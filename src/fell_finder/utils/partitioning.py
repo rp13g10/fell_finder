@@ -3,8 +3,10 @@ package"""
 
 from typing import Tuple
 
-from pyspark.sql import DataFrame, functions as F
 from bng_latlon import WGS84toOSGB36
+from pyspark.sql import DataFrame
+from pyspark.sql import functions as F
+from pyspark.sql.types import IntegerType
 
 
 def get_coordinates(lat: float, lon: float) -> Tuple[int, int]:
@@ -48,7 +50,9 @@ def get_partitions(easting: int, northing: int) -> Tuple[int, int]:
 def add_partitions_to_df(df: DataFrame) -> DataFrame:
     """For a provided dataframe with both easting and northing columns, assign
     each record to corresponding easting and northing partitions. These will be
-    stored in the easting_ptn and northing_ptn columns respectively.
+    stored in the easting_ptn and northing_ptn columns respectively. Note that
+    bankers rounding is applied here, in order to ensure consistency with the
+    output of the `get_partitions` function.
 
     Args:
         df (DataFrame): A dataframe containing both `easting` and `northing`
@@ -58,29 +62,13 @@ def add_partitions_to_df(df: DataFrame) -> DataFrame:
         DataFrame: A copy of the input dataset with additional `easting_ptn`
           and `northing_ptn` columns
     """
-    df = df.withColumn("easting_ptn", F.round(F.col("easting") / 1000))
+    df = df.withColumn(
+        "easting_ptn", F.bround(F.col("easting") / 1000).astype(IntegerType())
+    )
 
-    df = df.withColumn("northing_ptn", F.round(F.col("northing") / 1000))
+    df = df.withColumn(
+        "northing_ptn",
+        F.bround(F.col("northing") / 1000).astype(IntegerType()),
+    )
 
     return df
-
-
-# def get_partitions_for_df(df: pd.DataFrame) -> pd.DataFrame:
-#     """For a pandas dataframe containg 'easting' and 'northing' columns,
-#     create the corresponding 'easting_ptn' and 'northing_ptn' columns.
-#     The values created in these colummns correspond to the output from
-#     get_partitions, but this implementation should be faster than using
-#     pd.DataFrame.apply.
-
-#     Args:
-#         df (pd.DataFrame): A dataframe containing and 'easting' and a
-#           'northing' column
-
-#     Returns:
-#         pd.DataFrame: A copy of the input dataset with additional
-#           'easting_ptn' and 'northing_ptn' columns"""
-
-#     df.loc[:, "easting_ptn"] = (df["easting"] / 1000).round().astype(int)
-#     df.loc[:, "northing_ptn"] = (df["northing"] / 1000).round().astype(int)
-
-#     return df

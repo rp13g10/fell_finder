@@ -1,20 +1,12 @@
 import pytest
 from pyspark import SparkConf, SparkContext
-from pyspark.sql import SQLContext
+from pyspark.sql import SQLContext, SparkSession
 
 
 @pytest.fixture
-def test_session() -> SQLContext:
-    conf = SparkConf()
-    conf = conf.setAppName("refinement")
-    conf = conf.setMaster("local[10]")
-    conf = conf.set("spark.driver.memory", "2g")
-    conf = conf.set("spark.sql.adaptive.coalescePartitions.enabled", "false")
-    conf = conf.set("spark.sql.files.maxPartitionBytes", "1048576")
+def test_session() -> SparkSession:
+    spark = SparkSession.builder.appName(  # type: ignore
+        "fell_finder_tests"
+    ).getOrCreate()
 
-    context = SparkContext(conf=conf)
-    context.setLogLevel("WARN")
-    spark = context.getOrCreate()
-    sql = SQLContext(spark)
-
-    return sql
+    return spark

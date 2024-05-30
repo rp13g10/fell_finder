@@ -1,3 +1,5 @@
+"""Unit tests for functions relating to partitioning of data"""
+
 from chispa import assert_df_equality
 from unittest.mock import patch, MagicMock
 from pyspark.sql import SQLContext
@@ -14,6 +16,7 @@ from fell_finder.utils.partitioning import (
 def test_get_coordinates(mock_wgs84toosgb36: MagicMock):
     """Check that the expected function output is returned and rounded
     correctly"""
+
     # Arrange
     mock_wgs84toosgb36.side_effect = lambda x, y: (x, y)
 
@@ -31,26 +34,48 @@ def test_get_coordinates(mock_wgs84toosgb36: MagicMock):
     assert result_northing == target_northing
 
 
-def test_get_partitions():
-    """Check that the partitions are being generated correctly"""
-    # Arrange
-    test_easting = 12345
-    test_northing = 56789
+class TestGetPartitions:
+    """Make sure partitions are correctly generated in all cases"""
 
-    target_easting_ptn = 12
-    target_northing_ptn = 57
+    def test_standard_behaviour(self):
+        """Check that the partitions are being generated correctly"""
+        # Arrange
+        test_easting = 123456
+        test_northing = 987654
 
-    # Act
-    result_easting_ptn, result_northing_ptn = get_partitions(
-        test_easting, test_northing
-    )
+        target_easting_ptn = 123
+        target_northing_ptn = 988
 
-    # Assert
-    assert result_easting_ptn == target_easting_ptn
-    assert result_northing_ptn == target_northing_ptn
+        # Act
+        result_easting_ptn, result_northing_ptn = get_partitions(
+            test_easting, test_northing
+        )
+
+        # Assert
+        assert result_easting_ptn == target_easting_ptn
+        assert result_northing_ptn == target_northing_ptn
+
+    def test_midpoint_behaviour(self):
+        """Check that the partitions are being generated correctly"""
+        # Arrange
+        test_easting = 100500
+        test_northing = 101500
+
+        target_easting_ptn = 100
+        target_northing_ptn = 102
+
+        # Act
+        result_easting_ptn, result_northing_ptn = get_partitions(
+            test_easting, test_northing
+        )
+
+        # Assert
+        assert result_easting_ptn == target_easting_ptn
+        assert result_northing_ptn == target_northing_ptn
 
 
 def test_add_partitions_to_df(test_session: SQLContext):
+    """Check that partitions are correctly added to spark dataframes"""
     # Arrange #################################################################
 
     # ----- Test Data -----
@@ -59,9 +84,12 @@ def test_add_partitions_to_df(test_session: SQLContext):
         ['inx', 'easting', 'northing'])
 
     test_data = [
+        # Standard behaviour
         [0    , 123456   , 987654],
         [1    , 987654   , 123456],
+        # Midpoint behaviour
         [2    , 100500   , 101500],
+        # Missing data
         [3    , None     , None]
     ]
     # fmt: on
@@ -84,7 +112,7 @@ def test_add_partitions_to_df(test_session: SQLContext):
     tgt_data = [
         [0    , 123456   , 987654    , 123          , 988],
         [1    , 987654   , 123456    , 988          , 123],
-        [2    , 100500   , 101500    , 101          , 101],
+        [2    , 100500   , 101500    , 100          , 102],
         [3    , None     , None      , None         , None]
     ]
     # fmt: on

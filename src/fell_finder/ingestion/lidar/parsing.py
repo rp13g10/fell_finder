@@ -3,13 +3,13 @@ extracts into a tabular format."""
 
 import os
 import re
-from functools import lru_cache
 from glob import glob
-from typing import List
+from typing import Dict, List
 
 import numpy as np
+import pandas as pd
 import rasterio as rio
-from pyspark.sql import DataFrame, SQLContext, functions as F
+from pyspark.sql import DataFrame, SparkSession, functions as F
 from pyspark.sql.types import StructType, StructField, IntegerType, DoubleType
 from tqdm import tqdm
 
@@ -18,7 +18,21 @@ from fell_finder.utils.partitioning import add_partitions_to_df
 
 
 class LidarLoader:
-    def __init__(self, sql: SQLContext, data_dir: str):
+    """This contains all of the functions required to convert the data held in
+    a LIDAR folder into tabular format. In most use cases, only the `load`
+    method will need to be called."""
+
+    def __init__(self, sql: SparkSession, data_dir: str):
+        """Initialize the loader class. An active pyspark SQL context is
+        required, as is the path to the folder which contains the LIDAR
+        extracts to be parsed.
+
+        Args:
+            sql (SQLContext): An active pyspark SQL context
+            data_dir (str): The data directory for this project. It is expected
+              that this will contain an 'extracts/lidar' subdirectory, into
+              which all LIDAR data will have been extracted.
+        """
         self.sql = sql
         self.data_dir = data_dir
 
@@ -26,8 +40,8 @@ class LidarLoader:
 
     @staticmethod
     def load_lidar_from_folder(lidar_dir: str) -> np.ndarray:
-        """For a given data folder, read in the contents of the .tif file within as
-        a numpy array.
+        """For a given data folder, read in the contents of the .tif file
+        within as a numpy array.
 
         Args:
             lidar_dir (str): The location of the data folder to be loaded
@@ -46,8 +60,8 @@ class LidarLoader:
 
     @staticmethod
     def load_bbox_from_folder(lidar_dir: str) -> np.ndarray:
-        """For a given data folder, read in the contents of the .shp file within as
-        a numpy array of length 4.
+        """For a given data folder, read in the contents of the .shp file
+        within as a numpy array of length 4.
 
         Args:
             lidar_dir (str): The location of the data folder to be loaded
@@ -74,11 +88,10 @@ class LidarLoader:
 
         return bbox
 
-    @lru_cache(16)
     @staticmethod
     def generate_file_id(lidar_dir: str) -> str:
-        """Extract the OS grid reference for a given LIDAR file based on its full
-        location on the filesystem.
+        """Extract the OS grid reference for a given LIDAR file based on its
+        full location on the filesystem.
 
         Args:
             lidar_dir (str): The full path to a LIDAR file, expected format is
@@ -103,12 +116,12 @@ class LidarLoader:
         )
 
     @staticmethod
-    def generate_records_from_lidar_array(
+    def generate_data_from_lidar_array(
         lidar: np.ndarray, bbox: np.ndarray
-    ) -> List:
+    ) -> Dict[str, np.ndarray]:
         """Parse a given array containing LIDAR data, and the corresponding
-        bounding box. Returns a long-form dataframe containg eastings, northings
-        and elevations.
+        bounding box. Returns a long-form dataframe containg eastings,
+        northings and elevations.
 
         Args:
             lidar (np.ndarray): An array containing LIDAR data
@@ -133,16 +146,30 @@ class LidarLoader:
             range(bbox[3] - 1, bbox[1] - 1, -1), size_e
         ).astype("int32")
 
-        records = [
-            [easting, northing, elevation]
-            for easting, northing, elevation in zip(
-                eastings, northings, elevations
-            )
-        ]
+        data = {
+            "easting": eastings,
+            "northing": northings,
+            "elevation": elevations,
+        }
 
-        return records
+        return data
 
-    def generate_dataframe_from_records(self, records: List) -> DataFrame:
+    def generate_dataframe_from_data(
+        self, records: Dict[str, np.ndarray]
+    ) -> DataFrame:
+        """Generate a pySpark dataframe based on the provided list of records,
+        the generated dataframe will contain an `easting`, `northing` and
+        `elevation` column.
+
+        Args:
+            records (List): A list of records to be read in as a dataframe
+
+        Returns:
+            DataFrame: A pyspark data contain the provided records
+        """
+
+        df = pd.DataFrame.from_dict(records, orient="columns")
+
         schema = StructType(
             [
                 StructField("easting", IntegerType()),
@@ -151,25 +178,23 @@ class LidarLoader:
             ]
         )
 
-        df = self.sql.createDataFrame(data=records, schema=schema)
+        df = self.sql.createDataFrame(data=df, schema=schema)
 
         return df
 
-    # Continue conversion process from here, everything needs to run using
-    # pyspark rather than pandas. Testing & benchmarking will be required.
-
     def add_file_ids(self, lidar_df: DataFrame, lidar_dir: str) -> DataFrame:
-        """Generate a file ID for a given file name, and store it in the provided
-        dataframe under the 'file_id' column name. The file ID will be the OS grid
-        reference for the provided file name. For example,
+        """Generate a file ID for a given file name, and store it in the
+        provided dataframe under the 'file_id' column name. The file ID will be
+        the OS grid reference for the provided file name. For example,
         lidar_composite_dtm_2022-1-SU20ne would generate a file ID of SU20ne.
 
         Args:
             lidar_df (pd.DataFrame): A dataframe containing LIDAR data
-            lidar_dir (str): The name of the file from which `lidar_df` was created
+            lidar_dir (str): The name of the file from which `lidar_df` was
+              created
 
         Returns:
-            pd.DataFrame: The input dataset, with an additional 'file_id' column
+            DataFrame: The input dataset, with an additional 'file_id' column
         """
 
         file_id = self.generate_file_id(lidar_dir)
@@ -200,44 +225,45 @@ class LidarLoader:
 
     def write_df_to_parquet(self, lidar_df: DataFrame):
         """Write the contents of a dataframe containing lidar data to the
-        specified location, setting the file name to <lidar_id>.csv
+        specified location. Data will be written in the parquet format, with
+        partitioning set on the `easting_ptn` and `northing_ptn` columns
 
         Args:
             lidar_df (pd.DataFrame): A dataframe containing lidar data
-            lidar_id (str): The unique identifier for the lidar file which was
-            used to create lidar_df
-            data_dir (str): The location which the parsed dataframe should be
-            exported to
         """
         tgt_loc = os.path.join(self.data_dir, "parsed/lidar")
 
-        lidar_df.write.partitionBy("easting_ptn", "northing_ptn").parquet(
-            tgt_loc
-        )
+        lidar_df.write.mode("overwrite").partitionBy(
+            "easting_ptn", "northing_ptn"
+        ).parquet(tgt_loc)
 
-    def parse_lidar_folder(self, lidar_dir: str) -> DataFrame:
+    def parse_lidar_folder(self, lidar_dir: str):
         """This function will read in the contents of a single LIDAR folder,
-        transform it into the correct format for ingestion into Cassandra/Scylla
-        and return the output as a Pandas dataframe.
+        transform it into a tabular format and return its contents as a pySpark
+        Dataframe
 
         Args:
             lidar_dir (str): The location of the LIDAR folder to be loaded
 
         Returns:
-            pd.DataFrame: The contents of the provided LIDAR folder
+            DataFrame: The contents of the provided LIDAR folder
         """
 
         lidar = self.load_lidar_from_folder(lidar_dir)
         bbox = self.load_bbox_from_folder(lidar_dir)
 
-        records = self.generate_records_from_lidar_array(lidar, bbox)
-        lidar_df = self.generate_dataframe_from_records(records)
+        data = self.generate_data_from_lidar_array(lidar, bbox)
+        lidar_df = self.generate_dataframe_from_data(data)
 
         lidar_df = add_partitions_to_df(lidar_df)
         lidar_df = self.add_file_ids(lidar_df, lidar_dir)
-
+        lidar_df = self.set_output_schema(lidar_df)
         return lidar_df
 
     def load(self):
+        """Primary user facing function for this class. Parses every available
+        LIDAR extract and stores the output as a partitioned parquet dataset.
+        """
         for lidar_dir in tqdm(self.to_load, desc="Parsing LIDAR data"):
-            self.parse_lidar_folder(lidar_dir)
+            lidar_df = self.parse_lidar_folder(lidar_dir)
+            self.write_df_to_parquet(lidar_df)

@@ -1,22 +1,20 @@
-from pyspark import SparkConf, SparkContext
-from pyspark.sql import SQLContext
+"""Primary execution script (for now). Triggers ingestion of LIDAR and OSM
+data, joins the two datasets together to create a single augmented graph."""
+
+from pyspark.sql import SparkSession
 
 from fell_finder.ingestion import LidarLoader
 
 DATA_DIR = "/home/ross/repos/fell_finder/data"
 
 # Generate internal sparkcontext
-conf = SparkConf()
-conf = conf.setAppName("refinement")
-conf = conf.setMaster("local[10]")
-conf = conf.set("spark.driver.memory", "2g")
-conf = conf.set("spark.sql.adaptive.coalescePartitions.enabled", "false")
-conf = conf.set("spark.sql.files.maxPartitionBytes", "1048576")
+spark = (
+    SparkSession.builder.appName("fell_finder")  # type: ignore
+    .config("spark.driver.memory", "2g")
+    .config("spark.sql.adaptive.coalescePartitions.enabled", "false")
+    .config("spark.sql.files.maxPartitionBytes", "1048576")
+    .getOrCreate()
+)
 
-context = SparkContext(conf=conf)
-context.setLogLevel("WARN")
-spark = context.getOrCreate()
-sql = SQLContext(spark)
-
-lidar_parser = LidarLoader(sql, DATA_DIR)
+lidar_parser = LidarLoader(spark, DATA_DIR)
 lidar_parser.load()

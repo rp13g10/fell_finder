@@ -10,10 +10,10 @@ def get_available_folders(data_dir: str) -> Set[str]:
     """Get a list of all of the data folders which are available within the
     data directory of this package. Data must have been downloaded from the
     DEFRA website:
-      https://environment.data.gov.uk/DefraDataDownload/?Mode=survey
+    https://environment.data.gov.uk/DefraDataDownload/?Mode=survey
     Data should be from the composite DTM layer at 1m resolution, and folder
-    names should match the 'lidar_composite_dtm-*' pattern. Any zip archives should be
-    extracted before running this script.
+    names should match the 'lidar_composite_dtm-*' pattern. Any zip archives
+    should be extracted before running this script.
 
     Raises:
         FileNotFoundError: If no folders matching the above pattern are found,
