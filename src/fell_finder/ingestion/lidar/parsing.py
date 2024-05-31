@@ -4,16 +4,12 @@ extracts into a tabular format."""
 import os
 import re
 from glob import glob
-from typing import Dict, List
 
 import numpy as np
 import polars as pl
 
-# import pandas as pd
 import rasterio as rio
 
-# from pyspark.sql import DataFrame, SparkSession, functions as F
-# from pyspark.sql.types import StructType, StructField, IntegerType, DoubleType
 from tqdm import tqdm
 
 from fell_finder.ingestion.lidar.discovery import get_available_folders
