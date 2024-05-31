@@ -7,14 +7,17 @@ from glob import glob
 from typing import Dict, List
 
 import numpy as np
-import pandas as pd
+import polars as pl
+
+# import pandas as pd
 import rasterio as rio
-from pyspark.sql import DataFrame, SparkSession, functions as F
-from pyspark.sql.types import StructType, StructField, IntegerType, DoubleType
+
+# from pyspark.sql import DataFrame, SparkSession, functions as F
+# from pyspark.sql.types import StructType, StructField, IntegerType, DoubleType
 from tqdm import tqdm
 
 from fell_finder.ingestion.lidar.discovery import get_available_folders
-from fell_finder.utils.partitioning import add_partitions_to_df
+from fell_finder.utils.partitioning import add_partitions_to_polars_df
 
 
 class LidarLoader:
@@ -22,7 +25,7 @@ class LidarLoader:
     a LIDAR folder into tabular format. In most use cases, only the `load`
     method will need to be called."""
 
-    def __init__(self, sql: SparkSession, data_dir: str):
+    def __init__(self, data_dir: str):
         """Initialize the loader class. An active pyspark SQL context is
         required, as is the path to the folder which contains the LIDAR
         extracts to be parsed.
@@ -33,7 +36,7 @@ class LidarLoader:
               that this will contain an 'extracts/lidar' subdirectory, into
               which all LIDAR data will have been extracted.
         """
-        self.sql = sql
+        # self.sql = sql
         self.data_dir = data_dir
 
         self.to_load = get_available_folders(data_dir)
@@ -116,9 +119,9 @@ class LidarLoader:
         )
 
     @staticmethod
-    def generate_data_from_lidar_array(
+    def generate_df_from_lidar_array(
         lidar: np.ndarray, bbox: np.ndarray
-    ) -> Dict[str, np.ndarray]:
+    ) -> pl.DataFrame:
         """Parse a given array containing LIDAR data, and the corresponding
         bounding box. Returns a long-form dataframe containg eastings,
         northings and elevations.
@@ -146,43 +149,19 @@ class LidarLoader:
             range(bbox[3] - 1, bbox[1] - 1, -1), size_e
         ).astype("int32")
 
-        data = {
-            "easting": eastings,
-            "northing": northings,
-            "elevation": elevations,
-        }
-
-        return data
-
-    def generate_dataframe_from_data(
-        self, records: Dict[str, np.ndarray]
-    ) -> DataFrame:
-        """Generate a pySpark dataframe based on the provided list of records,
-        the generated dataframe will contain an `easting`, `northing` and
-        `elevation` column.
-
-        Args:
-            records (List): A list of records to be read in as a dataframe
-
-        Returns:
-            DataFrame: A pyspark data contain the provided records
-        """
-
-        df = pd.DataFrame.from_dict(records, orient="columns")
-
-        schema = StructType(
-            [
-                StructField("easting", IntegerType()),
-                StructField("northing", IntegerType()),
-                StructField("elevation", DoubleType()),
-            ]
+        df = pl.DataFrame(
+            {
+                "easting": eastings,
+                "northing": northings,
+                "elevation": elevations,
+            }
         )
-
-        df = self.sql.createDataFrame(data=df, schema=schema)
 
         return df
 
-    def add_file_ids(self, lidar_df: DataFrame, lidar_dir: str) -> DataFrame:
+    def add_file_ids(
+        self, lidar_df: pl.DataFrame, lidar_dir: str
+    ) -> pl.DataFrame:
         """Generate a file ID for a given file name, and store it in the
         provided dataframe under the 'file_id' column name. The file ID will be
         the OS grid reference for the provided file name. For example,
@@ -198,12 +177,13 @@ class LidarLoader:
         """
 
         file_id = self.generate_file_id(lidar_dir)
-        lidar_df = lidar_df.withColumn("file_id", F.lit(file_id))
+
+        lidar_df = lidar_df.with_columns(pl.lit(file_id).alias("file_id"))
 
         return lidar_df
 
     @staticmethod
-    def set_output_schema(lidar_df: DataFrame) -> DataFrame:
+    def set_output_schema(lidar_df: pl.DataFrame) -> pl.DataFrame:
         """Set expected column order
 
         Args:
@@ -223,7 +203,7 @@ class LidarLoader:
 
         return lidar_df
 
-    def write_df_to_parquet(self, lidar_df: DataFrame):
+    def write_df_to_parquet(self, lidar_df: pl.DataFrame):
         """Write the contents of a dataframe containing lidar data to the
         specified location. Data will be written in the parquet format, with
         partitioning set on the `easting_ptn` and `northing_ptn` columns
@@ -233,9 +213,13 @@ class LidarLoader:
         """
         tgt_loc = os.path.join(self.data_dir, "parsed/lidar")
 
-        lidar_df.write.mode("overwrite").partitionBy(
-            "easting_ptn", "northing_ptn"
-        ).parquet(tgt_loc)
+        lidar_df.write_parquet(
+            tgt_loc,
+            use_pyarrow=True,
+            pyarrow_options={
+                "partition_cols": ["easting_ptn", "northing_ptn"]
+            },
+        )
 
     def parse_lidar_folder(self, lidar_dir: str):
         """This function will read in the contents of a single LIDAR folder,
@@ -252,10 +236,9 @@ class LidarLoader:
         lidar = self.load_lidar_from_folder(lidar_dir)
         bbox = self.load_bbox_from_folder(lidar_dir)
 
-        data = self.generate_data_from_lidar_array(lidar, bbox)
-        lidar_df = self.generate_dataframe_from_data(data)
+        lidar_df = self.generate_df_from_lidar_array(lidar, bbox)
 
-        lidar_df = add_partitions_to_df(lidar_df)
+        lidar_df = add_partitions_to_polars_df(lidar_df)
         lidar_df = self.add_file_ids(lidar_df, lidar_dir)
         lidar_df = self.set_output_schema(lidar_df)
         return lidar_df

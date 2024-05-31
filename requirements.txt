@@ -1,0 +1,11 @@
+polars
+pyspark
+pandas
+pyarrow
+numpy
+tqdm
+pytest
+pytest-cov
+pytest-xdist
+rasterio
+bng-latlon

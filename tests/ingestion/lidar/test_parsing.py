@@ -4,15 +4,8 @@ import os
 from unittest.mock import patch, MagicMock, call
 
 import numpy as np
-from pyspark.sql import SparkSession
-from pyspark.sql.types import (
-    StructType,
-    StructField,
-    IntegerType,
-    DoubleType,
-    StringType,
-)
-from pyspark.testing.utils import assertDataFrameEqual
+import polars as pl
+from polars.testing import assert_frame_equal
 
 from fell_finder.ingestion.lidar.parsing import LidarLoader
 
@@ -109,7 +102,7 @@ def test_generate_file_id():
     assert result == target
 
 
-def test_generate_data_from_lidar_array():
+def test_generate_df_from_lidar_array():
     """Check that LIDAR data is correctly being converted into records"""
 
     # Arrange
@@ -128,95 +121,32 @@ def test_generate_data_from_lidar_array():
     test_lidar = test_lidar.reshape(5000, 5000)
 
     # fmt: off
-    target_head = {
+    target_head = pl.DataFrame({
         'easting': np.array([100000, 100001, 100002, 100003, 100004]).astype('int32'),
         'northing': np.array([204999, 204999, 204999, 204999, 204999]).astype('int32'),
         'elevation': np.array([0, 1, 2, 3, 4])
-    }
-    target_tail = {
+    })
+    target_tail = pl.DataFrame({
         'easting': np.array([104995, 104996, 104997, 104998, 104999]).astype('int32'),
         'northing': np.array([200000, 200000, 200000, 200000, 200000]).astype('int32'),
         'elevation': np.array([24999995, 24999996, 24999997, 24999998, 24999999])
-    }
+    })
 
     # fmt: on
 
     # Act
-    result = LidarLoader.generate_data_from_lidar_array(test_lidar, test_bbox)
+    result = LidarLoader.generate_df_from_lidar_array(test_lidar, test_bbox)
 
-    result_head = {
-        "easting": result["easting"][:5],
-        "northing": result["northing"][:5],
-        "elevation": result["elevation"][:5],
-    }
-    result_tail = {
-        "easting": result["easting"][-5:],
-        "northing": result["northing"][-5:],
-        "elevation": result["elevation"][-5:],
-    }
+    result_head = result.head(5)
+    result_tail = result.tail(5)
 
     # Assert
-    assert (result_head["easting"] == target_head["easting"]).all()
-    assert (result_head["northing"] == target_head["northing"]).all()
-    assert (result_head["elevation"] == target_head["elevation"]).all()
-    assert (result_tail["easting"] == target_tail["easting"]).all()
-    assert (result_tail["northing"] == target_tail["northing"]).all()
-    assert (result_tail["elevation"] == target_tail["elevation"]).all()
+    assert_frame_equal(result_head, target_head)
+    assert_frame_equal(result_tail, target_tail)
 
 
 @patch("fell_finder.ingestion.lidar.parsing.get_available_folders")
-def test_generate_dataframe_from_data(
-    mock_get_available_folders: MagicMock, test_session: SparkSession
-):
-    """Make sure data is being read in properly"""
-
-    # Arrange
-    test_data = {
-        "easting": np.array([0, 1, 2, 3, 4]).astype("int32"),
-        "northing": np.array([5, 4, 3, 2, 1]).astype("int32"),
-        "elevation": np.array([10.0, 11.0, 12.0, 13.0, 14.0]),
-    }
-
-    # fmt: off
-    _ = (
-        ['easting', 'northing', 'elevation']
-    )
-
-    target_data = [
-        [0        , 5         , 10.0],
-        [1        , 4         , 11.0],
-        [2        , 3         , 12.0],
-        [3        , 2         , 13.0],
-        [4        , 1         , 14.0],
-    ]
-    # fmt: on
-
-    target_schema = StructType(
-        [
-            StructField("easting", IntegerType()),
-            StructField("northing", IntegerType()),
-            StructField("elevation", DoubleType()),
-        ]
-    )
-
-    target = test_session.createDataFrame(
-        data=target_data, schema=target_schema
-    )
-
-    mock_get_available_folders.return_value = []
-    mock_loader = LidarLoader(sql=test_session, data_dir="dummy")
-
-    # Act
-    result = mock_loader.generate_dataframe_from_data(test_data)
-
-    # Assert
-    assertDataFrameEqual(result, target)
-
-
-@patch("fell_finder.ingestion.lidar.parsing.get_available_folders")
-def test_add_file_ids(
-    mock_get_available_folders: MagicMock, test_session: SparkSession
-):
+def test_add_file_ids(mock_get_available_folders: MagicMock):
     """Check that file IDs are being added properly"""
     # Arrange #################################################################
 
@@ -230,18 +160,14 @@ def test_add_file_ids(
     ]
     # fmt: on
 
-    test_schema = StructType(
-        [
-            StructField("inx", IntegerType()),
-        ]
-    )
+    test_schema = {"inx": pl.Int32()}
 
-    test_df = test_session.createDataFrame(data=test_data, schema=test_schema)
+    test_df = pl.DataFrame(data=test_data, schema=test_schema)
 
     test_lidar_dir = "/some/folder/lidar_composite_dtm-2020-1-SU20ne"
 
     mock_get_available_folders.return_value = []
-    mock_loader = LidarLoader(sql=test_session, data_dir="dummy")
+    mock_loader = LidarLoader(data_dir="dummy")
 
     # ----- Target Data -----=
     # fmt: off
@@ -253,23 +179,18 @@ def test_add_file_ids(
     ]
     # fmt: on
 
-    tgt_schema = StructType(
-        [
-            StructField("inx", IntegerType()),
-            StructField("file_id", StringType(), False),
-        ]
-    )
+    tgt_schema = {"inx": pl.Int32(), "file_id": pl.String()}
 
-    tgt_df = test_session.createDataFrame(data=tgt_data, schema=tgt_schema)
+    tgt_df = pl.DataFrame(data=tgt_data, schema=tgt_schema)
 
     # Act
     res_df = mock_loader.add_file_ids(test_df, test_lidar_dir)
 
     # Assert
-    assertDataFrameEqual(tgt_df, res_df)
+    assert_frame_equal(tgt_df, res_df)
 
 
-def test_set_output_schema(test_session: SparkSession):
+def test_set_output_schema():
     """Check that the correct output schema is being set"""
     # Arrange #################################################################
 
@@ -283,7 +204,7 @@ def test_set_output_schema(test_session: SparkSession):
     ]
     # fmt: on
 
-    test_df = test_session.createDataFrame(data=test_data, schema=test_cols)
+    test_df = pl.DataFrame(data=test_data, schema=test_cols)
 
     # ----- Target Data -----=
     # fmt: off
@@ -295,54 +216,43 @@ def test_set_output_schema(test_session: SparkSession):
     ]
     # fmt: on
 
-    tgt_df = test_session.createDataFrame(data=tgt_data, schema=tgt_cols)
+    tgt_df = pl.DataFrame(data=tgt_data, schema=tgt_cols)
 
     # Act
     res_df = LidarLoader.set_output_schema(test_df)
 
     # Assert
-    assertDataFrameEqual(tgt_df, res_df)
+    assert_frame_equal(tgt_df, res_df)
 
 
 @patch("fell_finder.ingestion.lidar.parsing.get_available_folders")
-def test_write_df_to_parquet(
-    mock_get_available_folders: MagicMock, test_session: SparkSession
-):
+def test_write_df_to_parquet(mock_get_available_folders: MagicMock):
     """Ensure the correct calls are made when writing data"""
 
     # Arrange
-    mock_write = MagicMock()
-    mock_parquet = MagicMock(return_value=mock_write)
-    mock_partition_by = MagicMock(return_value=mock_write)
-    mock_mode = MagicMock(return_value=mock_write)
-    mock_write.partitionBy = mock_partition_by
-    mock_write.parquet = mock_parquet
-    mock_write.mode = mock_mode
-
+    mock_write_parquet = MagicMock()
     mock_df = MagicMock()
-    mock_df.write = mock_write
+    mock_df.write_parquet = mock_write_parquet
 
-    mock_loader = LidarLoader(test_session, "data_dir")
+    mock_loader = LidarLoader("data_dir")
 
     mock_get_available_folders.return_value = []
 
-    target_ptn_call = ("easting_ptn", "northing_ptn")
-    target_pqt_call = "data_dir/parsed/lidar"
-    target_mode_call = "overwrite"
+    target_args = ["data_dir/parsed/lidar"]
+    target_kwargs = {
+        "use_pyarrow": True,
+        "pyarrow_options": {"partition_cols": ["easting_ptn", "northing_ptn"]},
+    }
 
     # Act
     mock_loader.write_df_to_parquet(mock_df)
 
     # Assert
-    mock_partition_by.assert_called_once_with(*target_ptn_call)
-    mock_parquet.assert_called_once_with(target_pqt_call)
-    mock_mode.assert_called_once_with(target_mode_call)
+    mock_write_parquet.assert_called_once_with(*target_args, **target_kwargs)
 
 
 @patch("fell_finder.ingestion.lidar.parsing.get_available_folders")
-def test_parse_lidar_folder(
-    mock_get_available_folders: MagicMock, test_session: SparkSession
-):
+def test_parse_lidar_folder(mock_get_available_folders: MagicMock):
     """Ensure the correct calls are made, and output is as expected"""
 
     # Arrange #################################################################
@@ -353,14 +263,10 @@ def test_parse_lidar_folder(
 
     mock_load_lidar_from_folder = MagicMock()
     mock_load_bbox_from_folder = MagicMock()
-    mock_generate_data_from_lidar_array = MagicMock()
 
-    mock_loader = LidarLoader(test_session, "dummy")
+    mock_loader = LidarLoader("dummy")
     mock_loader.load_lidar_from_folder = mock_load_lidar_from_folder
     mock_loader.load_bbox_from_folder = mock_load_bbox_from_folder
-    mock_loader.generate_data_from_lidar_array = (
-        mock_generate_data_from_lidar_array
-    )
 
     # Test Data ---------------------------------------------------------------
 
@@ -373,19 +279,17 @@ def test_parse_lidar_folder(
     ]
     # fmt: on
 
-    test_schema = StructType(
-        [
-            StructField("easting", IntegerType()),
-            StructField("northing", IntegerType()),
-            StructField("elevation", DoubleType()),
-        ]
-    )
+    test_schema = {
+        "easting": pl.Int32(),
+        "northing": pl.Int32(),
+        "elevation": pl.Float64(),
+    }
 
-    test_df = test_session.createDataFrame(data=test_data, schema=test_schema)
+    test_df = pl.DataFrame(data=test_data, schema=test_schema)
 
-    mock_generate_dataframe_from_data = MagicMock(return_value=test_df)
-    mock_loader.generate_dataframe_from_data = (
-        mock_generate_dataframe_from_data
+    mock_generate_df_from_lidar_array = MagicMock(return_value=test_df)
+    mock_loader.generate_df_from_lidar_array = (
+        mock_generate_df_from_lidar_array
     )
 
     test_lidar_dir = "/some/folder/lidar_composite_dtm-2020-1-SU20ne"
@@ -401,18 +305,16 @@ def test_parse_lidar_folder(
     ]
     # fmt: on
 
-    tgt_schema = StructType(
-        [
-            StructField("easting", IntegerType()),
-            StructField("northing", IntegerType()),
-            StructField("elevation", DoubleType()),
-            StructField("file_id", StringType(), False),
-            StructField("easting_ptn", IntegerType()),
-            StructField("northing_ptn", IntegerType()),
-        ]
-    )
+    tgt_schema = {
+        "easting": pl.Int32(),
+        "northing": pl.Int32(),
+        "elevation": pl.Float64(),
+        "file_id": pl.String(),
+        "easting_ptn": pl.Int32(),
+        "northing_ptn": pl.Int32(),
+    }
 
-    tgt_df = test_session.createDataFrame(data=tgt_data, schema=tgt_schema)
+    tgt_df = pl.DataFrame(data=tgt_data, schema=tgt_schema)
 
     # Act #####################################################################
 
@@ -421,21 +323,19 @@ def test_parse_lidar_folder(
     # Assert ##################################################################
     mock_load_lidar_from_folder.assert_called_once_with(test_lidar_dir)
     mock_load_bbox_from_folder.assert_called_once_with(test_lidar_dir)
-    mock_generate_data_from_lidar_array.assert_called_once()
+    mock_generate_df_from_lidar_array.assert_called_once()
 
-    assertDataFrameEqual(result_df, tgt_df)
+    assert_frame_equal(result_df, tgt_df)
 
 
 @patch("fell_finder.ingestion.lidar.parsing.get_available_folders")
-def test_load(
-    mock_get_available_folders: MagicMock, test_session: SparkSession
-):
+def test_load(mock_get_available_folders: MagicMock):
     """Ensure the correct calls are made when writing data"""
 
     # Arrange
     mock_get_available_folders.return_value = ["file_one", "file_two"]
 
-    mock_loader = LidarLoader(test_session, "dummy")
+    mock_loader = LidarLoader("dummy")
 
     mock_parse_lidar_folder = MagicMock(side_effect=["df_1", "df_2"])
     mock_loader.parse_lidar_folder = mock_parse_lidar_folder
