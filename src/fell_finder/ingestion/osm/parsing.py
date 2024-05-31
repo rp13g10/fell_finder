@@ -164,15 +164,20 @@ class OsmLoader:
         Returns:
             List[Tuple]: A list in which each tuple contains:
               start_id, end_id, start_lat, start_lon, end_lat, end_lon, ...
-              \\... edge_type, easting, northing
+              \\... edge_type, src_easting, src_northing, dst_easting, ...
+              \\... dst_northing
         """
+
+        # NOTE: lat/lon datapoints can be dropped after UAT, not required
+        #       for algorithm
 
         all_edges = []
         for start_id, end_id in graph.edges():
             edge_type = graph[start_id][end_id].get("highway")
             start_lat, start_lon = self.fetch_node_coords(graph, start_id)
             end_lat, end_lon = self.fetch_node_coords(graph, end_id)
-            start_easting, start_northing = WGS84toOSGB36(start_lat, start_lon)
+            src_easting, src_northing = WGS84toOSGB36(start_lat, start_lon)
+            dst_easting, dst_northing = WGS84toOSGB36(end_lat, end_lon)
             all_edges.append(
                 (
                     start_id,
@@ -182,8 +187,10 @@ class OsmLoader:
                     end_lat,
                     end_lon,
                     edge_type,
-                    start_easting,
-                    start_northing,
+                    src_easting,
+                    src_northing,
+                    dst_easting,
+                    dst_northing,
                 )
             )
 
@@ -213,6 +220,8 @@ class OsmLoader:
             "type": pl.String(),
             "easting": pl.Int32(),
             "northing": pl.Int32(),
+            "dst_easting": pl.Int32(),
+            "dst_northing": pl.Int32(),
         }
 
         edge_df = pl.DataFrame(data=edge_data, schema=edge_schema)
@@ -237,8 +246,10 @@ class OsmLoader:
             "dst_lat",
             "dst_lon",
             "type",
-            "easting",
-            "northing",
+            pl.col("easting").alias("src_easting"),
+            pl.col("northing").alias("src_northing"),
+            "dst_easting",
+            "dst_northing",
             "easting_ptn",
             "northing_ptn",
         )
