@@ -128,7 +128,13 @@ class OsmLoader:
             pl.DataFrame: A subset of the provided dataframe
         """
         node_df = node_df.select(
-            "id", "lat", "lon", "easting_ptn", "northing_ptn"
+            "id",
+            "lat",
+            "lon",
+            "easting",
+            "northing",
+            "easting_ptn",
+            "northing_ptn",
         )
         return node_df
 
@@ -231,6 +237,8 @@ class OsmLoader:
             "dst_lat",
             "dst_lon",
             "type",
+            "easting",
+            "northing",
             "easting_ptn",
             "northing_ptn",
         )
