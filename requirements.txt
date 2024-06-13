@@ -10,3 +10,4 @@ pytest-xdist
 rasterio
 bng-latlon
 networkx
+geopy

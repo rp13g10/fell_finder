@@ -213,7 +213,7 @@ class LidarLoader:
             tgt_loc,
             use_pyarrow=True,
             pyarrow_options={
-                "partition_cols": ["easting_ptn", "northing_ptn"]
+                "partition_cols": ["easting_ptn", "northing_ptn"],
             },
         )
 

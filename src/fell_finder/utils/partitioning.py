@@ -55,7 +55,9 @@ def get_partitions(easting: int, northing: int) -> Tuple[int, int]:
     return easting_ptn, northing_ptn
 
 
-def add_partitions_to_spark_df(df: DataFrame) -> DataFrame:
+def add_partitions_to_spark_df(
+    df: DataFrame, easting_col: str = "easting", northing_col: str = "northing"
+) -> DataFrame:
     """For a provided dataframe with both easting and northing columns, assign
     each record to corresponding easting and northing partitions. These will be
     stored in the easting_ptn and northing_ptn columns respectively.
@@ -69,12 +71,12 @@ def add_partitions_to_spark_df(df: DataFrame) -> DataFrame:
           and `northing_ptn` columns
     """
     df = df.withColumn(
-        "easting_ptn", F.round(F.col("easting") / 1000).astype(IntegerType())
+        "easting_ptn", F.round(F.col(easting_col) / 1000).astype(IntegerType())
     )
 
     df = df.withColumn(
         "northing_ptn",
-        F.round(F.col("northing") / 1000).astype(IntegerType()),
+        F.round(F.col(northing_col) / 1000).astype(IntegerType()),
     )
 
     return df
