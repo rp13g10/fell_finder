@@ -11,3 +11,6 @@ rasterio
 bng-latlon
 networkx
 geopy
+thefuzz
+graph-tool
+plotly
