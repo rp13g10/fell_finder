@@ -16,6 +16,9 @@ from fell_finder.utils.partitioning import add_partitions_to_polars_df
 #       hampshire-latest OSM dataset. Expansion to other regions is planned as
 #       part of a future build.
 
+# TODO: In future this will need setting up to run on raw .osm files. This will
+#       be required in order to correctly flag bridges for elevation correction
+
 
 class OsmLoader:
     """Reads in the JSON graph, converted from OSM data. Generates two parquet
