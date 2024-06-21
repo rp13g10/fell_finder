@@ -2,6 +2,7 @@
 which can be reached from the requested route start point without going over
 the max configured distance."""
 
+import os
 from typing import Dict, List, Tuple
 
 import graph_tool.all as gt
@@ -17,16 +18,32 @@ from fell_finder.utils.gt_graphs import find_nearest_node, remove_isolates
 
 # TODO: Remove hard-coded data directories
 
+VALID_TYPES = {
+    "footway",
+    "living_street",
+    "path",
+    "pedestrian",
+    "primary",
+    "primary_link",
+    "residential",
+    "secondary",
+    "secondary_link",
+    "service",
+    "steps",
+    "tertiary",
+    "tertiary_link",
+    "track",
+    "unclassified",
+    "compound",
+}
+
 
 class Selector:
     """Retrieves a graph containing all nodes which can be reached from the
     requested route start point without going over the max configured distance.
     """
 
-    def __init__(
-        self,
-        config: RouteConfig,
-    ):
+    def __init__(self, config: RouteConfig, data_dir: str):
         """Create an instance of the graph enricher class based on the
         contents of the networkx graph specified by `source_path`
 
@@ -38,6 +55,10 @@ class Selector:
         # Store down core attributes
         self.config = config
         self.bbox = self.get_bounding_box_for_route()
+        self.data_dir = data_dir
+
+        if self.config.terrain_types:
+            assert all(x in VALID_TYPES for x in self.config.terrain_types)
 
     def get_bounding_box_for_route(self) -> BBox:
         """Generate a square bounding box which contains a circle with diameter
@@ -50,11 +71,11 @@ class Selector:
 
         dist_to_corner = (self.config.max_distance / 2) * (2**0.5)
 
-        nw_corner = distance.distance(kilometers=dist_to_corner).destination(
+        nw_corner = distance.distance(meters=dist_to_corner).destination(
             point=start_point, bearing=315
         )
 
-        se_corner = distance.distance(kilometers=dist_to_corner).destination(
+        se_corner = distance.distance(meters=dist_to_corner).destination(
             point=start_point, bearing=135
         )
 
@@ -76,7 +97,7 @@ class Selector:
             List[Dict]: A list of node metadata
         """
         nodes_dataset = ParquetDataset(
-            "/home/ross/repos/refinement/data/enriched_nodes",
+            os.path.join(self.data_dir, "enriched/nodes"),
             filters=[
                 ("easting_ptn", ">=", self.bbox.min_easting_ptn),
                 ("easting_ptn", "<=", self.bbox.max_easting_ptn),
@@ -104,14 +125,20 @@ class Selector:
         Returns:
             List[Tuple]: A list of edges & the corresponding metadata
         """
+
+        filters = [
+            ("easting_ptn", ">=", self.bbox.min_easting_ptn),
+            ("easting_ptn", "<=", self.bbox.max_easting_ptn),
+            ("northing_ptn", ">=", self.bbox.min_northing_ptn),
+            ("northing_ptn", "<=", self.bbox.max_northing_ptn),
+        ]
+
+        # if self.config.terrain_types:
+        #     filters.append(("type", "in", self.config.terrain_types))
+
         edges_dataset = ParquetDataset(
-            "/home/ross/repos/refinement/data/enriched_edges",
-            filters=[
-                ("easting_ptn", ">=", self.bbox.min_easting_ptn),
-                ("easting_ptn", "<=", self.bbox.max_easting_ptn),
-                ("northing_ptn", ">=", self.bbox.min_northing_ptn),
-                ("northing_ptn", "<=", self.bbox.max_northing_ptn),
-            ],
+            os.path.join(self.data_dir, "enriched/edges"),
+            filters=filters,
         )
 
         edge_cols = [
