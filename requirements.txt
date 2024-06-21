@@ -14,3 +14,4 @@ geopy
 thefuzz
 plotly
 dash
+dash-leaflet

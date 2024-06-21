@@ -1,4 +1,4 @@
-"""Setup configuration for the relevation package"""
+"""Setup configuration for the fell_finder package"""
 
 from setuptools import setup
 
@@ -24,5 +24,6 @@ setup(
         "thefuzz",
         "plotly",
         "dash",
+        "dash-leaflet",
     ],
 )
