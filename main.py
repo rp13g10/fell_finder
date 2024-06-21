@@ -18,16 +18,15 @@ del osm_loader
 
 # Config set for testing on personal laptop, will need tuning for cloud envs
 spark = (
-    SparkSession.builder.appName(  # type: ignore
-        "fell_finder"
-    )
-    .config("spark.master", "local[10]")
-    .config("spark.driver.memory", "2g")
-    .config("spark.driver.memoryOverhead", "1g")
-    .config("spark.executor.memory", "4g")
-    .config("spark.executor.memoryOverhead", "1g")
+    SparkSession.builder.appName("fell_finder")  # type: ignore
+    .config("spark.master", "local[*]")
+    .config("spark.driver.memory", "4g")
+    .config("spark.driver.memoryOverhead", "2g")
+    .config("spark.executor.memory", "8g")
+    .config("spark.executor.memoryOverhead", "2g")
     .config("spark.sql.adaptive.coalescePartitions.enabled", "false")
     .config("spark.sql.files.maxPartitionBytes", "1048576")
+    .config("spark.sql.hive.filesourcePartitionFileCacheSize", "1048576000")
     .getOrCreate()
 )
 
