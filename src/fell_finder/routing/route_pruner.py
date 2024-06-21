@@ -8,6 +8,7 @@ from typing import Dict, List, Tuple
 
 import numpy as np
 from networkx import DiGraph
+from tqdm import tqdm
 
 from fell_finder.containers.routes import RouteConfig, Route
 from fell_finder.containers.geo import BBox
@@ -220,11 +221,15 @@ class RoutePruner:
         if len(routes) < self.config.max_candidates:
             return routes
 
+        print(f"Pruning {len(routes)} routes")
+
         # Subdivide graph into smaller squares, calculate which square each
         # route ends in
         cur_bbox = self._get_bounding_box()
         tagged_grid = self._generate_grid(cur_bbox)
         self._tag_routes_with_terminal_grid_square(tagged_grid)
+
+        print("Routes have been tagged with grid squares")
 
         # Group routes by terminal grid square, select top N. Sort by current
         # elevation loss/gain, and factor in delta back to start (express both
@@ -236,10 +241,16 @@ class RoutePruner:
             route.ratio = route_ratio
             grouped_routes[terminal_square].append(route)
 
+        print(
+            f"Routes have been split into {len(grouped_routes)} grid squares"
+        )
+
         # Evenly distribute max candidates between squares
         routes_per_square = math.ceil(
             self.config.max_candidates / len(grouped_routes.keys())
         )
+
+        print(f"Reducing to {routes_per_square} routes per square")
 
         # Take the N most promising routes for each grid square
         pruned_routes = []
