@@ -94,7 +94,7 @@ class LidarLoader:
 
         Args:
             lidar_dir (str): The full path to a LIDAR file, expected format is
-            /some/path/relevation/data/lidar_composite_dtm_YYYY-1-XXDDxx
+            /DATA_DIR/extracts/lidar/lidar_composite_dtm_YYYY-1-XXDDxx
 
         Returns:
             str: The OS grid reference for the file, expected format is

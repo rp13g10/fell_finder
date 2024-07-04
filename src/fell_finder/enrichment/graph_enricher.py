@@ -1,7 +1,6 @@
 """Handles the joining of graph data with the corresponding elevation data"""
 
 from abc import ABC, abstractmethod
-from functools import reduce
 from glob import glob
 from typing import Set, Tuple, List
 import os
@@ -9,7 +8,13 @@ import re
 
 from geopy.distance import distance
 from pyspark.sql import SparkSession, DataFrame, functions as F
-from pyspark.sql.types import ArrayType, DoubleType, IntegerType
+from pyspark.sql.types import (
+    ArrayType,
+    DoubleType,
+    IntegerType,
+    StructType,
+    StructField,
+)
 from pyspark.sql.window import Window
 from fell_finder.utils.partitioning import add_partitions_to_spark_df
 
@@ -442,8 +447,10 @@ class GraphEnricher(NodeMixin, EdgeMixin):
 
         self.edge_resolution_m = 10
 
-        self.common_ptns = self.get_common_partitions()
-        self.num_ptns = len(self.common_ptns)
+        common_ptns = self.get_common_partitions()
+        self.num_ptns = len(common_ptns)
+
+        self.common_ptns_df = self.get_common_partitions_df(common_ptns)
 
         self.start_shuffle_ptns = self.spark.conf.get(
             "spark.sql.shuffle.partitions", "200"
@@ -522,6 +529,35 @@ class GraphEnricher(NodeMixin, EdgeMixin):
 
         return common_ptns
 
+    def get_common_partitions_df(
+        self, common_partitions: Set[Tuple[int, int]]
+    ) -> DataFrame:
+        """Get a small dataframe containing the partitions which are present
+        in both the lidar and OSM dataset. Mark it as suitable for broadcast
+        joins.
+
+        Args:
+            common_partitions (Set[Tuple[int, int]]): A list of partitions
+              which are present in both datasets
+
+        Returns:
+            DataFrame: A dataframe with easting_ptn and northing_ptn fields
+              containing the data in common_partitions
+        """
+
+        schema = StructType(
+            [
+                StructField("easting_ptn", IntegerType()),
+                StructField("northing_ptn", IntegerType()),
+            ]
+        )
+
+        df = self.spark.createDataFrame(data=common_partitions, schema=schema)
+
+        df = F.broadcast(df)
+
+        return df
+
     def filter_df_by_common_partitions(self, df: DataFrame) -> DataFrame:
         """Filter the provided dataframe to include only the partitions which
         are present in both the lidar and osm datasets.
@@ -532,18 +568,12 @@ class GraphEnricher(NodeMixin, EdgeMixin):
         Returns:
             DataFrame: A filtered copy of the input dataset
         """
-        filter_conds = []
 
-        for easting_ptn, northing_ptn in self.common_ptns:
-            filter_cond = (F.col("easting_ptn") == easting_ptn) & (
-                F.col("northing_ptn") == northing_ptn
-            )
-
-            filter_conds.append(filter_cond)
-
-        ptn_filter = reduce(lambda x, y: x | y, filter_conds)
-
-        df = df.filter(ptn_filter)
+        df = df.join(
+            self.common_ptns_df,
+            on=["easting_ptn", "northing_ptn"],
+            how="inner",
+        )
 
         return df
 

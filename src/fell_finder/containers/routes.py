@@ -64,7 +64,7 @@ class RouteConfig:
     Args:
         start_lat (float): Latitude for the route start point
         start_lon (float): Longitude for the route start point
-        target_distance (float): Target distance for the route (in km)
+        target_distance (float): Target distance for the route (in m)
         tolerance (float): How far above/below the target distance a
           completed route can be while still being considered valid
         route_mode (str): Set to 'hilly' to generate the hilliest possible
@@ -91,6 +91,7 @@ class RouteConfig:
           - tertiary_link
           - track
           - unclassified
+          - compound
     """
 
     start_lat: float

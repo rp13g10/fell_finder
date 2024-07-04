@@ -10,6 +10,7 @@ from fell_finder.selection.selector import Selector
 from fell_finder.selection.condenser import GraphCondenser
 from fell_finder.routing.zimmer import Zimmer
 from fell_finder.routing.route_pruner import RoutePruner
+from fell_finder.routing.route_selector import RouteSelector
 
 # TODO: Make this more configurable
 
@@ -20,10 +21,7 @@ class RouteMaker:
     point & a max distance.
     """
 
-    def __init__(
-        self,
-        config: RouteConfig,
-    ):
+    def __init__(self, config: RouteConfig, data_dir: str):
         """Create a route finder based on user preferences.
 
         Args:
@@ -33,7 +31,7 @@ class RouteMaker:
         self.config = config
 
         # Fetch networkx graph from enriched parquet dataset
-        selector = Selector(self.config)
+        selector = Selector(self.config, data_dir)
         start_node, full_graph = selector.create_graph()
         self.start_node = start_node
         self.full_graph = full_graph
@@ -48,10 +46,11 @@ class RouteMaker:
         self.zimmer = Zimmer(self.cond_graph, self.config)
         self.candidates = self._create_seed_route(self.start_node)
         self.completed_routes: List[Route] = []
-        self.pruner = RoutePruner(
-            self.cond_graph,
-            config,
-        )
+        # self.pruner = RoutePruner(
+        #     self.cond_graph,
+        #     config,
+        # )
+        # self.pruner = RouteSelector
 
         # Debugging
         self.last_candidates: List[Route] = []
@@ -182,7 +181,20 @@ class RouteMaker:
 
             # Make sure the total number of routes stays below the configured
             # limit
-            new_candidates = self.pruner.prune_routes(new_candidates)
+            if len(new_candidates) > self.config.max_candidates:
+
+                selector = RouteSelector(
+                    routes=sorted(
+                        new_candidates,
+                        key=lambda x: x.ratio,
+                        reverse=self.config.route_mode == "hilly",
+                    ),
+                    num_routes_to_select=self.config.max_candidates,
+                    threshold=0.97,
+                )
+
+                new_candidates = selector.select_routes()
+
             self.last_candidates = self.candidates
             self.candidates = new_candidates
 

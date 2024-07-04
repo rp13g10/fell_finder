@@ -2,8 +2,9 @@
 this will be a prime target for development once work on the webapp gets
 underway."""
 
-from typing import List
+from typing import List, Tuple
 
+import dash_leaflet as dl
 from networkx import DiGraph
 from plotly import graph_objects as go
 
@@ -28,16 +29,10 @@ def generate_filename(route: Route) -> str:
 # TODO: Use dash-leaflet to rewrite this function
 
 
-def unpack_route_details(cond_graph: DiGraph, route: Route) -> List[int]:
-    """_summary_
+def get_visited_nodes_from_route(
+    cond_graph: DiGraph, route: Route
+) -> List[int]:
 
-    Args:
-        graph (DiGraph): _description_
-        route (Route): _description_
-
-    Returns:
-        List[int]: _description_
-    """
     visited_points = []
 
     last_id = None
@@ -54,6 +49,22 @@ def unpack_route_details(cond_graph: DiGraph, route: Route) -> List[int]:
     return visited_points
 
 
+def get_visited_coords_from_route(
+    full_graph: DiGraph, cond_graph: DiGraph, route: Route
+) -> List[Tuple[float, float]]:
+
+    visited_nodes = get_visited_nodes_from_route(cond_graph, route)
+
+    coords = []
+    for node_id in visited_nodes:
+        node = full_graph.nodes[node_id]
+        lat = node["lat"]
+        lon = node["lon"]
+        coords.append((lat, lon))
+
+    return coords
+
+
 def plot_elevation_profile(
     full_graph: DiGraph, cond_graph: DiGraph, route: Route
 ) -> go.Figure:
@@ -67,7 +78,7 @@ def plot_elevation_profile(
     cml_dist = 0
     last_id = None
     dists, eles = [], []
-    for node_id in unpack_route_details(cond_graph, route):
+    for node_id in get_visited_nodes_from_route(cond_graph, route):
         node = full_graph.nodes[node_id]
         ele = node["elevation"]
 
@@ -82,20 +93,27 @@ def plot_elevation_profile(
         eles.append(ele)
         dists.append(cml_dist)
 
+    distance = route.distance
+    elevation = route.elevation_gain
+    title = f"Distance: {distance}, Elevation: {elevation}"
+
     route_trace = go.Scatter(
         mode="lines+markers", x=dists, y=eles, line=dict(shape="spline")
     )
 
-    layout = go.Layout(title="Elevation Profile")
+    layout = go.Layout(
+        title=title,
+        margin=dict(l=20, r=20, t=20, b=20),
+    )
 
     figure = go.Figure(data=[route_trace], layout=layout)
 
     return figure
 
 
-def plot_route(
+def generate_route_polyline(
     full_graph: DiGraph, cond_graph: DiGraph, route: Route
-) -> go.Figure:
+) -> dl.Polyline:
     """For a generated route, generate a Plotly graph which plots it onto
     a mapbox map.
 
@@ -107,64 +125,9 @@ def plot_route(
     Returns:
         go.Figure: A mapbox plot of the provided route
     """
-    last_id = None
-    cml_dist = 0
-    lats, lons, eles, dists = [], [], [], []
-    for node_id in unpack_route_details(cond_graph, route):
-        node = full_graph.nodes[node_id]
-        lat = node["lat"]
-        lon = node["lon"]
-        ele = node["elevation"]
 
-        if last_id is None:
-            step_dist = 0
-        else:
-            step = full_graph[last_id][node_id]
-            step_dist = step["distance"]
+    positions = get_visited_coords_from_route(full_graph, cond_graph, route)
 
-            if "via" in step:
-                for lat, lon, ele in step["via"]:
-                    lats.append(lat)
-                    lons.append(lon)
-                    eles.append(ele)
-                    dists.append(None)
+    polyline = dl.Polyline(positions=positions, id="route-plot-trace")
 
-        cml_dist += step_dist
-        last_id = node_id
-
-        lats.append(lat)
-        lons.append(lon)
-        eles.append(ele)
-        dists.append(cml_dist)
-
-    text = [
-        f"Distance: {dist:,.2f}km\nElevation: {ele:,.2f}m" if dist else ""
-        for ele, dist in zip(eles, dists)
-    ]
-
-    route_trace = go.Scattermapbox(
-        mode="lines",
-        lat=lats,
-        lon=lons,
-        text=text,
-    )
-    se_trace = go.Scattermapbox(
-        mode="markers", lat=lats[0:1], lon=lons[0:1], marker=dict(size=20)
-    )
-
-    distance = route.distance
-    elevation = route.elevation_gain
-    title = f"Distance: {distance}, Elevation: {elevation}"
-
-    layout = go.Layout(
-        # margin={"l": 0, "t": 0, "r": 0, "l": 0},
-        mapbox={"center": {"lon": lons[0], "lat": lats[0]}},
-        mapbox_style="open-street-map",
-        mapbox_zoom=10,
-        title=title,
-        hovermode="closest",
-    )
-
-    fig = go.Figure(data=[route_trace, se_trace], layout=layout)
-
-    return fig
+    return polyline

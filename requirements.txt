@@ -12,5 +12,6 @@ bng-latlon
 networkx
 geopy
 thefuzz
-graph-tool
 plotly
+dash
+dash-leaflet
