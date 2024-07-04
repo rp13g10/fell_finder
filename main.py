@@ -5,16 +5,17 @@ from pyspark.sql import SparkSession
 
 from fell_finder.ingestion import LidarLoader, OsmLoader
 from fell_finder.enrichment import GraphEnricher
+from fell_finder.contraction.graph_contractor import GraphContractor
 
 DATA_DIR = "/home/ross/repos/fell_finder/data"
 
-lidar_loader = LidarLoader(DATA_DIR)
-lidar_loader.load()
-del lidar_loader
+# lidar_loader = LidarLoader(DATA_DIR)
+# lidar_loader.load()
+# del lidar_loader
 
-osm_loader = OsmLoader(DATA_DIR)
-osm_loader.load()
-del osm_loader
+# osm_loader = OsmLoader(DATA_DIR)
+# osm_loader.load()
+# del osm_loader
 
 # Config set for testing on personal laptop, will need tuning for cloud envs
 spark = (
@@ -31,5 +32,9 @@ spark = (
     .getOrCreate()
 )
 
-graph_enricher = GraphEnricher(DATA_DIR, spark)
-graph_enricher.enrich()
+# graph_enricher = GraphEnricher(DATA_DIR, spark)
+# graph_enricher.enrich()
+# del graph_enricher
+
+graph_contractor = GraphContractor(DATA_DIR, spark)
+self = graph_contractor

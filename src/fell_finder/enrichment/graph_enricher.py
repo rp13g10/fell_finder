@@ -216,7 +216,11 @@ class EdgeMixin(ABC):
             "dst_lon",
             "src_easting",
             "src_northing",
-            "type",
+            "way_id",
+            "way_inx",
+            "highway",
+            "surface",
+            "bridge",
             F.col("coords.inx_arr").alias("inx"),
             F.round(F.col("coords.easting_arr"))
             .astype(IntegerType())
@@ -258,7 +262,11 @@ class EdgeMixin(ABC):
             "src_northing",
             "inx",
             "elevation",
-            "type",
+            "way_id",
+            "way_inx",
+            "highway",
+            "surface",
+            "bridge",
         )
 
         return tagged
@@ -285,12 +293,20 @@ class EdgeMixin(ABC):
             "delta", F.col("elevation") - F.col("last_elevation")
         )
 
+        bridge_mask = ~((F.col("bridge") != "no") | (F.col("bridge").isNull()))
+
         edges = edges.withColumn(
-            "elevation_gain", F.greatest(F.col("delta"), F.lit(0))
+            "elevation_gain",
+            F.when(bridge_mask, F.lit(0.0)).otherwise(
+                F.abs(F.greatest(F.col("delta"), F.lit(0)))
+            ),
         )
 
         edges = edges.withColumn(
-            "elevation_loss", F.abs(F.least(F.col("delta"), F.lit(0)))
+            "elevation_loss",
+            F.when(bridge_mask, F.lit(0.0)).otherwise(
+                F.abs(F.least(F.col("delta"), F.lit(0)))
+            ),
         )
 
         return edges
@@ -316,7 +332,10 @@ class EdgeMixin(ABC):
             "dst_lon",
             "src_easting",
             "src_northing",
-            "type",
+            "way_id",
+            "way_inx",
+            "highway",
+            "surface",
         ).agg(
             F.sum(F.col("elevation_gain")).alias("elevation_gain"),
             F.sum(F.col("elevation_loss")).alias("elevation_loss"),
@@ -385,7 +404,10 @@ class EdgeMixin(ABC):
             "src_lon",
             "dst_lat",
             "dst_lon",
-            "type",
+            "way_id",
+            "way_inx",
+            "highway",
+            "surface",
             "distance",
             "elevation_gain",
             "elevation_loss",

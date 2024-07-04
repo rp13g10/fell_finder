@@ -1,23 +1,17 @@
-"""Functions relating to the loading of a .json network graph into a tabular
+"""Functions relating to the loading of a .osm.pbf network graph into a tabular
 format"""
 
-import json
 import os
-from typing import List, Tuple
+from typing import Tuple
 
+import pandas as pd
 import polars as pl
 from bng_latlon import WGS84toOSGB36
-from networkx import DiGraph
-from networkx.readwrite import json_graph
+from pyrosm import OSM
 
 from fell_finder.utils.partitioning import add_partitions_to_polars_df
 
-# NOTE: This is currently set up to only bring in the contents of the
-#       hampshire-latest OSM dataset. Expansion to other regions is planned as
-#       part of a future build.
-
-# TODO: In future this will need setting up to run on raw .osm files. This will
-#       be required in order to correctly flag bridges for elevation correction
+# TODO: Confirm whether the length field corresponds to ways or edges
 
 
 class OsmLoader:
@@ -32,105 +26,77 @@ class OsmLoader:
 
         self.data_dir = data_dir
 
-    @staticmethod
-    def fetch_node_coords(graph: DiGraph, node_id: int) -> Tuple[int, int]:
-        """Convenience function, retrieves the latitude and longitude for a
-        single node in a graph."""
-        node = graph.nodes[node_id]
-        lat = node["lat"]
-        lon = node["lon"]
-        return lat, lon
+    def _subset_nodes(self, nodes: pd.DataFrame) -> pd.DataFrame:
+        nodes = nodes.loc[:, ["id", "lat", "lon"]]
 
-    def load_graph(self) -> DiGraph:
-        """Read in the contents of the JSON file specified by `source_path`
-        to a networkx graph.
+        return nodes
 
-        Args:
-            source_path (str): The location of the networkx graph to be
-              enriched. The graph must have been saved to json format.
+    def _subset_edges(self, edges: pd.DataFrame) -> pd.DataFrame:
+        edges = edges.loc[
+            :,
+            [
+                "id",
+                "u",
+                "v",
+                "highway",
+                "surface",
+                "bridge",
+                "oneway",
+            ],
+        ]
+        edges.loc[:, "row_no"] = edges.index  # type: ignore
+        return edges
 
-        Returns:
-            Graph: A networkx graph with the contents of the provided json
-              file.
-        """
-
-        graph_path = os.path.join(
-            self.data_dir, "extracts/osm/hampshire-latest.json"
+    def read_osm_data(self) -> Tuple[pl.DataFrame, pl.DataFrame]:
+        file_path = os.path.join(
+            self.data_dir, "extracts/osm/hampshire-latest.osm.pbf"
         )
 
-        # Read in the contents of the JSON file
-        with open(graph_path, "r", encoding="utf8") as fobj:
-            graph_data = json.load(fobj)
+        osm_handle = OSM(file_path)
 
-        # Convert it back to a networkx graph
-        graph = json_graph.adjacency_graph(graph_data)
+        nodes, edges = osm_handle.get_network("walking", nodes=True)  # type: ignore
 
-        return graph
+        nodes = self._subset_nodes(nodes)  # type: ignore
+        edges = self._subset_edges(edges)  # type: ignore
 
-    @staticmethod
-    def generate_node_data(graph: DiGraph) -> List[Tuple]:
-        """Extracts the node_id, latitude and longitude for each node. Returns
-        a list of tuples containing this information.
+        nodes = pl.DataFrame(nodes)
+        edges = pl.DataFrame(edges)
 
-        Returns:
-            List[Tuple]: A list of tuples containing for each node in the
-            graph: id, latitude, longitude, easting, northing
-        """
+        return nodes, edges
 
-        all_coords = []
-        for node_id, node_attrs in graph.nodes.items():
-            node_lat = node_attrs["lat"]
-            node_lon = node_attrs["lon"]
-            node_easting, node_northing = WGS84toOSGB36(node_lat, node_lon)
-
-            all_coords.append(
-                (
-                    node_id,
-                    node_lat,
-                    node_lon,
-                    node_easting,
-                    node_northing,
-                )
+    def assign_bng_coords(self, nodes: pl.DataFrame) -> pl.DataFrame:
+        nodes = nodes.with_columns(
+            pl.struct("lat", "lon")
+            .map_elements(
+                lambda x: WGS84toOSGB36(x["lat"], x["lon"]),
+                return_dtype=pl.List(pl.Float64),
             )
+            .alias("bng_coords")
+        )
 
-        return all_coords
+        nodes = nodes.with_columns(
+            pl.col("bng_coords").list.get(0).cast(pl.Int32()).alias("easting"),
+            pl.col("bng_coords")
+            .list.get(1)
+            .cast(pl.Int32())
+            .alias("northing"),
+        )
 
-    def generate_node_df_from_data(
-        self, node_data: List[Tuple]
-    ) -> pl.DataFrame:
-        """Converts a list of tuples into a polars dataframe
+        nodes = nodes.drop("bng_coords")
 
-        Args:
-            node_data (List[Tuple]): A list of tuples containing one tuple for
-              each node in the graph. Each tuple should contain the elements:
-              id, latitude, longitude, easting, northing
+        return nodes
 
-        Returns:
-            pl.DataFrame: A polars dataframe containing the provided data
-        """
-        node_schema = {
-            "id": pl.Int64(),
-            "lat": pl.Float64(),
-            "lon": pl.Float64(),
-            "easting": pl.Int32(),
-            "northing": pl.Int32(),
-        }
-
-        nodes_df = pl.DataFrame(data=node_data, schema=node_schema)
-
-        return nodes_df
-
-    def set_node_output_schema(self, node_df: pl.DataFrame) -> pl.DataFrame:
+    def set_node_output_schema(self, nodes: pl.DataFrame) -> pl.DataFrame:
         """Ensure the node output dataset contains only the required columns
 
         Args:
-            node_df (pl.DataFrame): A polars dataframe containing details of
+            nodes (pl.DataFrame): A polars dataframe containing details of
               all nodes in the graph
 
         Returns:
             pl.DataFrame: A subset of the provided dataframe
         """
-        node_df = node_df.select(
+        nodes = nodes.select(
             "id",
             "lat",
             "lon",
@@ -139,18 +105,121 @@ class OsmLoader:
             "easting_ptn",
             "northing_ptn",
         )
-        return node_df
+        return nodes
 
-    def write_node_df_to_parquet(self, node_df: pl.DataFrame):
+    def tidy_edge_schema(self, edges: pl.DataFrame) -> pl.DataFrame:
+        edges = edges.select(
+            pl.col("u").alias("src"),
+            pl.col("v").alias("dst"),
+            pl.col("id").alias("way_id"),
+            "highway",
+            "surface",
+            "bridge",
+            "row_no",
+            "oneway",
+        )
+
+        return edges
+
+    def add_reverse_edges(self, edges: pl.DataFrame) -> pl.DataFrame:
+        reverse = edges.filter(
+            (pl.col("oneway").is_null()) | (pl.col("oneway") == "no")
+        )
+
+        reverse = reverse.with_columns(
+            pl.col("src").alias("old_src"), pl.col("dst").alias("src")
+        )
+
+        reverse = reverse.with_columns(
+            pl.col("old_src").alias("dst"),
+            (pl.col("way_id") * -1).alias("way_id"),
+            (pl.col("row_no") * -1).alias("row_no"),
+        ).drop("old_src")
+
+        edges = pl.concat([edges, reverse])
+
+        return edges
+
+    def derive_position_in_way(self, edges: pl.DataFrame):
+        edges = edges.with_columns(
+            pl.col("row_no").rank("ordinal").over("way_id").alias("way_inx")
+        )
+        return edges
+
+    def get_edge_start_coords(
+        self, nodes: pl.DataFrame, edges: pl.DataFrame
+    ) -> pl.DataFrame:
+        nodes = nodes.select(
+            pl.col("id").alias("src"),
+            pl.col("lat").alias("src_lat"),
+            pl.col("lon").alias("src_lon"),
+            pl.col("easting").alias("src_easting"),
+            pl.col("northing").alias("src_northing"),
+            "easting_ptn",
+            "northing_ptn",
+        )
+
+        edges = edges.join(nodes, on="src", how="inner")
+
+        return edges
+
+    def get_edge_end_coords(
+        self, nodes: pl.DataFrame, edges: pl.DataFrame
+    ) -> pl.DataFrame:
+        nodes = nodes.select(
+            pl.col("id").alias("dst"),
+            pl.col("lat").alias("dst_lat"),
+            pl.col("lon").alias("dst_lon"),
+            pl.col("easting").alias("dst_easting"),
+            pl.col("northing").alias("dst_northing"),
+        )
+
+        edges = edges.join(nodes, on="dst", how="inner")
+
+        return edges
+
+    def set_edge_output_schema(self, edges: pl.DataFrame) -> pl.DataFrame:
+        """Ensure the node output dataset contains only the required columns
+
+        Args:
+            nodes (pl.DataFrame): A polars dataframe containing details of
+              all nodes in the graph
+
+        Returns:
+            pl.DataFrame: A subset of the provided dataframe
+        """
+
+        edges = edges.select(
+            "src",
+            "dst",
+            "way_id",
+            "way_inx",
+            "highway",
+            "surface",
+            "bridge",
+            "src_lat",
+            "src_lon",
+            "dst_lat",
+            "dst_lon",
+            "src_easting",
+            "src_northing",
+            "dst_easting",
+            "dst_northing",
+            "easting_ptn",
+            "northing_ptn",
+        )
+        return edges
+
+    def write_nodes_to_parquet(self, nodes: pl.DataFrame):
         """Write the provided dataframe out to parquet format, partitioning
         by easting_ptn and northing_ptn
 
         Args:
-            node_df (pl.DataFrame): The dataframe to be written
+            nodes (pl.DataFrame): The dataframe to be written
         """
         tgt_loc = os.path.join(self.data_dir, "parsed/nodes")
 
-        node_df.write_parquet(
+        nodes.write_parquet(
             tgt_loc,
             use_pyarrow=True,
             pyarrow_options={
@@ -159,115 +228,16 @@ class OsmLoader:
             },
         )
 
-    def generate_edge_data(self, graph: DiGraph) -> List[Tuple]:
-        """Extracts the start and end points for each edge in the internal
-        graph, returns both their IDs and lat/lon coordinates as a tuple
-        for each edge in the graph.
-
-        Returns:
-            List[Tuple]: A list in which each tuple contains:
-              start_id, end_id, start_lat, start_lon, end_lat, end_lon, ...
-              \\... edge_type, src_easting, src_northing, dst_easting, ...
-              \\... dst_northing
-        """
-
-        # NOTE: lat/lon datapoints can be dropped after UAT, not required
-        #       for algorithm
-
-        all_edges = []
-        for start_id, end_id in graph.edges():
-            edge_type = graph[start_id][end_id].get("highway")
-            start_lat, start_lon = self.fetch_node_coords(graph, start_id)
-            end_lat, end_lon = self.fetch_node_coords(graph, end_id)
-            src_easting, src_northing = WGS84toOSGB36(start_lat, start_lon)
-            dst_easting, dst_northing = WGS84toOSGB36(end_lat, end_lon)
-            all_edges.append(
-                (
-                    start_id,
-                    end_id,
-                    start_lat,
-                    start_lon,
-                    end_lat,
-                    end_lon,
-                    edge_type,
-                    src_easting,
-                    src_northing,
-                    dst_easting,
-                    dst_northing,
-                )
-            )
-
-        return all_edges
-
-    def generate_edge_df_from_data(
-        self, edge_data: List[Tuple]
-    ) -> pl.DataFrame:
-        """Converts a list of tuples into a polars dataframe
-
-        Args:
-            edge_data (List[Tuple]): A list of tuples containing one tuple for
-              each node in the graph. Each tuple should contain the elements:
-              start_id, end_id, start_lat, start_lon, end_lat, end_lon, ...
-              \\... edge_type, easting, northing
-
-        Returns:
-            pl.DataFrame: A polars dataframe containing the provided data
-        """
-        edge_schema = {
-            "src": pl.Int64(),
-            "dst": pl.Int64(),
-            "src_lat": pl.Float64(),
-            "src_lon": pl.Float64(),
-            "dst_lat": pl.Float64(),
-            "dst_lon": pl.Float64(),
-            "type": pl.String(),
-            "easting": pl.Int32(),
-            "northing": pl.Int32(),
-            "dst_easting": pl.Int32(),
-            "dst_northing": pl.Int32(),
-        }
-
-        edge_df = pl.DataFrame(data=edge_data, schema=edge_schema)
-
-        return edge_df
-
-    def set_edge_output_schema(self, edge_df: pl.DataFrame) -> pl.DataFrame:
-        """Ensure the node output dataset contains only the required columns
-
-        Args:
-            node_df (pl.DataFrame): A polars dataframe containing details of
-              all nodes in the graph
-
-        Returns:
-            pl.DataFrame: A subset of the provided dataframe
-        """
-        edge_df = edge_df.select(
-            "src",
-            "dst",
-            "src_lat",
-            "src_lon",
-            "dst_lat",
-            "dst_lon",
-            "type",
-            pl.col("easting").alias("src_easting"),
-            pl.col("northing").alias("src_northing"),
-            "dst_easting",
-            "dst_northing",
-            "easting_ptn",
-            "northing_ptn",
-        )
-        return edge_df
-
-    def write_edge_df_to_parquet(self, edge_df: pl.DataFrame):
+    def write_edges_to_parquet(self, edges: pl.DataFrame):
         """Write the provided dataframe out to parquet format, partitioning
         by easting_ptn and northing_ptn
 
         Args:
-            node_df (pl.DataFrame): The dataframe to be written
+            nodes (pl.DataFrame): The dataframe to be written
         """
         tgt_loc = os.path.join(self.data_dir, "parsed/edges")
 
-        edge_df.write_parquet(
+        edges.write_parquet(
             tgt_loc,
             use_pyarrow=True,
             pyarrow_options={
@@ -277,24 +247,19 @@ class OsmLoader:
         )
 
     def load(self):
-        """Primary user facing function for this class. Reads in the provided
-        OSM extract and stores the nodes & edges as two separate partitioned
-        parquet datasets"""
-        graph = self.load_graph()
+        nodes, edges = self.read_osm_data()
 
-        node_data = self.generate_node_data(graph)
-        node_df = self.generate_node_df_from_data(node_data)
-        del node_data
-        node_df = add_partitions_to_polars_df(node_df)
-        node_df = self.set_node_output_schema(node_df)
-        self.write_node_df_to_parquet(node_df)
-        del node_df
+        nodes = self.assign_bng_coords(nodes)
+        nodes = add_partitions_to_polars_df(nodes)
+        nodes = self.set_node_output_schema(nodes)
 
-        edge_data = self.generate_edge_data(graph)
-        del graph
-        edge_df = self.generate_edge_df_from_data(edge_data)
-        del edge_data
-        edge_df = add_partitions_to_polars_df(edge_df)
-        edge_df = self.set_edge_output_schema(edge_df)
-        self.write_edge_df_to_parquet(edge_df)
-        del edge_df
+        edges = self.tidy_edge_schema(edges)
+        edges = self.add_reverse_edges(edges)
+        edges = self.derive_position_in_way(edges)
+
+        edges = self.get_edge_start_coords(nodes, edges)
+        edges = self.get_edge_end_coords(nodes, edges)
+        edges = self.set_edge_output_schema(edges)
+
+        self.write_nodes_to_parquet(nodes)
+        self.write_edges_to_parquet(edges)
