@@ -1,3 +1,4 @@
 data/*
 *.pyc
 **.egg-info*
+spark-warehouse/*
