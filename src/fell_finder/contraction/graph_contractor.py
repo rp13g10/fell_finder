@@ -82,7 +82,7 @@ class GraphContractor:
 
         return all_partitions
 
-    def _load_df(self, dataset: str) -> DataFrame:
+    def load_df(self, dataset: str) -> DataFrame:
         """Load in the contents of a single dataset, filtering it to include
         only the partitions which are present in all datasets.
 
@@ -106,31 +106,33 @@ class GraphContractor:
         Args:
             edges: A dataframe containing all of the edges in the graph"""
 
-        # TODO: This function needs updating, the graph is directed so the
-        #       current approach is double-counting most edges!
-        #       Propose trying something with collect_set for each groupby
-        #       and getting the union of the two. Calculate in_degree,
-        #       out_degree and degree for each node. Use degree == 2 to
-        #       flag nodes for contraction, degree == 1 for dead ends
-
-        in_degrees = edges.groupBy("dst").agg(
-            F.count(F.lit(1)).alias("in_degree")
+        out_links = edges.select(
+            F.col("src").alias("id"),
+            F.col("dst").alias("neighbour"),
+            F.lit(None).alias("neighbour_in"),
+            F.col("dst").alias("neighbour_out"),
         )
-        out_degrees = edges.groupBy("src").agg(
-            F.count(F.lit(1)).alias("out_degree")
+        in_links = edges.select(
+            F.col("dst").alias("id"),
+            F.col("src").alias("neighbour"),
+            F.col("src").alias("neighbour_in"),
+            F.lit(None).alias("neighbour_out"),
+        )
+        links = out_links.union(in_links)
+
+        degrees = links.groupBy("id").agg(
+            F.count(F.col("neighbour_in")).alias("in_degree"),
+            F.count(F.col("neighbour_out")).alias("out_degree"),
+            F.countDistinct(F.col("neighbour")).alias("degree"),
         )
 
-        in_degrees = in_degrees.withColumnRenamed("dst", "id")
-        out_degrees = out_degrees.withColumnRenamed("src", "id")
-
-        degrees = in_degrees.join(out_degrees, on="id", how="outer")
-        degrees = degrees.fillna(0)
         return degrees
 
     def add_degrees_to_nodes(
         self, nodes: DataFrame, edges: DataFrame
     ) -> DataFrame:
-        """Tag each node in the graph with in and out degrees
+        """Tag each node in the graph with in and out degrees. As a side-effect
+        this will also drop any orphaned nodes.
 
         Args:
             nodes: A dataframe containing all of the nodes in the graph
@@ -141,8 +143,7 @@ class GraphContractor:
             additional in_degree and out_degree columns"""
         degrees = self._get_node_degrees(edges)
 
-        nodes = nodes.join(degrees, on="id", how="left")
-        nodes = nodes.fillna(0, subset=["in_degree", "out_degree"])
+        nodes = nodes.join(degrees, on="id", how="inner")
 
         return nodes
 
@@ -159,9 +160,8 @@ class GraphContractor:
               * dead_end_flag
               * orphan_flag"""
 
-        contract_mask = (F.col("in_degree") == 1) & (F.col("out_degree") == 1)
-        dead_end_mask = (F.col("in_degree") + F.col("out_degree")) == 1
-        orphan_mask = (F.col("in_degree") + F.col("out_degree")) == 0
+        contract_mask = F.col("degree") == 2
+        dead_end_mask = F.col("degree") == 1
 
         nodes = nodes.withColumn(
             "contract_flag", F.when(contract_mask, 1).otherwise(0)
@@ -170,23 +170,6 @@ class GraphContractor:
         nodes = nodes.withColumn(
             "dead_end_flag", F.when(dead_end_mask, 1).otherwise(0)
         )
-
-        nodes = nodes.withColumn(
-            "orphan_flag", F.when(orphan_mask, 1).otherwise(0)
-        )
-
-        return nodes
-
-    def remove_orphans(self, nodes: DataFrame) -> DataFrame:
-        """Remove any nodes from the graph which cannot be reached
-
-        Args:
-            nodes: A dataframe containg all of the nodes in the graph
-
-        Returns:
-            A filtered copy of the input dataset"""
-        nodes = nodes.filter(F.col("orphan_flag") == 0)
-        nodes = nodes.drop("orphan_flag")
 
         return nodes
 
@@ -248,6 +231,7 @@ class GraphContractor:
             F.col("id").alias("src"),
             F.col("contract_flag").alias("src_contract_flag"),
             F.col("elevation").alias("src_elevation"),
+            F.col("dead_end_flag").alias("src_dead_end_flag"),
         )
         edges = edges.join(src_flags, on="src", how="inner")
 
@@ -256,8 +240,9 @@ class GraphContractor:
             F.col("id").alias("dst"),
             F.col("contract_flag").alias("dst_contract_flag"),
             F.col("elevation").alias("dst_elevation"),
+            F.col("dead_end_flag").alias("dst_dead_end_flag"),
         )
-        edges = edges.join(dst_flags, on="src", how="inner")
+        edges = edges.join(dst_flags, on="dst", how="inner")
 
         # Populate IDs for nodes at the start of a chain
         chain_src_mask = (F.col("way_start_flag") == 1) | (
@@ -353,12 +338,19 @@ class GraphContractor:
                         "src_lat",
                         "src_lon",
                         "src_elevation",
+                        "src_dead_end_flag",
                     )
                 )
             ).alias("src_geom"),
             F.array_sort(
                 F.collect_list(
-                    F.struct("way_inx", "dst_lat", "dst_lon", "dst_elevation")
+                    F.struct(
+                        "way_inx",
+                        "dst_lat",
+                        "dst_lon",
+                        "dst_elevation",
+                        "dst_dead_end_flag",
+                    )
                 )
             ).alias("dst_geom"),
         )
@@ -375,6 +367,7 @@ class GraphContractor:
         Returns:
             A copy of the input dataframe with a normalized schema
         """
+
         edges = edges.select(
             F.col("chain_src").alias("src"),
             F.col("chain_dst").alias("dst"),
@@ -391,28 +384,52 @@ class GraphContractor:
             F.array_insert(
                 F.col("src_geom.src_lat"),
                 -1,
-                F.col("dst_geom.dst_lat").getItem(-1),
+                F.element_at("dst_geom.dst_lat", -1),
             ).alias("geom_lat"),
             # Collect lons at each point in the edge
             F.array_insert(
-                F.col("dst_geom.src_lon"),
+                F.col("src_geom.src_lon"),
                 -1,
-                F.col("dst_geom.dst_lat").getItem(-1),
+                F.element_at("dst_geom.dst_lon", -1),
             ).alias("geom_lon"),
             # Collect elevation at each point in the edge
             F.array_insert(
                 F.col("src_geom.src_elevation"),
                 -1,
-                F.col("dst_geom.dst_elevation").getItem(-1),
+                F.element_at("dst_geom.dst_elevation", -1),
             ).alias("geom_elevation"),
             # Collect distance at each point in the edge, starting at 0
-            F.array_insert(F.col("geom.distance"), 0, 0.0).alias(
+            F.array_insert(F.col("geom.distance"), 1, 0.0).alias(
                 "geom_distance"
             ),
+            # Retrieve dead end flags for src/dest
+            F.element_at("src_geom.src_dead_end_flag", 1).alias(
+                "src_dead_end_flag"
+            ),
+            F.element_at("dst_geom.dst_dead_end_flag", -1).alias(
+                "dst_dead_end_flag"
+            ),
             # Get partitions based on first point in the edge
-            F.col("geom.easting_ptn").getItem(0).alias("easting_ptn"),
-            F.col("geom.northing_ptn").getItem(0).alias("northing_ptn"),
+            F.element_at("geom.easting_ptn", 1).alias("easting_ptn"),
+            F.element_at("geom.northing_ptn", 1).alias("northing_ptn"),
         )
+
+        return edges
+
+    def drop_dead_ends(self, edges: DataFrame) -> DataFrame:
+        """Remove any chains where either the start or end node is a dead end,
+        as the routing algorithm will not be able to send users down them
+
+        Args:
+            edges: A dataframe containing all of the edges in the graph
+
+        Returns:
+            A filtered copy of the input dataset
+        """
+        src_mask = F.col("src_dead_end_flag") == 0
+        dst_mask = F.col("dst_dead_end_flag") == 0
+
+        edges = edges.filter(src_mask & dst_mask)
 
         return edges
 
@@ -424,6 +441,7 @@ class GraphContractor:
 
         Returns:
             A copy of the input dataframe with a standardized schema"""
+
         edges = edges.select(
             "src",
             "dst",
@@ -433,6 +451,7 @@ class GraphContractor:
             "elevation_loss",
             "distance",
             F.struct(
+                # NOTE: Array order is preserved within DataFrames
                 F.col("geom_lat").alias("lat"),
                 F.col("geom_lon").alias("lon"),
                 F.col("geom_elevation").alias("elevation"),
@@ -457,8 +476,8 @@ class GraphContractor:
             A filtered copy of the nodes dataframe
         """
 
-        src_nodes = edges.select("src").alias("id")
-        dst_nodes = edges.select("dst").alias("id")
+        src_nodes = edges.select(F.col("src").alias("id"))
+        dst_nodes = edges.select(F.col("dst").alias("id"))
         to_keep = src_nodes.union(dst_nodes).dropDuplicates()
 
         nodes = nodes.join(to_keep, on="id", how="inner")
@@ -483,19 +502,32 @@ class GraphContractor:
         ).parquet(os.path.join(self.data_dir, "optimised", target))
 
     def contract(self):
-        nodes = self._load_df("nodes")
-        edges = self._load_df("edges")
+        """Run the graph contraction algorithm on the enriched nodes & edges
+        datasets. This will combine all edges in the graph which are neither
+        junctions nor the ends of ways, storing the geometry of the combined
+        edges as a new attribute. Only nodes which form the start or end
+        of a combined edge will be retained.
+
+        This minimises the speed and complexity of the graph, improving the
+        performance of the route finding algorithm.
+        """
+        nodes = self.load_df("nodes")
+        edges = self.load_df("edges")
 
         nodes = self.add_degrees_to_nodes(nodes, edges)
         nodes = self.derive_node_flags(nodes)
-        nodes = self.remove_orphans(nodes)
 
         edges = self.derive_way_start_end_flags(edges)
         edges = self.derive_chain_src_dst(nodes, edges)
         edges = self.propagate_chain_src_dst(edges)
 
         edges = self.contract_chains(edges)
+
         edges = self.generate_new_edges_from_chains(edges)
+        edges = self.drop_dead_ends(edges)
         edges = self.set_edge_output_schema(edges)
 
         nodes = self.drop_unused_nodes(nodes, edges)
+
+        self.store_df(nodes, "nodes")
+        self.store_df(edges, "edges")
