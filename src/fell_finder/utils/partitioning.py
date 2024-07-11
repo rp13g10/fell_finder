@@ -49,8 +49,8 @@ def get_partitions(easting: int, northing: int) -> Tuple[int, int]:
         Tuple[int, int]: The easting partition and the northing partition
     """
 
-    easting_ptn = _round_half_up(easting / 1000)
-    northing_ptn = _round_half_up(northing / 1000)
+    easting_ptn = _round_half_up(easting / 5000)
+    northing_ptn = _round_half_up(northing / 5000)
 
     return easting_ptn, northing_ptn
 
@@ -71,12 +71,12 @@ def add_partitions_to_spark_df(
           and `northing_ptn` columns
     """
     df = df.withColumn(
-        "easting_ptn", F.round(F.col(easting_col) / 1000).astype(IntegerType())
+        "easting_ptn", F.round(F.col(easting_col) / 5000).astype(IntegerType())
     )
 
     df = df.withColumn(
         "northing_ptn",
-        F.round(F.col(northing_col) / 1000).astype(IntegerType()),
+        F.round(F.col(northing_col) / 5000).astype(IntegerType()),
     )
 
     return df
@@ -96,11 +96,11 @@ def add_partitions_to_polars_df(df: pl.DataFrame) -> pl.DataFrame:
           and `northing_ptn` columns
     """
     df = df.with_columns(
-        (pl.col("easting") / 1000)
+        (pl.col("easting") / 5000)
         .round()
         .cast(pl.Int32())
         .alias("easting_ptn"),
-        (pl.col("northing") / 1000)
+        (pl.col("northing") / 5000)
         .round()
         .cast(pl.Int32())
         .alias("northing_ptn"),
