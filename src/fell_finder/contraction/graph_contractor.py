@@ -450,12 +450,14 @@ class GraphContractor:
             "elevation_gain",
             "elevation_loss",
             "distance",
-            F.struct(
-                # NOTE: Array order is preserved within DataFrames
-                F.col("geom_lat").alias("lat"),
-                F.col("geom_lon").alias("lon"),
-                F.col("geom_elevation").alias("elevation"),
-                F.col("geom_distance").alias("distance"),
+            F.to_json(
+                F.struct(
+                    # NOTE: Array order is preserved within DataFrames
+                    F.col("geom_lat").alias("lat"),
+                    F.col("geom_lon").alias("lon"),
+                    F.col("geom_elevation").alias("elevation"),
+                    F.col("geom_distance").alias("distance"),
+                )
             ).alias("geometry"),
             "easting_ptn",
             "northing_ptn",
@@ -482,6 +484,20 @@ class GraphContractor:
 
         nodes = nodes.join(to_keep, on="id", how="inner")
 
+        return nodes
+
+    def set_node_output_schema(self, nodes: DataFrame) -> DataFrame:
+        """Ensure the nodes dataset has a consistent schema
+
+        Args:
+            nodes: A dataframe containing all of the nodes in the graph
+
+        Returns:
+            A subset of the input dataframe
+        """
+        nodes = nodes.select(
+            "id", "lat", "lon", "elevation", "easting_ptn", "northing_ptn"
+        )
         return nodes
 
     def store_df(self, df: DataFrame, target: str):
