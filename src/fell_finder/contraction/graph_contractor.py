@@ -450,18 +450,19 @@ class GraphContractor:
             "elevation_gain",
             "elevation_loss",
             "distance",
-            F.to_json(
-                F.struct(
-                    # NOTE: Array order is preserved within DataFrames
-                    F.col("geom_lat").alias("lat"),
-                    F.col("geom_lon").alias("lon"),
-                    F.col("geom_elevation").alias("elevation"),
-                    F.col("geom_distance").alias("distance"),
-                )
+            F.struct(
+                # NOTE: Array order is preserved within DataFrames
+                F.col("geom_lat").alias("lat"),
+                F.col("geom_lon").alias("lon"),
+                F.col("geom_elevation").alias("elevation"),
+                F.col("geom_distance").alias("distance"),
             ).alias("geometry"),
             "easting_ptn",
             "northing_ptn",
         )
+
+        edges = edges.dropna(subset=["src", "dst"])
+
         return edges
 
     def drop_unused_nodes(
@@ -498,6 +499,9 @@ class GraphContractor:
         nodes = nodes.select(
             "id", "lat", "lon", "elevation", "easting_ptn", "northing_ptn"
         )
+
+        nodes = nodes.dropna(subset=["id"])
+
         return nodes
 
     def store_df(self, df: DataFrame, target: str):
