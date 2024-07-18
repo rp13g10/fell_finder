@@ -30,7 +30,6 @@ app.layout = index
     prevent_initial_call=True,
 )
 def show_clicked_point_on_map(click_data, current_children):
-
     if click_data is None:
         return no_update
 
@@ -39,8 +38,8 @@ def show_clicked_point_on_map(click_data, current_children):
 
     new_marker = dl.Marker(position=[lat, lon], id="route-plot-marker")
 
-    print("\n")
-    print(current_children)
+    # print("\n")
+    # print(current_children)
 
     new_children = [
         child
@@ -87,25 +86,21 @@ def calculate_and_render_route(
         terrain_types=route_terrain,
     )
 
-    print("\n")
-    print(config)
+    # print("\n")
+    # print(config)
 
     maker = RouteMaker(config, DATA_DIR)
     routes = maker.find_routes()
 
     route = routes[0]
-    route_polyline = generate_route_polyline(
-        maker.full_graph, maker.cond_graph, route
-    )
+    route_polyline = generate_route_polyline(maker.graph, route)
 
     new_children = [
         x for x in current_children if x["props"]["id"] != "route-plot-trace"
     ]
     new_children.append(route_polyline)
 
-    profile_plot = plot_elevation_profile(
-        maker.full_graph, maker.cond_graph, route
-    )
+    profile_plot = plot_elevation_profile(maker.graph, route)
 
     return new_children, profile_plot
 

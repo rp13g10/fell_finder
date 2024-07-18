@@ -307,19 +307,24 @@ class Selector:
 
         return graph
 
-    def generate_fine_subgraph(self, graph: rx.PyDiGraph):
+    def generate_fine_subgraph(self, graph: rx.PyDiGraph, start_node: int):
         search_radius = self.config.max_distance / 2
 
         def check_removal_cond(
-            data: Tuple[int, GraphNode], search_radius: float
+            data: Tuple[int, GraphNode], search_radius: float, start_node: int
         ):
-            attrs = data[1]
+            node_inx, attrs = data
             if attrs.dist_to_start is None:
+                # Remove if no path back to start
                 return False
+            elif node_inx == start_node:
+                # Keep start node
+                return True
+            # Remove nodes outside of search radius
             return attrs.dist_to_start > search_radius
 
         to_remove = graph.filter_nodes(
-            lambda data: check_removal_cond(data, search_radius)
+            lambda data: check_removal_cond(data, search_radius, start_node)
         )
 
         graph.remove_nodes_from(to_remove)
@@ -335,6 +340,6 @@ class Selector:
 
         graph = self.tag_distances_to_start(graph, inverse_graph, start_node)
 
-        graph = self.generate_fine_subgraph(graph)
+        graph = self.generate_fine_subgraph(graph, start_node)
 
         return start_node, graph

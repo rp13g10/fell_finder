@@ -47,14 +47,16 @@ class Route:
 
     current_position: int
     visited: Set[int]
-    terminal_square: Optional[Tuple[int, int]] = None
 
     distance: float = 0.0
     elevation_gain: float = 0.0
     elevation_loss: float = 0.0
     elevation_gain_potential: float = 0.0
     elevation_loss_potential: float = 0.0
-    ratio: float = 0.0
+
+    @property
+    def ratio(self):
+        return self.elevation_gain / self.distance
 
 
 @dataclass

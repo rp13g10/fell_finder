@@ -4,7 +4,7 @@ route."""
 from copy import deepcopy
 from typing import Iterable, Tuple
 
-from networkx import DiGraph
+from rustworkx import PyDiGraph
 from fell_finder.containers.routes import Route, RouteConfig, StepMetrics
 
 
@@ -13,7 +13,7 @@ class Zimmer:
     provided which will generate a list of possible nodes to step to, and
     applying those steps to a given route."""
 
-    def __init__(self, graph: DiGraph, config: RouteConfig):
+    def __init__(self, graph: PyDiGraph, config: RouteConfig):
         """Store down the required information to handle processing of routes
 
         Args:
@@ -89,15 +89,12 @@ class Zimmer:
         """
         cur_node = route.route[-1]
 
-        step = self.graph[cur_node][next_node]
-        distance = step["distance"]
-        gain = step["elevation_gain"]
-        loss = step["elevation_loss"]
+        step = self.graph.get_edge_data(cur_node, next_node)
 
         step_metrics = StepMetrics(
-            distance=distance,
-            elevation_gain=gain,
-            elevation_loss=loss,
+            distance=step.distance,
+            elevation_gain=step.elevation_gain,
+            elevation_loss=step.elevation_loss,
         )
 
         return step_metrics
@@ -161,15 +158,6 @@ class Zimmer:
         """
         cur_pos = route.route[-1]
 
-        # Route is too long
-        if route.distance >= self.config.max_distance:
-            return "invalid"
-
-        # Route cannot be completed without becoming too long
-        remaining = self.graph.nodes[cur_pos]["dist_to_start"]
-        if (route.distance + remaining) >= self.config.max_distance:
-            return "invalid"
-
         # Route is circular
         start_pos = route.route[0]
         if start_pos == cur_pos:
@@ -182,6 +170,15 @@ class Zimmer:
                 return "complete"
             else:
                 return "invalid"
+
+        # Route is too long
+        if route.distance >= self.config.max_distance:
+            return "invalid"
+
+        # Route cannot be completed without becoming too long
+        remaining = self.graph[cur_pos][1].dist_to_start
+        if (route.distance + remaining) >= self.config.max_distance:
+            return "invalid"
 
         return "valid"
 

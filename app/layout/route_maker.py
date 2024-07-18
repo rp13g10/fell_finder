@@ -18,7 +18,6 @@ TERRAIN_TYPES = [
     "tertiary_link",
     "track",
     "unclassified",
-    "compound",
 ]
 
 BLANK_MAP = dl.Map(

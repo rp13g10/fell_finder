@@ -7,9 +7,7 @@ import tqdm
 
 from fell_finder.containers.routes import Route, RouteConfig
 from fell_finder.selection.selector import Selector
-from fell_finder.selection.condenser import GraphCondenser
 from fell_finder.routing.zimmer import Zimmer
-from fell_finder.routing.route_pruner import RoutePruner
 from fell_finder.routing.route_selector import RouteSelector
 
 # TODO: Make this more configurable
@@ -32,25 +30,14 @@ class RouteMaker:
 
         # Fetch networkx graph from enriched parquet dataset
         selector = Selector(self.config, data_dir)
-        start_node, full_graph = selector.create_graph()
+        start_node, graph = selector.create_graph()
         self.start_node = start_node
-        self.full_graph = full_graph
-
-        # Create a condensed representation of the selected graph
-        condenser = GraphCondenser(full_graph, start_node)
-        cond_graph = condenser.condense_graph()
-        self.cond_graph = cond_graph
-        del selector, condenser
+        self.graph = graph
 
         # Set up for route generation
-        self.zimmer = Zimmer(self.cond_graph, self.config)
+        self.zimmer = Zimmer(self.graph, self.config)
         self.candidates = self._create_seed_route(self.start_node)
         self.completed_routes: List[Route] = []
-        # self.pruner = RoutePruner(
-        #     self.cond_graph,
-        #     config,
-        # )
-        # self.pruner = RouteSelector
 
         # Debugging
         self.last_candidates: List[Route] = []
@@ -62,9 +49,9 @@ class RouteMaker:
         Args:
             node_id (int): The ID of the node to fetch lat/lon for
         """
-        node = self.cond_graph.nodes[node_id]
-        lat = node["lat"]
-        lon = node["lon"]
+        node = self.graph[node_id][1]
+        lat = node.lat
+        lon = node.lon
         return lat, lon
 
     # Route Seeding ###########################################################
@@ -182,7 +169,6 @@ class RouteMaker:
             # Make sure the total number of routes stays below the configured
             # limit
             if len(new_candidates) > self.config.max_candidates:
-
                 selector = RouteSelector(
                     routes=sorted(
                         new_candidates,
@@ -190,7 +176,7 @@ class RouteMaker:
                         reverse=self.config.route_mode == "hilly",
                     ),
                     num_routes_to_select=self.config.max_candidates,
-                    threshold=0.97,
+                    threshold=0.9,
                 )
 
                 new_candidates = selector.select_routes()
@@ -202,10 +188,13 @@ class RouteMaker:
             iters += 1
             self._update_progress_bar(pbar)
 
-        self.completed_routes = sorted(
-            self.completed_routes,
-            key=lambda x: x.ratio,
-            reverse=self.config.route_mode == "hilly",
-        )
+        if self.completed_routes:
+            self.completed_routes = sorted(
+                self.completed_routes,
+                key=lambda x: x.ratio,
+                reverse=self.config.route_mode == "hilly",
+            )
 
-        return self.completed_routes
+            return self.completed_routes
+
+        return self.last_candidates
