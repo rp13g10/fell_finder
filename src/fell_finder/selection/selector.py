@@ -178,6 +178,10 @@ class Selector:
             ("northing_ptn", "<=", self.bbox.max_northing_ptn),
         ]
 
+        if self.config.terrain_types:
+            terrain_filter = ("highway", "in", self.config.terrain_types)
+            filters.append(terrain_filter)
+
         edges_dataset = ParquetDataset(
             os.path.join(self.data_dir, "optimised/edges"),
             filters=filters,

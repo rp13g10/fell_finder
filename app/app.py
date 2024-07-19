@@ -81,7 +81,7 @@ def calculate_and_render_route(
         start_lon=lon,
         target_distance=route_dist * 1000,
         route_mode=route_mode,
-        max_candidates=512,
+        max_candidates=256,
         tolerance=0.1,
         terrain_types=route_terrain,
     )
