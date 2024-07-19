@@ -4,8 +4,10 @@ route."""
 from copy import deepcopy
 from typing import Iterable, Tuple
 
-from rustworkx import PyDiGraph
+from rustworkx import PyDiGraph, dijkstra_shortest_path_lengths
 from fell_finder.containers.routes import Route, RouteConfig, StepMetrics
+
+ALL_REMOVALS = []
 
 
 class Zimmer:
@@ -26,7 +28,9 @@ class Zimmer:
         self.graph = graph
         self.config = config
 
-    def _validate_step(self, route: Route, node_id: int) -> bool:
+    def _validate_step(
+        self, graph: PyDiGraph, route: Route, node_id: int
+    ) -> bool:
         """For a given route and potential next step, verify that the step
         does not result in us visiting a node we've already been to. This
         requirement is waived when revisiting one of the first 3 nodes in
@@ -40,6 +44,27 @@ class Zimmer:
             bool: Whether or not the provided node_id would be a valid step
               to take
         """
+
+        start_node = route.route[0]
+
+        try:
+            dist_to_start = dijkstra_shortest_path_lengths(
+                graph,
+                node_id,
+                goal=start_node,
+                edge_cost_fn=lambda attrs: attrs.distance,
+            )[start_node]
+        except IndexError:
+            # TODO: Need to verify that this is actually what happen when no
+            #       path exists. Can't find any other reasonable explanation.
+            return False
+
+        if dist_to_start is None:
+            return False
+
+        dist_remaining = self.config.max_distance - route.distance
+        if dist_to_start > dist_remaining:
+            return False
 
         visited = route.visited
 
@@ -67,11 +92,32 @@ class Zimmer:
               be stepped to from the current position of the provided route
         """
 
+        global ALL_REMOVALS
+
         cur_node = route.route[-1]
+        # first_node = route.route[0]
+
+        valid_graph = self.graph.copy()
+        if len(route.visited) > 3:
+            to_remove = route.visited.difference(set(route.route[:3]))
+            try:
+                to_remove.remove(cur_node)
+            except KeyError:
+                pass
+            to_remove = list(to_remove)
+            valid_graph.remove_nodes_from(to_remove)
+
+            ALL_REMOVALS += to_remove
+
         neighbours = filter(
-            lambda node: self._validate_step(route, node),
-            self.graph.neighbors(cur_node),
+            lambda node: self._validate_step(valid_graph, route, node),
+            valid_graph.neighbors(cur_node),
         )
+
+        neighbours = list(neighbours)
+        for neighbour in neighbours:
+            if len(route.visited) > 3 and neighbour in to_remove:
+                pass
 
         return neighbours
 

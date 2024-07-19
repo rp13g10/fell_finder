@@ -8,7 +8,7 @@ import tqdm
 from fell_finder.containers.routes import Route, RouteConfig
 from fell_finder.selection.selector import Selector
 from fell_finder.routing.zimmer import Zimmer
-from fell_finder.routing.route_selector import RouteSelector
+from fell_finder.routing.route_selector import FZRouteSelector, PyRouteSelector
 
 # TODO: Make this more configurable
 
@@ -169,14 +169,14 @@ class RouteMaker:
             # Make sure the total number of routes stays below the configured
             # limit
             if len(new_candidates) > self.config.max_candidates:
-                selector = RouteSelector(
+                selector = PyRouteSelector(
                     routes=sorted(
                         new_candidates,
                         key=lambda x: x.ratio,
                         reverse=self.config.route_mode == "hilly",
                     ),
-                    num_routes_to_select=self.config.max_candidates,
-                    threshold=0.9,
+                    n_routes=self.config.max_candidates // 2,
+                    threshold=0.95,
                 )
 
                 new_candidates = selector.select_routes()

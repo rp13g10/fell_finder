@@ -25,9 +25,9 @@ BLANK_MAP = dl.Map(
     children=[
         dl.TileLayer(id="route-plot-tiles"),
         dl.ScaleControl(position="bottomleft", id="route-plot-scale"),
-        dl.Marker(position=[51.063685, -1.319560], id="route-plot-marker"),
+        dl.Marker(position=[50.9690528, -1.3832098], id="route-plot-marker"),
     ],
-    center=[51.063685, -1.319560],
+    center=[50.9690528, -1.3832098],
     style={"width": "100%", "height": "50vh"},
     zoom=12,
 )
