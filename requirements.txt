@@ -13,5 +13,7 @@ networkx
 geopy
 thefuzz
 plotly
-dash
+dash[celery]
 dash-leaflet
+pyrosm
+rustworkx
