@@ -17,9 +17,9 @@ from dash import (
 from fell_finder.containers.routes import RouteConfig
 from fell_finder.routing.route_maker import RouteMaker
 
-from fell_finder.plotting.plotting import (
-    generate_route_polyline,
-    plot_elevation_profile,
+from components.route_plots import (
+    generate_polyline_data,
+    generate_elevation_data,
 )
 
 from index import index
@@ -57,9 +57,6 @@ def show_clicked_point_on_map(click_data, current_children):
     lon = click_data["latlng"]["lng"]
 
     new_marker = dl.Marker(position=[lat, lon], id="route-plot-marker")
-
-    # print("\n")
-    # print(current_children)
 
     new_children = [
         child
@@ -104,43 +101,74 @@ def calculate_and_render_route(
     )
     lat, lon = current_marker["props"]["position"]
 
+    max_candidates = 64
+
     config = RouteConfig(
         start_lat=lat,
         start_lon=lon,
         target_distance=route_dist * 1000,
         route_mode=route_mode,
-        max_candidates=256,
+        max_candidates=64,
         tolerance=0.1,
         terrain_types=route_terrain,
     )
 
-    maker = RouteMaker(config, DATA_DIR)
-    for progress, routes in maker.find_routes():
-        set_progress(
-            update_progress_bar(
-                cur_val=progress["avg_distance"],
-                max_val=progress["max_distance"],
+    no_attempts = 0
+    routes = []
+    while len(routes) == 0 and no_attempts < 4:
+        config.max_candidates = max_candidates * (2 * (no_attempts + 1))
+
+        maker = RouteMaker(config, DATA_DIR)
+        for progress, attempt_routes in maker.find_routes():
+            set_progress(
+                update_progress_bar(
+                    cur_val=progress["avg_distance"],
+                    max_val=progress["max_distance"],
+                    attempt=no_attempts,
+                    valid_routes=progress["n_valid"],
+                )
             )
-        )
+
+            if attempt_routes is not None:
+                routes = attempt_routes
+
+        no_attempts += 1
 
     route = routes[0]
-    route_polyline = generate_route_polyline(maker.graph, route)
+    route_polyline = generate_polyline_data(maker.graph, route)
 
     new_children = [
         x for x in current_children if x["props"]["id"] != "route-plot-trace"
     ]
     new_children.append(route_polyline)
 
-    profile_plot = plot_elevation_profile(maker.graph, route)
+    profile_plot = generate_elevation_data(maker.graph, route)
 
     return new_children, profile_plot
 
 
-# @callback(Output('route-plot', 'children'),
-#           Input('route-profile', 'hoverData'))
-# def link_map_and_elevation_profile(hover_data):
+@callback(
+    Output("route-plot", "children"),
+    Input("route-profile", "hoverData"),
+    State("route-plot", "children"),
+    prevent_initial_call=True,
+)
+def update_map_based_on_profile(hover_data, current_children):
+    if hover_data is None:
+        return no_update
 
-#     selected_point = hover_data[0]
+    lat_lon = hover_data["points"][0]["customdata"]
+
+    route_marker = dl.Marker(position=lat_lon, id="selected-point")
+
+    new_children = [
+        x for x in current_children if x["props"]["id"] != "selected-point"
+    ]
+
+    new_children.append(route_marker)
+
+    return new_children
+
 
 if __name__ == "__main__":
     app.run(debug=True)

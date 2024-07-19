@@ -118,9 +118,6 @@ class RouteMaker:
         progress_dict["avg_distance"] = avg_distance
         progress_dict["max_distance"] = self.config.max_distance
 
-        print("Progress Dict:")
-        print(progress_dict)
-
         return progress_dict
 
     def _generate_route_id(self, cand_inx: int, step_inx: int) -> str:

@@ -7,14 +7,7 @@ from pyspark.sql import SparkSession
 from fell_finder.ingestion import LidarLoader, OsmLoader
 from fell_finder.enrichment import GraphEnricher
 from fell_finder.contraction import GraphContractor
-from fell_finder.selection import Selector
-from fell_finder.routing import RouteMaker
-from fell_finder.plotting.plotting import (
-    plot_elevation_profile,
-    get_geometry_from_route,
-)
 
-from fell_finder.containers.routes import RouteConfig
 
 DATA_DIR = "/home/ross/repos/fell_finder/data"
 

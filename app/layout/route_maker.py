@@ -29,7 +29,7 @@ BLANK_MAP = dl.Map(
     ],
     center=[50.9690528, -1.3832098],
     style={"width": "100%", "height": "50vh"},
-    zoom=12,
+    zoom=14,
 )
 
 BLANK_PROFILE = dcc.Graph(
@@ -51,7 +51,7 @@ sidebar = html.Div(
                 html.Div(
                     className="list-group-item",
                     children=dcc.Input(
-                        type="number", value=10, id="route-dist"
+                        type="number", value=5, id="route-dist"
                     ),
                 ),
                 html.Div(
@@ -85,12 +85,21 @@ sidebar = html.Div(
 )
 
 
-def update_progress_bar(cur_val: int, max_val: int):
+def update_progress_bar(
+    cur_val: int, max_val: int, attempt: int, valid_routes: int
+):
+    colours = {0: "#0d6efd ", 1: "#ffc107", 2: "#fd7e14", 3: "#dc3545"}
+
+    if valid_routes:
+        colour = "#198754"
+    else:
+        colour = colours[attempt]
+
     width = int((cur_val / max_val) * 100)
     bar = html.Div(
         className="progress-bar",
         role="progressbar",
-        style={"width": f"{width}%"},
+        style={"width": f"{width}%", "background-color": colour},
         **{
             "aria-valuenow": str(cur_val),
             "aria-valuemin": "0",
@@ -111,7 +120,7 @@ plots = html.Div(
                     children=html.Div(
                         id="progress-bar",
                         className="progress",
-                        children=update_progress_bar(0, 100),
+                        children=update_progress_bar(0, 100, 0, 0),
                     ),
                 )
             ],
