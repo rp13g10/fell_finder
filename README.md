@@ -18,6 +18,8 @@ This project is still in early development, with significant work still required
   * This can be downloaded [here](https://environment.data.gov.uk/survey)
   * After selecting the area to download, select 'LIDAR Composite DTM / 2022 / 1m'
 * Pip install this package and all of its requirements
+* Install redis `sudo dnf install redis` on Fedora and set it to run
+  * `sudo systemctl start redis` to run it once, or `sudo systemctl enable redis` to run it every time your computer boots
 * Run `ingestion.py` to process your extracts.
   * In my own testing, it takes ~1 hour to completely process the data for all of Hampshire
 * Once ingestion has completed, you can start the webapp in development mode
@@ -26,6 +28,13 @@ This project is still in early development, with significant work still required
   * You can then access the webapp by opening 'http://localhost:8050/' in your browser
 
 ## Future developments
+* Existing code needs tidying up, decide on a structure which will scale as the webapp becomes more sophisticated
+  * Too many similar filenames, could do with renaming
+* Full test coverage required for existing code
+* Build out export capability for GPX export
+* Admin dashboard?
+* User logins? Save routes?
+* API integrations?
 * The webapp itself is currently very basic, and needs a lot of tidying up
 * Some of the code-base is likely to be restructured as additional components are added
 * Additional pages are planned
