@@ -1,7 +1,18 @@
 import json
 
 import dash_leaflet as dl
-from dash import Dash, html, dcc, callback, Output, Input, State, no_update
+from celery import Celery
+from dash import (
+    Dash,
+    html,
+    dcc,
+    callback,
+    Output,
+    Input,
+    State,
+    no_update,
+    CeleryManager,
+)
 
 from fell_finder.containers.routes import RouteConfig
 from fell_finder.routing.route_maker import RouteMaker
@@ -12,11 +23,20 @@ from fell_finder.plotting.plotting import (
 )
 
 from index import index
+from layout.route_maker import update_progress_bar
 
 # TODO: Update route plotting functions to account for new format of vias, lat
 #       and lon are now available in the vias
 
 DATA_DIR = "/home/ross/repos/fell_finder/data"
+
+
+celery_app = Celery(
+    __name__,
+    broker="redis://localhost:6379/0",
+    backend="redis://localhost:6379/1",
+)
+background_callback_manager = CeleryManager(celery_app)
 
 app = Dash(__name__)
 
@@ -63,10 +83,18 @@ def show_clicked_point_on_map(click_data, current_children):
         State("route-mode", "value"),
         State("route-terrain", "value"),
     ],
+    background=True,
     prevent_initial_call=True,
+    progress=Output("progress-bar", "children"),
+    manager=background_callback_manager,
 )
 def calculate_and_render_route(
-    n_clicks, current_children, route_dist, route_mode, route_terrain
+    set_progress,
+    n_clicks,
+    current_children,
+    route_dist,
+    route_mode,
+    route_terrain,
 ):
     if not n_clicks:
         return no_update, no_update
@@ -86,11 +114,14 @@ def calculate_and_render_route(
         terrain_types=route_terrain,
     )
 
-    # print("\n")
-    # print(config)
-
     maker = RouteMaker(config, DATA_DIR)
-    routes = maker.find_routes()
+    for progress, routes in maker.find_routes():
+        set_progress(
+            update_progress_bar(
+                cur_val=progress["avg_distance"],
+                max_val=progress["max_distance"],
+            )
+        )
 
     route = routes[0]
     route_polyline = generate_route_polyline(maker.graph, route)
@@ -104,6 +135,12 @@ def calculate_and_render_route(
 
     return new_children, profile_plot
 
+
+# @callback(Output('route-plot', 'children'),
+#           Input('route-profile', 'hoverData'))
+# def link_map_and_elevation_profile(hover_data):
+
+#     selected_point = hover_data[0]
 
 if __name__ == "__main__":
     app.run(debug=True)

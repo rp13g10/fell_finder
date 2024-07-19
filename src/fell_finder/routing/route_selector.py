@@ -4,11 +4,11 @@ used to remove near-duplicate routes from it."""
 # from thefuzz import fuzz
 from abc import ABC, abstractmethod
 from rapidfuzz import process
-from typing import List, Union, Optional
+from typing import List
 from fell_finder.containers.routes import Route
 
 
-class BaseRouteSelector:
+class BaseRouteSelector(ABC):
     """Base class containing methods useful for all child route selectors"""
 
     def __init__(self, routes: List[Route], threshold: float, n_routes: int):

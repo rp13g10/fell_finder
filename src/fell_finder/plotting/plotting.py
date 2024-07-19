@@ -80,7 +80,7 @@ def plot_elevation_profile(graph: PyDiGraph, route: Route) -> go.Figure:
     total_distance = route.distance
     total_elevation = route.elevation_gain
 
-    title = f"Distance: {total_distance}, Elevation: {total_elevation}"
+    title = f"Distance: {total_distance:,.0f} m, Elevation: {total_elevation:,.0f} m"
 
     route_trace = go.Scatter(
         mode="lines+markers",
@@ -91,7 +91,7 @@ def plot_elevation_profile(graph: PyDiGraph, route: Route) -> go.Figure:
 
     layout = go.Layout(
         title=title,
-        margin=dict(l=20, r=20, t=20, b=20),
+        margin=dict(l=20, r=20, t=40, b=20),
     )
 
     figure = go.Figure(data=[route_trace], layout=layout)

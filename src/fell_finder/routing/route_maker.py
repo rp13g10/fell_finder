@@ -1,7 +1,7 @@
 """Primary class which handles the creation of circular routes according
 to the user provided configuration."""
 
-from typing import List, Tuple
+from typing import List, Tuple, Dict, Generator, Union
 
 import tqdm
 
@@ -97,13 +97,11 @@ class RouteMaker:
         route.visited.remove(start_pos)
         return route
 
-    def _update_progress_bar(self, pbar: tqdm.tqdm):
+    def _update_progress(self):
         """Update the progress bar with relevant metrics which enable the
         user to track the calculation as it progresses
-
-        Args:
-            pbar (tqdm.tqdm): Handle for the progress bar
         """
+
         n_candidates = len(self.candidates)
         n_valid = len(self.completed_routes)
 
@@ -114,19 +112,24 @@ class RouteMaker:
         else:
             avg_distance = self.config.max_distance
 
-        pbar.update(1)
-        pbar.set_description(
-            (
-                f"{n_candidates:,.0f} cands | {n_valid:,.0f} valid | "
-                f"{avg_distance:,.2f} avg dist"
-            )
-        )
+        progress_dict = {}
+        progress_dict["n_candidates"] = n_candidates
+        progress_dict["n_valid"] = n_valid
+        progress_dict["avg_distance"] = avg_distance
+        progress_dict["max_distance"] = self.config.max_distance
+
+        print("Progress Dict:")
+        print(progress_dict)
+
+        return progress_dict
 
     def _generate_route_id(self, cand_inx: int, step_inx: int) -> str:
         """Generate a unique identifier for a route"""
         return f"{cand_inx}_{step_inx}"
 
-    def find_routes(self) -> List[Route]:
+    def find_routes(
+        self,
+    ) -> Generator[Tuple[Dict, Union[List[Route], None]], None, None]:
         """Main user-facing function for this class. Generates a list of
         circular routes according to the user's preferences.
 
@@ -135,7 +138,7 @@ class RouteMaker:
         """
 
         # Recursively check for circular routes
-        pbar = tqdm.tqdm()
+
         iters = 0
         while self.candidates:
             # For each potential candidate route
@@ -186,7 +189,9 @@ class RouteMaker:
 
             # Update the progress bar
             iters += 1
-            self._update_progress_bar(pbar)
+            progress = self._update_progress()
+
+            yield progress, None
 
         if self.completed_routes:
             self.completed_routes = sorted(
@@ -195,6 +200,8 @@ class RouteMaker:
                 reverse=self.config.route_mode == "hilly",
             )
 
-            return self.completed_routes
+            yield progress, self.completed_routes
+            return
 
-        return self.last_candidates
+        yield progress, []
+        return

@@ -11,8 +11,6 @@ from pyrosm import OSM
 
 from fell_finder.utils.partitioning import add_partitions_to_polars_df
 
-# TODO: Confirm whether the length field corresponds to ways or edges
-
 
 class OsmLoader:
     """Reads in the JSON graph, converted from OSM data. Generates two parquet

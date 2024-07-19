@@ -36,7 +36,7 @@ BLANK_PROFILE = dcc.Graph(
     id="route-profile",
     figure=go.Figure(
         data=go.Scatter(),
-        layout=go.Layout(margin=dict(l=20, r=20, t=20, b=20)),
+        layout=go.Layout(margin=dict(l=20, r=20, t=40, b=20)),
     ),
 )
 
@@ -85,9 +85,37 @@ sidebar = html.Div(
 )
 
 
+def update_progress_bar(cur_val: int, max_val: int):
+    width = int((cur_val / max_val) * 100)
+    bar = html.Div(
+        className="progress-bar",
+        role="progressbar",
+        style={"width": f"{width}%"},
+        **{
+            "aria-valuenow": str(cur_val),
+            "aria-valuemin": "0",
+            "aria-valuemax": str(max_val),
+        },
+    )
+    return bar
+
+
 plots = html.Div(
     className="col-9",
     children=[
+        html.Div(
+            className="row",
+            children=[
+                html.Div(
+                    className="col-12",
+                    children=html.Div(
+                        id="progress-bar",
+                        className="progress",
+                        children=update_progress_bar(0, 100),
+                    ),
+                )
+            ],
+        ),
         html.Div(
             className="row",
             children=[
