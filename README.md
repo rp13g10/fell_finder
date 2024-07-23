@@ -32,6 +32,8 @@ This project is still in early development, with significant work still required
   * Too many similar filenames, could do with renaming
 * Full test coverage required for existing code
 * Build out export capability for GPX export
+* Investigate moving ingestion process into DBT
+  * https://docs.getdbt.com/guides/manual-install?step=1
 * Admin dashboard?
 * User logins? Save routes?
 * API integrations?
@@ -48,3 +50,48 @@ This project is still in early development, with significant work still required
 * The entire app needs to be containerised and set up to scale
 * An airflow pipeline is planned, picking up updated LIDAR/OSM data once it appears
 * Everything will ultimately be deployed into the cloud
+
+## Target architecture
+
+* data
+  * extracts
+  * parsed
+  * enriched
+  * optimised
+  * temp
+* src/fell_finder
+  * ingestion
+    * parsing
+      - osm.py
+      - lidar.py
+    * enriching
+      - graph_enricher.py
+      - node_mixin.py
+      - edge_mixin.py
+    * optimising
+      - contraction.py
+    - utils.py
+  * retrieval
+    - graph_fetcher.py
+  * routing
+    - route_maker.py
+    - route_finder.py
+    - zimmer.py
+  * egestion
+    * routes
+      * gpx.py
+      * ...
+  * app
+    * components
+    * plotting
+    * layout
+* tests
+  * ...
+- config.yml
+- app.py
+- setup.py
+- pyproject.toml
+- README.md
+
+Notes:
+* containers move into relevant subfolders
