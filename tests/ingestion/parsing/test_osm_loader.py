@@ -1,0 +1,297 @@
+"""Unit tests for the OSM loader"""
+
+from unittest.mock import patch, MagicMock
+import pandas as pd
+import polars as pl
+
+from pandas.testing import assert_frame_equal as pd_assert_frame_equal
+from polars.testing import assert_frame_equal as pl_assert_frame_equal
+
+from fell_finder.ingestion.parsing.osm_loader import OsmLoader
+
+
+def test_subset_nodes():
+    """Check that the correct fields are being brought through"""
+    # Arrange #################################################################
+
+    # ----- Test Data -----
+    # fmt: off
+    test_cols = (
+        ['id', 'lat', 'lon', 'other'])
+
+    test_data = [
+        [0] * len(test_cols)
+    ]
+    # fmt: on
+
+    test_df = pd.DataFrame(data=test_data, columns=test_cols)
+
+    # ----- Target Data -----=
+    # fmt: off
+    tgt_cols = (
+        ['id', 'lat', 'lon'])
+
+    tgt_data = [
+        [0] * len(tgt_cols)
+    ]
+    # fmt: on
+
+    tgt_df = pd.DataFrame(data=tgt_data, columns=tgt_cols)
+
+    # Act #####################################################################
+    res_df = OsmLoader._subset_nodes(test_df)
+
+    # Assert ##################################################################
+    pd_assert_frame_equal(tgt_df, res_df)
+
+
+def test_subset_edges():
+    """Check that the correct fields are being brought through"""
+    # Arrange #################################################################
+
+    # ----- Test Data -----
+    # fmt: off
+    test_cols = (
+        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'oneway', 'other'])
+
+    test_data = [
+        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'oneway', 'other'],
+        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'oneway', 'other'],
+        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'oneway', 'other']
+    ]
+    # fmt: on
+
+    test_df = pd.DataFrame(data=test_data, columns=test_cols)
+
+    # ----- Target Data -----=
+    # fmt: off
+    tgt_cols = (
+        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'oneway', 'row_no'])
+
+    tgt_data = [
+        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'oneway', 0],
+        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'oneway', 1],
+        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'oneway', 2]
+    ]
+    # fmt: on
+
+    tgt_df = pd.DataFrame(data=tgt_data, columns=tgt_cols)
+
+    # Act #####################################################################
+    res_df = OsmLoader._subset_edges(test_df)
+
+    # Assert ##################################################################
+    pd_assert_frame_equal(tgt_df, res_df)
+
+
+@patch("fell_finder.ingestion.parsing.osm_loader.OSM")
+def test_read_osm_data(mock_osm: MagicMock):
+    """Check that data is being read in, processed and converted into polars
+    dataframes"""
+    # Arrange #################################################################
+
+    # Test Data ---------------------------------------------------------------
+    # ----- Nodes -----
+
+    # fmt: off
+    test_node_cols = (
+        ['id', 'lat', 'lon', 'other'])
+
+    test_node_data = [
+        ['id', 'lat', 'lon', 'other']
+    ]
+    # fmt: on
+
+    test_node_df = pd.DataFrame(data=test_node_data, columns=test_node_cols)
+
+    # ----- Edges -----
+
+    # fmt: off
+    test_edge_cols = (
+        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'oneway', 'other'])
+
+    test_edge_data = [
+        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'oneway', 'other'],
+        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'oneway', 'other'],
+        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'oneway', 'other']
+    ]
+    # fmt: on
+
+    test_edge_df = pd.DataFrame(data=test_edge_data, columns=test_edge_cols)
+
+    # ----- Initialize Class -----
+
+    mock_osm_handle = MagicMock()
+    mock_osm.return_value = mock_osm_handle
+    mock_osm_handle.get_network.return_value = test_node_df, test_edge_df
+
+    test_osm_loader = OsmLoader("data_dir")
+
+    # Target Data -------------------------------------------------------------
+
+    # ----- Nodes -----
+    # fmt: off
+    tgt_node_cols = (
+        ['id', 'lat', 'lon'])
+
+    tgt_node_data = [
+        ['id', 'lat', 'lon']
+    ]
+    # fmt: on
+
+    tgt_node_df = pl.DataFrame(
+        data=tgt_node_data, schema=tgt_node_cols, orient="row"
+    )
+
+    # ----- Edges -----
+    # fmt: off
+    tgt_edge_cols = (
+        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'oneway', 'row_no'])
+
+    tgt_edge_data = [
+        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'oneway', 0],
+        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'oneway', 1],
+        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'oneway', 2]
+    ]
+    # fmt: on
+
+    tgt_edge_df = pl.DataFrame(
+        data=tgt_edge_data, schema=tgt_edge_cols, orient="row"
+    )
+
+    # Expected Calls ----------------------------------------------------------
+
+    tgt_osm_call = "data_dir/extracts/osm/hampshire-latest.osm.pbf"
+
+    # Act #####################################################################
+    res_node_df, res_edge_df = test_osm_loader.read_osm_data()
+
+    # Assert ##################################################################
+    mock_osm.assert_called_once_with(tgt_osm_call)
+    pl_assert_frame_equal(res_node_df, tgt_node_df)
+    pl_assert_frame_equal(res_edge_df, tgt_edge_df)
+
+
+@patch("fell_finder.ingestion.parsing.osm_loader.WGS84toOSGB36")
+def test_assign_bng_coords(mock_wgs84_to_osgb36: MagicMock):
+    """Check that records are correctly being assigned BNG coordinates based
+    on their latitude & longitude"""
+    # Arrange #################################################################
+
+    # ----- Test Data -----
+    # fmt: off
+    _ = (
+        ['inx', 'lat', 'lon'])
+
+    test_data = [
+        [0    , 50.0 , 10.0],
+        [1    , 100.0, 20.0],
+        [2    , 66.6 , 33.3]
+    ]
+    # fmt: on
+
+    test_schema = {"inx": pl.Int32(), "lat": pl.Float64(), "lon": pl.Float64()}
+
+    test_df = pl.DataFrame(data=test_data, schema=test_schema, orient="row")
+
+    # ----- Mocks -----
+
+    mock_wgs84_to_osgb36.side_effect = lambda x, y: (x / 2, y / 2)
+
+    # ----- Target Data -----=
+    # fmt: off
+    _ = (
+        ['inx', 'lat', 'lon', 'easting', 'northing'])
+
+    tgt_data = [
+        [0    , 50.0 , 10.0 , 25       , 5],
+        [1    , 100.0, 20.0 , 50       , 10],
+        [2    , 66.6 , 33.3 , 33       , 16]
+    ]
+    # fmt: on
+
+    tgt_schema = {
+        "inx": pl.Int32(),
+        "lat": pl.Float64(),
+        "lon": pl.Float64(),
+        "easting": pl.Int32(),
+        "northing": pl.Int32(),
+    }
+
+    tgt_df = pl.DataFrame(data=tgt_data, schema=tgt_schema, orient="row")
+
+    # Act #####################################################################
+    res_df = OsmLoader.assign_bng_coords(test_df)
+
+    # Assert ##################################################################
+    pl_assert_frame_equal(tgt_df, res_df)
+
+
+def test_set_node_output_schema():
+    """Check that the correct schema is being set for the nodes dataset"""
+    # Arrange #################################################################
+
+    # ----- Test Data -----
+    # fmt: off
+    test_cols = (
+        ['id', 'lat', 'lon', 'easting', 'northing', 'easting_ptn', 'northing_ptn', 'other'])
+
+    test_data = [
+        [0] * len(test_cols)
+    ]
+    # fmt: on
+
+    test_df = pl.DataFrame(data=test_data, schema=test_cols, orient="row")
+
+    # ----- Target Data -----=
+    # fmt: off
+    tgt_cols = (
+        ['id', 'lat', 'lon', 'easting', 'northing', 'easting_ptn', 'northing_ptn'])
+
+    tgt_data = [
+        [0] * len(tgt_cols)
+    ]
+    # fmt: on
+
+    tgt_df = pl.DataFrame(data=tgt_data, schema=tgt_cols, orient="row")
+
+    # Act #####################################################################
+    res_df = OsmLoader.set_node_output_schema(test_df)
+
+    # Assert ##################################################################
+    pl_assert_frame_equal(tgt_df, res_df)
+
+
+def test_tidy_edge_schema():
+    """Check that the correct aliases are being set for the edges dataset"""
+    # Arrange #################################################################
+
+    # ----- Test Data -----
+    # fmt: off
+    test_cols = (
+        ['u', 'v', 'id', 'highway', 'surface', 'bridge', 'row_no', 'oneway', 'other'])
+
+    test_data = [
+        ['u', 'v', 'id', 'highway', 'surface', 'bridge', 'row_no', 'oneway', 'other']
+    ]
+    # fmt: on
+
+    test_df = pl.DataFrame(data=test_data, schema=test_cols, orient="row")
+
+    # ----- Target Data -----=
+    # fmt: off
+    tgt_cols = (
+        ['src', 'dst', 'way_id', 'highway', 'surface', 'bridge', 'row_no', 'oneway'])
+
+    tgt_data = [
+        ['u'  , 'v'  , 'id'    , 'highway', 'surface', 'bridge', 'row_no', 'oneway']
+    ]
+    # fmt: on
+
+    tgt_df = pl.DataFrame(data=tgt_data, schema=tgt_cols, orient="row")
+
+    # Act #####################################################################
+    res_df = OsmLoader.tidy_edge_schema(test_df)
+
+    # Assert ##################################################################
+    pl_assert_frame_equal(tgt_df, res_df)

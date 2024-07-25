@@ -2,3 +2,4 @@ data/*
 *.pyc
 **.egg-info*
 spark-warehouse/*
+old_tests/*

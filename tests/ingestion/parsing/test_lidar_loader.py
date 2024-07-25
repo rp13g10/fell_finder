@@ -1,17 +1,52 @@
-"""Unit tests for LIDAR file parsing"""
+"""Unit tests for the LIDAR parsing script"""
 
 import os
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import MagicMock, call, patch
 
 import numpy as np
 import polars as pl
+import pytest
+from fell_finder.ingestion.parsing.lidar_loader import (
+    LidarLoader,
+    get_available_folders,
+)
+from fell_finder.utils.partitioning import get_partitions
 from polars.testing import assert_frame_equal
 
-from fell_finder.ingestion.lidar.parsing import LidarLoader
+
+class TestGetAvailableFolders:
+    """Check behaviour is as-expected when searching for files"""
+
+    @patch("fell_finder.ingestion.parsing.lidar_loader.glob")
+    def test_files_found(self, mock_glob: MagicMock):
+        """Check expected output format when files are found"""
+        # Arrange
+        test_dir = "test/dir"
+        mock_glob.return_value = ["item_one"]
+        target_out = {"item_one"}
+        target_call = "test/dir/extracts/lidar/lidar_composite_dtm-*"
+
+        # Act
+        result = get_available_folders(test_dir)
+
+        # Assert
+        assert result == target_out
+        mock_glob.assert_called_once_with(target_call)
+
+    @patch("fell_finder.ingestion.parsing.lidar_loader.glob")
+    def test_files_not_found(self, mock_glob: MagicMock):
+        """Check exception is thrown when they aren't"""
+        # Arrange
+        test_dir = "dummy"
+        mock_glob.return_value = {}
+
+        # Act, Assert
+        with pytest.raises(FileNotFoundError):
+            _ = get_available_folders(test_dir)
 
 
-@patch("fell_finder.ingestion.lidar.parsing.rio.open")
-@patch("fell_finder.ingestion.lidar.parsing.glob")
+@patch("fell_finder.ingestion.parsing.lidar_loader.rio.open")
+@patch("fell_finder.ingestion.parsing.lidar_loader.glob")
 def test_load_lidar_from_folder(
     mock_glob: MagicMock, mock_rio_open: MagicMock
 ):
@@ -44,8 +79,8 @@ def test_load_lidar_from_folder(
     assert result == target_output
 
 
-@patch("fell_finder.ingestion.lidar.parsing.open")
-@patch("fell_finder.ingestion.lidar.parsing.glob")
+@patch("fell_finder.ingestion.parsing.lidar_loader.open")
+@patch("fell_finder.ingestion.parsing.lidar_loader.glob")
 def test_load_bbox_from_folder(mock_glob: MagicMock, mock_open: MagicMock):
     """Check that data is passed through the function call as expected"""
     # Arrange
@@ -145,7 +180,7 @@ def test_generate_df_from_lidar_array():
     assert_frame_equal(result_tail, target_tail)
 
 
-@patch("fell_finder.ingestion.lidar.parsing.get_available_folders")
+@patch("fell_finder.ingestion.parsing.lidar_loader.get_available_folders")
 def test_add_file_ids(mock_get_available_folders: MagicMock):
     """Check that file IDs are being added properly"""
     # Arrange #################################################################
@@ -225,7 +260,7 @@ def test_set_output_schema():
     assert_frame_equal(tgt_df, res_df)
 
 
-@patch("fell_finder.ingestion.lidar.parsing.get_available_folders")
+@patch("fell_finder.ingestion.parsing.lidar_loader.get_available_folders")
 def test_write_df_to_parquet(mock_get_available_folders: MagicMock):
     """Ensure the correct calls are made when writing data"""
 
@@ -251,7 +286,7 @@ def test_write_df_to_parquet(mock_get_available_folders: MagicMock):
     mock_write_parquet.assert_called_once_with(*target_args, **target_kwargs)
 
 
-@patch("fell_finder.ingestion.lidar.parsing.get_available_folders")
+@patch("fell_finder.ingestion.parsing.lidar_loader.get_available_folders")
 def test_parse_lidar_folder(mock_get_available_folders: MagicMock):
     """Ensure the correct calls are made, and output is as expected"""
 
@@ -270,12 +305,14 @@ def test_parse_lidar_folder(mock_get_available_folders: MagicMock):
 
     # Test Data ---------------------------------------------------------------
 
+    easting, northing = 123456, 987654
+
     # fmt: off
     _ = (
         ['easting', 'northing', 'elevation'])
 
     test_data = [
-        [123456   , 987654    , 100.0]
+        [easting  , northing  , 100.0]
     ]
     # fmt: on
 
@@ -296,12 +333,14 @@ def test_parse_lidar_folder(mock_get_available_folders: MagicMock):
 
     # Target Data -------------------------------------------------------------
 
+    easting_ptn, northing_ptn = get_partitions(easting, northing)
+
     # fmt: off
     _ = (
         ['easting', 'northing', 'elevation', 'file_id', 'easting_ptn', 'northing_ptn'])
 
     tgt_data = [
-        [123456   , 987654    , 100.0      , 'SU20ne' , 123          , 988]
+        [easting  , northing  , 100.0      , 'SU20ne' , easting_ptn  , northing_ptn]
     ]
     # fmt: on
 
@@ -328,7 +367,7 @@ def test_parse_lidar_folder(mock_get_available_folders: MagicMock):
     assert_frame_equal(result_df, tgt_df)
 
 
-@patch("fell_finder.ingestion.lidar.parsing.get_available_folders")
+@patch("fell_finder.ingestion.parsing.lidar_loader.get_available_folders")
 def test_load(mock_get_available_folders: MagicMock):
     """Ensure the correct calls are made when writing data"""
 

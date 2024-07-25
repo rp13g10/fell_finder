@@ -9,7 +9,7 @@ select = ["E", "F", "W", "D1", "D41", "ANN001", "ANN2"]
 ignore = ["D107", "D415"]
 
 [tool.ruff.lint.per-file-ignores]
-"./tests/*" = ["E501"]
+"./tests/*" = ["E501", "ANN201"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
