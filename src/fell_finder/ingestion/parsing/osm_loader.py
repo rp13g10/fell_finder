@@ -27,7 +27,8 @@ class OsmLoader:
 
         self.data_dir = data_dir
 
-    def _subset_nodes(self, nodes: pd.DataFrame) -> pd.DataFrame:
+    @staticmethod
+    def _subset_nodes(nodes: pd.DataFrame) -> pd.DataFrame:
         """Select only the required columns from the nodes dataframe
 
         Args:
@@ -40,7 +41,8 @@ class OsmLoader:
 
         return nodes
 
-    def _subset_edges(self, edges: pd.DataFrame) -> pd.DataFrame:
+    @staticmethod
+    def _subset_edges(edges: pd.DataFrame) -> pd.DataFrame:
         """Select only the required columns from the edges dataframe
 
         Args:
@@ -89,7 +91,8 @@ class OsmLoader:
 
         return nodes, edges
 
-    def assign_bng_coords(self, nodes: pl.DataFrame) -> pl.DataFrame:
+    @staticmethod
+    def assign_bng_coords(nodes: pl.DataFrame) -> pl.DataFrame:
         """Assign each node an easting and northing, this will be used to
         split the nodes dataset into partitions according to their geographical
         location
@@ -122,7 +125,8 @@ class OsmLoader:
 
         return nodes
 
-    def set_node_output_schema(self, nodes: pl.DataFrame) -> pl.DataFrame:
+    @staticmethod
+    def set_node_output_schema(nodes: pl.DataFrame) -> pl.DataFrame:
         """Ensure the node output dataset contains only the required columns
 
         Args:
@@ -143,7 +147,8 @@ class OsmLoader:
         )
         return nodes
 
-    def tidy_edge_schema(self, edges: pl.DataFrame) -> pl.DataFrame:
+    @staticmethod
+    def tidy_edge_schema(edges: pl.DataFrame) -> pl.DataFrame:
         """Set more descriptive field aliases for the edge dataframe
 
         Args:
@@ -166,7 +171,8 @@ class OsmLoader:
 
         return edges
 
-    def add_reverse_edges(self, edges: pl.DataFrame) -> pl.DataFrame:
+    @staticmethod
+    def add_reverse_edges(edges: pl.DataFrame) -> pl.DataFrame:
         """For any edges A-B where the oneway field is either NULL or
         explicitlyset to no, create a second edge B-A. Assign this new edge
         to a new way, and record its position in the dataframe. The geometry
@@ -199,7 +205,8 @@ class OsmLoader:
 
         return edges
 
-    def derive_position_in_way(self, edges: pl.DataFrame) -> pl.DataFrame:
+    @staticmethod
+    def derive_position_in_way(edges: pl.DataFrame) -> pl.DataFrame:
         """For each edge in a way, record its relative position as way_inx.
         The first edge will have a way_inx of 1, and the last edge will have a
         way_inx of N, where N is the number of edges in the way.
@@ -216,8 +223,9 @@ class OsmLoader:
         )
         return edges
 
+    @staticmethod
     def get_edge_start_coords(
-        self, nodes: pl.DataFrame, edges: pl.DataFrame
+        nodes: pl.DataFrame, edges: pl.DataFrame
     ) -> pl.DataFrame:
         """For each edge in the graph, work out its starting position by
         joining on details of the source node.
@@ -246,8 +254,9 @@ class OsmLoader:
 
         return edges
 
+    @staticmethod
     def get_edge_end_coords(
-        self, nodes: pl.DataFrame, edges: pl.DataFrame
+        nodes: pl.DataFrame, edges: pl.DataFrame
     ) -> pl.DataFrame:
         """For each edge in the graph, work out its final position by joining
         on details of the destination node.
@@ -274,7 +283,8 @@ class OsmLoader:
 
         return edges
 
-    def set_edge_output_schema(self, edges: pl.DataFrame) -> pl.DataFrame:
+    @staticmethod
+    def set_edge_output_schema(edges: pl.DataFrame) -> pl.DataFrame:
         """Ensure the node output dataset contains only the required columns
 
         Args:
