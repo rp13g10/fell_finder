@@ -2,7 +2,7 @@
 during the route finding process"""
 
 from dataclasses import dataclass, field
-from typing import List, Set, Tuple, Optional
+from typing import List, Set
 
 
 @dataclass

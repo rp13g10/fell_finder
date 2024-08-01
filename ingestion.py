@@ -4,9 +4,12 @@ data, joins the two datasets together to create a single augmented graph."""
 import os
 from pyspark.sql import SparkSession
 
-from fell_finder.ingestion import LidarLoader, OsmLoader
-from fell_finder.enrichment import GraphEnricher
-from fell_finder.contraction import GraphContractor
+from fell_finder.ingestion import (
+    LidarLoader,
+    OsmLoader,
+    GraphEnricher,
+    GraphContractor,
+)
 
 
 DATA_DIR = "/home/ross/repos/fell_finder/data"

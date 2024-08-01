@@ -95,3 +95,6 @@ This project is still in early development, with significant work still required
 
 Notes:
 * containers move into relevant subfolders
+
+To Do:
+* remove type hints from docstrings, one less thing to maintain

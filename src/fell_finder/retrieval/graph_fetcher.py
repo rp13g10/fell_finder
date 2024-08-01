@@ -3,15 +3,17 @@ which can be reached from the requested route start point without going over
 the max configured distance."""
 
 import os
+from dataclasses import dataclass
 from typing import Dict, List, Tuple, Any
 
+from bng_latlon import WGS84toOSGB36
 from geopy import distance, point
 from pyarrow.parquet import ParquetDataset
 import rustworkx as rx
 
 
-from fell_finder.containers.geo import BBox
-from fell_finder.containers.routes import RouteConfig
+from fell_finder.routing.containers import RouteConfig
+from fell_finder.utils.partitioning import get_partitions
 
 VALID_TYPES = {
     "footway",
@@ -31,8 +33,40 @@ VALID_TYPES = {
     "unclassified",
 }
 
-# TODO: Tidy this up, then update route finding algorithm to work with the
-#       RustworkX graph type
+
+@dataclass
+class BBox:
+    """Contains information about the physical boundaries of one or more
+    routes
+
+    Args:
+        min_lat (float): Minimum latitude
+        min_lon (float): Minimum longitude
+        max_lat (float): Maximum latitude
+        max_lon (float): Maximum longitude"""
+
+    min_lat: float
+    min_lon: float
+    max_lat: float
+    max_lon: float
+
+    def __post_init__(self) -> None:
+        """After initialization, fetch the corresponding partitions for the
+        provided coordinates"""
+        min_easting, min_northing = WGS84toOSGB36(self.min_lat, self.min_lon)
+        max_easting, max_northing = WGS84toOSGB36(self.max_lat, self.max_lon)
+
+        min_easting_ptn, min_northing_ptn = get_partitions(
+            min_easting, min_northing
+        )
+        max_easting_ptn, max_northing_ptn = get_partitions(
+            max_easting, max_northing
+        )
+
+        self.min_easting_ptn = min_easting_ptn
+        self.min_northing_ptn = min_northing_ptn
+        self.max_easting_ptn = max_easting_ptn
+        self.max_northing_ptn = max_northing_ptn
 
 
 class GraphNode:
@@ -67,7 +101,7 @@ class GraphEdge:
         self.index = index
 
 
-class Selector:
+class GraphFetcher:
     """Retrieves a graph containing all nodes which can be reached from the
     requested route start point without going over the max configured distance.
     """
@@ -180,7 +214,7 @@ class Selector:
 
         if self.config.terrain_types:
             terrain_filter = ("highway", "in", self.config.terrain_types)
-            filters.append(terrain_filter)
+            filters.append(terrain_filter)  # type: ignore
 
         edges_dataset = ParquetDataset(
             os.path.join(self.data_dir, "optimised/edges"),
