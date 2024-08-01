@@ -22,12 +22,12 @@ class NodeMixin(ABC):
         this is a straightforward operation.
 
         Args:
-            nodes (DataFrame): A table representing nodes in the OSM graph
-            elevation (DataFrame): A table containing elevation data at
-              different coordinates
+            nodes: A table representing nodes in the OSM graph
+            elevation: A table containing elevation data at different
+              coordinates
 
         Returns:
-            DataFrame: _description_
+            A copy of nodes with an additional elevation field
         """
         tagged = nodes.join(
             elevation,
@@ -43,10 +43,10 @@ class NodeMixin(ABC):
         dataset
 
         Args:
-            nodes (DataFrame): The enriched node dataset
+            nodes: The enriched node dataset
 
         Returns:
-            DataFrame: A subset of the input dataset
+            A subset of the input dataset
         """
         nodes = nodes.select(
             "id", "lat", "lon", "elevation", "easting_ptn", "northing_ptn"

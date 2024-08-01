@@ -33,9 +33,9 @@ class GraphEnricher(NodeMixin, EdgeMixin):
         data directory and spark session.
 
         Args:
-            data_dir (str): A folder containing parsed lidar, node and edge
+            data_dir: A folder containing parsed lidar, node and edge
               datasets
-            spark (SparkSession): The active spark session
+            spark: The active spark session
         """
         self.data_dir = data_dir
         self.spark = spark
@@ -49,16 +49,15 @@ class GraphEnricher(NodeMixin, EdgeMixin):
         pyspark groupby operation.
 
         Args:
-            subfolder (str): The subfolder containing the dataset to be
-              analysed
+            subfolder: The subfolder containing the dataset to be analysed
 
         Raises:
             FileNotFoundError: If no partitions can be identified, an exception
               will be raised
 
         Returns:
-            Set[Tuple[int, int]]: A set in which each tuple represents a single
-              easting_ptn/northing_ptn pair which is present in the data
+            A set in which each tuple represents a single
+            easting_ptn/northing_ptn pair which is present in the data
         """
 
         # Fetch a list of all parquet files in the dataset
@@ -73,15 +72,15 @@ class GraphEnricher(NodeMixin, EdgeMixin):
             return them as a tuple.
 
             Args:
-                file_path (str): The file path to be analysed
+                file_path: The file path to be analysed
 
             Raises:
                 FileNotFoundError: If no partitions can be identified, an
                   exception will be raised
 
             Returns:
-                Tuple[int, int]: A tuple containing the easting_ptn and
-                  northing_ptn for the provided file_path
+                A tuple containing the easting_ptn and northing_ptn for the
+                provided file_path
             """
             match_ = re.search(
                 r".*/easting_ptn=(\d+)/northing_ptn=(\d+)/.*", file_path
@@ -104,8 +103,7 @@ class GraphEnricher(NodeMixin, EdgeMixin):
         attempting any expensive join operations.
 
         Returns:
-            Set[Tuple[int, int]]: A set of partitions which are present in both
-              datasets
+            A set of partitions which are present in both datasets
         """
         elevation_ptns = self.get_available_partitions("parsed/lidar")
         graph_ptns = self.get_available_partitions("parsed/nodes")
@@ -122,12 +120,12 @@ class GraphEnricher(NodeMixin, EdgeMixin):
         joins.
 
         Args:
-            common_partitions (Set[Tuple[int, int]]): A list of partitions
-              which are present in both datasets
+            common_partitions: A list of partitions which are present in both
+              datasets
 
         Returns:
-            DataFrame: A dataframe with easting_ptn and northing_ptn fields
-              containing the data in common_partitions
+            A dataframe with easting_ptn and northing_ptn fields containing the
+            data in common_partitions
         """
 
         schema = StructType(
@@ -156,7 +154,7 @@ class GraphEnricher(NodeMixin, EdgeMixin):
               retained
 
         Returns:
-            DataFrame: A filtered copy of data_df
+            A filtered copy of data_df
         """
 
         df = data_df.join(
@@ -181,7 +179,7 @@ class GraphEnricher(NodeMixin, EdgeMixin):
               retained
 
         Returns:
-            DataFrame: The filtered contents of the specified dataset
+            The filtered contents of the specified dataset
         """
         data_dir = os.path.join(self.data_dir, "parsed", dataset)
 
@@ -198,8 +196,8 @@ class GraphEnricher(NodeMixin, EdgeMixin):
         and northing_ptn.
 
         Args:
-            df (DataFrame): The dataframe to be stored
-            target (str): The target location for the enriched dataset
+            df: The dataframe to be stored
+            target: The target location for the enriched dataset
         """
 
         # Attempt to minimise the number of files written

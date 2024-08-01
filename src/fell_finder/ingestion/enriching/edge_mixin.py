@@ -33,11 +33,10 @@ class EdgeMixin(ABC):
         account.
 
         Args:
-            edges (DataFrame): A table representing edges in the OSM graph
+            edges: A table representing edges in the OSM graph
 
         Returns:
-            DataFrame: A copy of the input table with an additional
-              'edge_steps' column.
+            A copy of the input table with an additional 'edge_steps' column
         """
 
         # Calculate edge distance based on start/end coords
@@ -74,10 +73,10 @@ class EdgeMixin(ABC):
         self.edge_resolution_m parameter.
 
         Args:
-            edges (DataFrame): A table representing edges in the OSM graph
+            edges: A table representing edges in the OSM graph
 
         Returns:
-            DataFrame: An exploded view of the input dataset
+            An exploded view of the input dataset
         """
 
         @F.udf(returnType=ArrayType(DoubleType()))
@@ -86,13 +85,12 @@ class EdgeMixin(ABC):
             and end coordinates.
 
             Args:
-                start (int): The starting easting/northing
-                end (int): The ending easting/northing
-                n_steps (int): The number of steps to generate
+                start: The starting easting/northing
+                end: The ending easting/northing
+                n_steps: The number of steps to generate
 
             Returns:
-                List[float]: A list of evenly spaced points between start and
-                  end
+                A list of evenly spaced points between start and end
             """
             start_f, end_f = float(start), float(end)
             range_ = end_f - start_f
@@ -107,10 +105,10 @@ class EdgeMixin(ABC):
             """Returns a list of indexes between 0 and n_checkpoints
 
             Args:
-                n_checkpoints (int): The number of indexes to generate
+                n_checkpoints: The number of indexes to generate
 
             Returns:
-                List[int]: A list of indexes between 0 and n_checkpoints
+                A list of indexes between 0 and n_checkpoints
             """
             return list(range(n_checkpoints))
 
@@ -157,11 +155,11 @@ class EdgeMixin(ABC):
         indexes, eastings and northing for each step into standard columns.
 
         Args:
-            edges (DataFrame): A table representing exploded edges in the OSM
+            edges: A table representing exploded edges in the OSM
               graph
 
         Returns:
-            DataFrame: A tidied up view of the input dataset
+            A tidied up view of the input dataset
         """
         edges = edges.select(
             "src",
@@ -195,12 +193,11 @@ class EdgeMixin(ABC):
         the elevation at multiple points along each edge.
 
         Args:
-            edges (DataFrame): A table representing exploded edges in the OSM
-              graph
-            elevation (DataFrame): A table containing elevation data
+            edges: A table representing exploded edges in the OSM graph
+            elevation: A table containing elevation data
 
         Returns:
-            DataFrame: _description_
+            A copy of the edges dataframe with an additional elevation column
         """
         tagged = edges.join(
             elevation,
@@ -235,12 +232,11 @@ class EdgeMixin(ABC):
         elevation loss and gain separately.
 
         Args:
-            edges (DataFrame): A table representing exploded edges in the OSM
-              graph
+            edges: A table representing exploded edges in the OSM graph
 
         Returns:
-            DataFrame: A copy of the input dataset with additional
-              elevation_gain and elevation_loss fields
+            A copy of the input dataset with additional elevation_gain and
+            elevation_loss fields
         """
         rolling_window = Window.partitionBy("src", "dst").orderBy("inx")
 
@@ -275,12 +271,10 @@ class EdgeMixin(ABC):
         rolling the dataset back up to one record per edge.
 
         Args:
-            edges (DataFrame): A table representing exploded edges in the OSM
-              graph
+            edges: A table representing exploded edges in the OSM graph
 
         Returns:
-            DataFrame: An aggregated view of the input dataset, with one record
-              per edge
+            An aggregated view of the input dataset, with one record per edge
         """
         edges = edges.groupBy(
             "src",
@@ -308,11 +302,10 @@ class EdgeMixin(ABC):
         this, as pySpark does not provide this function natively.
 
         Args:
-            edges (DataFrame): A table representing edges in the OSM graph
+            edges: A table representing edges in the OSM graph
 
         Returns:
-            DataFrame: A copy of the input dataset with an additional distance
-              column
+            A copy of the input dataset with an additional distance column
         """
 
         @F.udf(returnType=DoubleType())
@@ -353,10 +346,10 @@ class EdgeMixin(ABC):
         dataset
 
         Args:
-            edges (DataFrame): The enriched edge dataset
+            edges: The enriched edge dataset
 
         Returns:
-            DataFrame: A subset of the input dataset
+            A subset of the input dataset
         """
         edges = edges.select(
             "src",
