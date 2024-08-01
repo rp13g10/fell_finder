@@ -269,7 +269,8 @@ class EdgeMixin(ABC):
 
         return edges
 
-    def implode_edges(self, edges: DataFrame) -> DataFrame:
+    @staticmethod
+    def implode_edges(edges: DataFrame) -> DataFrame:
         """Calculate the sum of elevation gains & losses across all steps,
         rolling the dataset back up to one record per edge.
 
@@ -300,7 +301,8 @@ class EdgeMixin(ABC):
         )
         return edges
 
-    def calculate_edge_distances(self, edges: DataFrame) -> DataFrame:
+    @staticmethod
+    def calculate_edge_distances(edges: DataFrame) -> DataFrame:
         """For each edge in the graph, calculate the distance from the start
         point to the end point in metres. A UDF must be applied to achieve
         this, as pySpark does not provide this function natively.
@@ -345,7 +347,8 @@ class EdgeMixin(ABC):
 
         return edges
 
-    def set_edge_output_schema(self, edges: DataFrame) -> DataFrame:
+    @staticmethod
+    def set_edge_output_schema(edges: DataFrame) -> DataFrame:
         """Bring through only the required columns for the enriched edge
         dataset
 

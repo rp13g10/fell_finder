@@ -1,5 +1,8 @@
 """Tests for methods relating to enrichment of graph edges"""
 
+from typing import Tuple
+from unittest.mock import patch, MagicMock
+
 from pyspark.sql import SparkSession
 from pyspark.sql.types import (
     StructType,
@@ -533,16 +536,236 @@ def test_calculate_elevation_changes(test_session: SparkSession):
     assertDataFrameEqual(result_df, target_df)
 
 
-def test_implode_edges():
+def test_implode_edges(test_session: SparkSession):
     """Make sure data is being aggregated properly"""
-    raise AssertionError()
+
+    # Arrange #################################################################
+
+    # Test Data ---------------------------------------------------------------
+
+    # fmt: off
+    _ = (
+        ['src', 'dst', 'inx', 'src_lat', 'src_lon', 'dst_lat', 'dst_lon', 'src_easting', 'src_northing', 'way_id', 'way_inx', 'highway', 'surface', 'elevation_gain', 'elevation_loss', 'other'])
+
+    test_data = [
+        # Single record
+        [0    , 1    , 1    , 'src_lat', 'src_lon', 'dst_lat', 'dst_lon', 'src_easting', 'src_northing', 'way_id', 'way_inx', 'highway', 'surface', 1.0             , 1.0             , 'other'],
+        # Multiple records
+        [1    , 2    , 1    , 'src_lat', 'src_lon', 'dst_lat', 'dst_lon', 'src_easting', 'src_northing', 'way_id', 'way_inx', 'highway', 'surface', 1.0             , 1.0             , 'other'],
+        [1    , 2    , 2    , 'src_lat', 'src_lon', 'dst_lat', 'dst_lon', 'src_easting', 'src_northing', 'way_id', 'way_inx', 'highway', 'surface', 1.0             , 1.0             , 'other'],
+    ]
+
+    # fmt: on
+
+    test_schema = StructType(
+        [
+            StructField("src", IntegerType()),
+            StructField("dst", IntegerType()),
+            StructField("inx", IntegerType()),
+            StructField("src_lat", StringType()),
+            StructField("src_lon", StringType()),
+            StructField("dst_lat", StringType()),
+            StructField("dst_lon", StringType()),
+            StructField("src_easting", StringType()),
+            StructField("src_northing", StringType()),
+            StructField("way_id", StringType()),
+            StructField("way_inx", StringType()),
+            StructField("highway", StringType()),
+            StructField("surface", StringType()),
+            StructField("elevation_gain", DoubleType()),
+            StructField("elevation_loss", DoubleType()),
+            StructField("other", StringType()),
+        ]
+    )
+
+    test_df = test_session.createDataFrame(test_data, test_schema)
+
+    # Target Data -------------------------------------------------------------
+
+    # fmt: off
+    _ = (
+        ['src', 'dst', 'src_lat', 'src_lon', 'dst_lat', 'dst_lon', 'src_easting', 'src_northing', 'way_id', 'way_inx', 'highway', 'surface', 'elevation_gain', 'elevation_loss'])
+
+    target_data = [
+        # Single record
+        [0    , 1    , 'src_lat', 'src_lon', 'dst_lat', 'dst_lon', 'src_easting', 'src_northing', 'way_id', 'way_inx', 'highway', 'surface', 1.0             , 1.0],
+        # Multiple records
+        [1    , 2    , 'src_lat', 'src_lon', 'dst_lat', 'dst_lon', 'src_easting', 'src_northing', 'way_id', 'way_inx', 'highway', 'surface', 2.0             , 2.0]
+
+    ]
+
+    # fmt: on
+
+    target_schema = StructType(
+        [
+            StructField("src", IntegerType()),
+            StructField("dst", IntegerType()),
+            StructField("src_lat", StringType()),
+            StructField("src_lon", StringType()),
+            StructField("dst_lat", StringType()),
+            StructField("dst_lon", StringType()),
+            StructField("src_easting", StringType()),
+            StructField("src_northing", StringType()),
+            StructField("way_id", StringType()),
+            StructField("way_inx", StringType()),
+            StructField("highway", StringType()),
+            StructField("surface", StringType()),
+            StructField("elevation_gain", DoubleType()),
+            StructField("elevation_loss", DoubleType()),
+        ]
+    )
+
+    target_df = test_session.createDataFrame(target_data, target_schema)
+    target_df = target_df.select(*sorted(target_df.columns))
+
+    # Act #####################################################################
+
+    result_df = EdgeMixin.implode_edges(test_df)
+    result_df = result_df.select(*sorted(result_df.columns))
+
+    # Assert ##################################################################
+    assertDataFrameEqual(result_df, target_df)
 
 
-def test_calculate_edge_distances():
+@patch("fell_finder.ingestion.enriching.edge_mixin.distance")
+def test_calculate_edge_distances(
+    mock_distance: MagicMock, test_session: SparkSession
+):
     """Make sure the distance calculation is being applied properly"""
-    raise AssertionError()
+
+    # Arrange #################################################################
+
+    # Test Data ---------------------------------------------------------------
+
+    # fmt: off
+    _ = (
+        ['src_lat', 'src_lon', 'dst_lat', 'dst_lon'])
+
+    test_data = [
+        [0.0      , 0.0      , 5.0      , 5.0]
+    ]
+
+    # fmt: on
+
+    test_schema = StructType(
+        [
+            StructField("src_lat", DoubleType()),
+            StructField("src_lon", DoubleType()),
+            StructField("dst_lat", DoubleType()),
+            StructField("dst_lon", DoubleType()),
+        ]
+    )
+
+    test_df = test_session.createDataFrame(test_data, test_schema)
+
+    def side_effect(
+        source: Tuple[float, float], destination: Tuple[float, float]
+    ) -> float:
+        """Mock behaviour for geopy.distance"""
+        src_lat, src_lon = source
+        dst_lat, dst_lon = destination
+        lat_dist = dst_lat - src_lat
+        lon_dist = dst_lon - src_lon
+        dist_m = ((lat_dist**2) + (lon_dist**2)) ** 0.5
+        dist = MagicMock()
+        dist.meters = dist_m
+        return dist
+
+    mock_distance.side_effect = side_effect
+
+    # Target Data -------------------------------------------------------------
+
+    # fmt: off
+    _ = (
+        ['src_lat', 'src_lon', 'dst_lat', 'dst_lon'])
+
+    target_data = [
+        [0.0      , 0.0      , 5.0      , 5.0, 50**0.5]
+    ]
+
+    # fmt: on
+
+    target_schema = StructType(
+        [
+            StructField("src_lat", DoubleType()),
+            StructField("src_lon", DoubleType()),
+            StructField("dst_lat", DoubleType()),
+            StructField("dst_lon", DoubleType()),
+            StructField("distance", DoubleType()),
+        ]
+    )
+
+    target_df = test_session.createDataFrame(target_data, target_schema)
+    target_df = target_df.select(*sorted(target_df.columns))
+
+    # Act #####################################################################
+
+    result_df = EdgeMixin.calculate_edge_distances(test_df)
+    result_df = result_df.select(*sorted(result_df.columns))
+
+    # Assert ##################################################################
+    assertDataFrameEqual(result_df, target_df)
 
 
-def test_set_edge_output_schema():
+def test_set_edge_output_schema(test_session: SparkSession):
     """Make sure the output schema is being set correctly"""
-    raise AssertionError()
+
+    # Arrange #################################################################
+
+    # Test Data ---------------------------------------------------------------
+
+    test_cols = [
+        "src",
+        "dst",
+        "src_lat",
+        "src_lon",
+        "dst_lat",
+        "dst_lon",
+        "way_id",
+        "way_inx",
+        "highway",
+        "surface",
+        "distance",
+        "elevation_gain",
+        "elevation_loss",
+        "easting_ptn",
+        "northing_ptn",
+        "other",
+    ]
+
+    test_data = [[0 for _ in test_cols]]
+
+    test_df = test_session.createDataFrame(test_data, test_cols)
+
+    # Target Data -------------------------------------------------------------
+
+    target_cols = [
+        "src",
+        "dst",
+        "src_lat",
+        "src_lon",
+        "dst_lat",
+        "dst_lon",
+        "way_id",
+        "way_inx",
+        "highway",
+        "surface",
+        "distance",
+        "elevation_gain",
+        "elevation_loss",
+        "easting_ptn",
+        "northing_ptn",
+    ]
+
+    target_data = [[0 for _ in target_cols]]
+
+    target_df = test_session.createDataFrame(target_data, target_cols)
+    target_df = target_df.select(*sorted(target_df.columns))
+
+    # Act #####################################################################
+
+    result_df = EdgeMixin.set_edge_output_schema(test_df)
+    result_df = result_df.select(*sorted(result_df.columns))
+
+    # Assert ##################################################################
+    assertDataFrameEqual(result_df, target_df)

@@ -1,7 +1,7 @@
 """Handles the joining of graph data with the corresponding elevation data"""
 
 from glob import glob
-from typing import Set, Tuple
+from typing import Set, Tuple, Literal
 import os
 import re
 
@@ -41,17 +41,7 @@ class GraphEnricher(NodeMixin, EdgeMixin):
         self.spark = spark
 
         self.edge_resolution_m = 10
-
-        common_ptns = self.get_common_partitions()
-        self.num_ptns = len(common_ptns)
-
-        self.common_ptns_df = self.get_common_partitions_df(common_ptns)
-
-        self.start_shuffle_ptns = self.spark.conf.get(
-            "spark.sql.shuffle.partitions", "200"
-        )
-
-        self.spark.conf.set("spark.sql.shuffle.partitions", str(self.num_ptns))
+        self.num_ptns = 0
 
     def get_available_partitions(self, subfolder: str) -> Set[Tuple[int, int]]:
         """Use the filesystem to determine which partitions are available in
@@ -153,31 +143,42 @@ class GraphEnricher(NodeMixin, EdgeMixin):
 
         return df
 
-    def filter_df_by_common_partitions(self, df: DataFrame) -> DataFrame:
+    @staticmethod
+    def filter_df_by_common_partitions(
+        data_df: DataFrame, common_ptns_df: DataFrame
+    ) -> DataFrame:
         """Filter the provided dataframe to include only the partitions which
         are present in both the lidar and osm datasets.
 
         Args:
-            df (DataFrame): The dataframe to be filtered
+            data_df: The dataframe to be filtered
+            common_ptns_df: A dataframe containing the partitions to be
+              retained
 
         Returns:
-            DataFrame: A filtered copy of the input dataset
+            DataFrame: A filtered copy of data_df
         """
 
-        df = df.join(
-            self.common_ptns_df,
+        df = data_df.join(
+            common_ptns_df,
             on=["easting_ptn", "northing_ptn"],
             how="inner",
         )
 
         return df
 
-    def load_df(self, dataset: str) -> DataFrame:
+    def load_df(
+        self,
+        dataset: Literal["nodes", "edges", "lidar"],
+        common_ptns_df: DataFrame,
+    ) -> DataFrame:
         """Load in the contents of a single dataset, filtering it to include
         only the partitions which are present in all datasets.
 
         Args:
-            dataset (str): The dataset to be loaded
+            dataset: The name of the dataset to be loaded
+            common_ptns_df: A dataframe containing the partitions to be
+              retained
 
         Returns:
             DataFrame: The filtered contents of the specified dataset
@@ -185,12 +186,14 @@ class GraphEnricher(NodeMixin, EdgeMixin):
         data_dir = os.path.join(self.data_dir, "parsed", dataset)
 
         df = self.spark.read.parquet(data_dir)
-        df = self.filter_df_by_common_partitions(df)
+        df = self.filter_df_by_common_partitions(df, common_ptns_df)
         df = df.repartition(self.num_ptns, "easting_ptn", "northing_ptn")
 
         return df
 
-    def store_df(self, df: DataFrame, target: str) -> None:
+    def store_df(
+        self, df: DataFrame, target: Literal["nodes", "edges", "lidar"]
+    ) -> None:
         """Store an enriched dataframe to disk, partitioning it by easting_ptn
         and northing_ptn.
 
@@ -213,18 +216,29 @@ class GraphEnricher(NodeMixin, EdgeMixin):
         to the 'enriched' subfolder within the specified data_dir.
         """
 
+        common_ptns = self.get_common_partitions()
+        num_ptns = len(common_ptns)
+
+        start_shuffle_ptns = self.spark.conf.get(
+            "spark.sql.shuffle.partitions", "200"
+        )
+
+        self.spark.conf.set("spark.sql.shuffle.partitions", str(num_ptns))
+
+        common_ptns_df = self.get_common_partitions_df(common_ptns)
+
         # Read in elevation data
-        elevation_df = self.load_df("lidar")
+        elevation_df = self.load_df("lidar", common_ptns_df)
 
         # Enrich & store nodes
-        nodes_df = self.load_df("nodes")
+        nodes_df = self.load_df("nodes", common_ptns_df)
         nodes_df = self.tag_nodes(nodes_df, elevation_df)
         nodes_df = self.set_node_output_schema(nodes_df)
         self.store_df(nodes_df, target="nodes")
         del nodes_df
 
         # Enrich & store edges
-        edges_df = self.load_df("edges")
+        edges_df = self.load_df("edges", common_ptns_df)
         edges_df = self.calculate_step_metrics(edges_df)
         edges_df = self.explode_edges(edges_df)
         edges_df = self.unpack_exploded_edges(edges_df)
@@ -244,5 +258,5 @@ class GraphEnricher(NodeMixin, EdgeMixin):
         # Restore the original settings of the spark session
         self.spark.conf.set(
             "spark.sql.shuffle.partitions",
-            self.start_shuffle_ptns,  # type: ignore
+            start_shuffle_ptns,  # type: ignore
         )
