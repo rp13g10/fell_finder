@@ -2,7 +2,7 @@
 complexity of the graph when loaded into networkx for route creation"""
 
 from glob import glob
-from typing import Set, Tuple
+from typing import Set, Tuple, Literal
 import os
 import re
 
@@ -79,15 +79,15 @@ class GraphContractor:
 
         return all_partitions
 
-    def load_df(self, dataset: str) -> DataFrame:
-        """Load in the contents of a single dataset, filtering it to include
-        only the partitions which are present in all datasets.
+    def load_df(self, dataset: Literal["edges", "nodes"]) -> DataFrame:
+        """Load in the contents of a single dataset as a spark dataframe.
 
         Args:
-            dataset: The dataset to be loaded
+            dataset: The name of the dataset to be loaded, must be in the
+              `enriched` subfolder of the configured `data_dir`
 
         Returns:
-            The filtered contents of the specified dataset
+            The contents of the specified dataset
         """
         data_dir = os.path.join(self.data_dir, "enriched", dataset)
 
@@ -96,7 +96,8 @@ class GraphContractor:
 
         return df
 
-    def _get_node_degrees(self, edges: DataFrame) -> DataFrame:
+    @staticmethod
+    def _get_node_degrees(edges: DataFrame) -> DataFrame:
         """Fetch a dataframe containing the in_degree and out_degree for each
         node in the graph.
 
@@ -148,7 +149,8 @@ class GraphContractor:
 
         return nodes
 
-    def derive_node_flags(self, nodes: DataFrame) -> DataFrame:
+    @staticmethod
+    def derive_node_flags(nodes: DataFrame) -> DataFrame:
         """Use the degree information for each node to determine whether it
         can be contracted (or removed)
 
@@ -158,8 +160,7 @@ class GraphContractor:
         Returns:
             A copy of the input dataset with additional flags::
               * contract_flag
-              * dead_end_flag
-              * orphan_flag"""
+              * dead_end_flag"""
 
         contract_mask = F.col("degree") == 2
         dead_end_mask = F.col("degree") == 1
@@ -174,7 +175,8 @@ class GraphContractor:
 
         return nodes
 
-    def derive_way_start_end_flags(self, edges: DataFrame) -> DataFrame:
+    @staticmethod
+    def derive_way_start_end_flags(edges: DataFrame) -> DataFrame:
         """Determine which nodes are found at the start or end of ways, as
         they appear in the OSM data.
 
@@ -210,9 +212,8 @@ class GraphContractor:
 
         return edges
 
-    def derive_chain_src_dst(
-        self, nodes: DataFrame, edges: DataFrame
-    ) -> DataFrame:
+    @staticmethod
+    def derive_chain_src_dst(nodes: DataFrame, edges: DataFrame) -> DataFrame:
         """For each edge in the graph, if it forms the start or end of a chain
         populate the chain_src and chain_dst columns with its src and dst.
         These fields will be NULL for any edges which do not form the start or
@@ -271,7 +272,8 @@ class GraphContractor:
 
         return edges
 
-    def propagate_chain_src_dst(self, edges: DataFrame) -> DataFrame:
+    @staticmethod
+    def propagate_chain_src_dst(edges: DataFrame) -> DataFrame:
         """Ensure that chain_src and chain_dst are populated for every edge in
         the graph by propagating the values forwards/backwards across each way
 
@@ -305,7 +307,8 @@ class GraphContractor:
 
         return edges
 
-    def contract_chains(self, edges: DataFrame) -> DataFrame:
+    @staticmethod
+    def contract_chains(edges: DataFrame) -> DataFrame:
         """Aggregate all of the edges in the graph according to their new
         chain_src and chain_dst values, eliminating edges which are in the
         middle of each chain. Retain key information about the geometry of
@@ -319,7 +322,7 @@ class GraphContractor:
             An aggregated copy of the input dataframe
         """
 
-        edges = edges.groupBy("way_id", "chain_src", "chain_dst").agg(
+        edges = edges.groupBy("chain_src", "chain_dst").agg(
             F.collect_set("highway").alias("highway"),
             F.collect_set("surface").alias("surface"),
             F.sum("elevation_gain").alias("elevation_gain"),
@@ -358,7 +361,8 @@ class GraphContractor:
 
         return edges
 
-    def generate_new_edges_from_chains(self, edges: DataFrame) -> DataFrame:
+    @staticmethod
+    def generate_new_edges_from_chains(edges: DataFrame) -> DataFrame:
         """Unpack the information stored when aggregating the edges into a more
         meaningful format.
 
@@ -417,7 +421,8 @@ class GraphContractor:
 
         return edges
 
-    def drop_dead_ends(self, edges: DataFrame) -> DataFrame:
+    @staticmethod
+    def drop_dead_ends(edges: DataFrame) -> DataFrame:
         """Remove any chains where either the start or end node is a dead end,
         as the routing algorithm will not be able to send users down them
 
@@ -434,7 +439,8 @@ class GraphContractor:
 
         return edges
 
-    def set_edge_output_schema(self, edges: DataFrame) -> DataFrame:
+    @staticmethod
+    def set_edge_output_schema(edges: DataFrame) -> DataFrame:
         """Finalise the schema of the edges dataset ready for writing to disk
 
         Args:
@@ -466,9 +472,8 @@ class GraphContractor:
 
         return edges
 
-    def drop_unused_nodes(
-        self, nodes: DataFrame, edges: DataFrame
-    ) -> DataFrame:
+    @staticmethod
+    def drop_unused_nodes(nodes: DataFrame, edges: DataFrame) -> DataFrame:
         """Drop any nodes from the graph which are no longer connected to an
         edge.
 
@@ -488,7 +493,8 @@ class GraphContractor:
 
         return nodes
 
-    def set_node_output_schema(self, nodes: DataFrame) -> DataFrame:
+    @staticmethod
+    def set_node_output_schema(nodes: DataFrame) -> DataFrame:
         """Ensure the nodes dataset has a consistent schema
 
         Args:
