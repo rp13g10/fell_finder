@@ -1,6 +1,18 @@
 # Fell Finder
 
-This project is still in early development, with significant work still required before it's ready for general use. That said, with a little leg-work a viable PoC is now up and running.
+A personal project which aims to help you find the hilliest possible routes in your local area (so long as you're UK based). Development is typically limited to ~4 hours a week while I'm commuting in to the office, so new features may take a while to implement. You are welcome to use any of the code provided in this repo, so long as credit is given to me as the original author.
+
+
+## Objectives
+
+The aims of this project are twofold. Primarily, it is intended that the final product will be a webapp which can be used to generate superlative routes (the hilli*est*, the flatt*est*), as opposed to simply a 'hilly' route. Future builds are likely to include other features which make it easier for users to identify large hills to run up, and may go as far as to offer integrations with other popular services (Strava, Komoot) depending on which APIs are available.
+The secondary objective is to provide myself with a challenge, and an opportunity to try out some different technologies. Once the current phase is complete (getting a fully tested PoC running locally, with an architecture I'm satisfied with), the next step will be setting everything up to scale and deploying it to the cloud.
+
+## Current State
+
+This project is still in early development, with significant work still required before it's ready for general use. That said, with a little leg-work a viable PoC is now up and running. At present, the ingestion pipeline is largely up and running (although it's executed on-demand at the moment). A basic webapp is provided, which is able to plot routes on demand and display them to the user. The route finding page of the webapp is not feature complete; there are no GPX exports, and only one route is displayed to the user. Routes are generally created in less than a minute for shorter distances (up to 10k), although the algorithm has been tested up to marathon distance. The route-finding algorithm needs further improvement to reduce execution time and increase completion rates.
+
+
 
 ## Instructions for use
 * After cloning, you'll need to select a folder which will hold all of the source data. In `app.py` and `ingestion.py`, set this directory as your `DATA_DIR`.
@@ -27,74 +39,36 @@ This project is still in early development, with significant work still required
   * Then, without closing the celery process, start the webapp with `python app.py`
   * You can then access the webapp by opening 'http://localhost:8050/' in your browser
 
-## Future developments
-* Existing code needs tidying up, decide on a structure which will scale as the webapp becomes more sophisticated
-  * Too many similar filenames, could do with renaming
-* Full test coverage required for existing code
-* Build out export capability for GPX export
-* Investigate moving ingestion process into DBT
-  * https://docs.getdbt.com/guides/manual-install?step=1
-* Admin dashboard?
-* User logins? Save routes?
-* API integrations?
-* The webapp itself is currently very basic, and needs a lot of tidying up
-* Some of the code-base is likely to be restructured as additional components are added
-* Additional pages are planned
-  * Manual route plotting
-  * Finding the hilliest/flattest area within a radius of a selected point
-* Additional route finding modes are planned
-  * Find the route with the greatest proportion of trails
-* Further performance improvements to the route finding process should be possible
-  * In a future build, the more intensive processes may be rewritten in a more performant language
-  * Very early prototypes took ~6 hours to generate a route, so I'm quite pleased with the current 1-2 minutes!
-* The entire app needs to be containerised and set up to scale
-* An airflow pipeline is planned, picking up updated LIDAR/OSM data once it appears
-* Everything will ultimately be deployed into the cloud
+## Roadmap
 
-## Target architecture
+These new features are listed in approximate order of priority
 
-* data
-  * extracts
-  * parsed
-  * enriched
-  * optimised
-  * temp
-* src/fell_finder
-  * ingestion
-    * parsing
-      - osm.py
-      - lidar.py
-    * enriching
-      - graph_enricher.py
-      - node_mixin.py
-      - edge_mixin.py
-    * optimising
-      - contraction.py
-    - utils.py
-  * retrieval
-    - graph_fetcher.py
-  * routing
-    - route_maker.py
-    - route_finder.py
-    - zimmer.py
-  * egestion
-    * routes
-      * gpx.py
-      * ...
-  * app
-    * components
-    * plotting
-    * layout
-* tests
-  * ...
-- config.yml
-- app.py
-- setup.py
-- pyproject.toml
-- README.md
+### Backend
 
-Notes:
-* containers move into relevant subfolders
+* Improve the route finding algorithm, try to ensure that at least one circuit is always completed
+  * One potential approach may be the use of a 'max distance to start' type filter to kill routes early if they can't reach the target distance.
+  * If possible, switching over to using the rustworkx api to generate routes may yield performance benefits and improve completion rates
+  * Neo4j also needs to be evaluated, this may prove a more suitable store for the optimised graph data and has its own query language for graph operations
+* Build out support for GPX exports
+* Update routing to include threshold for tarmac/trail composition
+  * e.g. only return routes which are on tarmac for 25% or less of the total distance
+* Containerise everything
+* Set up an airflow pipeline for ingestion
+* Deploy to the cloud
+* Identify ways to further improve the accuracy of calculated elevation gain/loss
+  * Values are typically quite close to Strava now, but there are some blips in the source LIDAR data which it may be possible to smooth out with software processing
 
-To Do:
-* remove type hints from docstrings, one less thing to maintain
+### Frontend
+* Build out the route finding page of the webapp
+  * The user should be presented with more than one candidate route if available
+  * Once the exporter is available, a download as GPX button needs adding
+* Formally define the expected end state of the webapp
+  * Set out all of the different features to be built out
+  * Define a target layout for each feature
+  * This may include the following
+    * Manual route plotting
+    * Hill finder (find the largest/steepest climbs in the local area)
+    * API integrations
+      * This may then enable dashboards looking at past activity data
+* Add user logins, allowing people to save & retrieve routes
+* Create an admin dashboard to aid development & performance diagnostics
