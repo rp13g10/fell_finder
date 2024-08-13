@@ -563,6 +563,7 @@ class GraphContractor:
         edges = self.set_edge_output_schema(edges)
 
         nodes = self.drop_unused_nodes(nodes, edges)
+        nodes = self.set_node_output_schema(nodes)
 
         self.store_df(nodes, "nodes")
         self.store_df(edges, "edges")

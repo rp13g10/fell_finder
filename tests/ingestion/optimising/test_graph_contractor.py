@@ -1,6 +1,7 @@
 """Tests for the GraphContractor class"""
 
-from unittest.mock import patch, MagicMock
+import inspect
+from unittest.mock import call, patch, MagicMock
 
 import pytest
 from pyspark.sql import SparkSession
@@ -869,40 +870,623 @@ def test_contract_chains(test_session: SparkSession):
     assertDataFrameEqual(res_df, tgt_df)
 
 
-def test_generate_new_edges_from_chains():
+def test_generate_new_edges_from_chains(test_session: SparkSession):
     """Make sure that new edges are being generated correctly"""
-    raise AssertionError()
+
+    # Arrange #################################################################
+
+    # Test Data ---------------------------------------------------------------
+
+    # Complex fields - Single record
+    geom_1 = [
+        {"way_inx": 1, "distance": 1.0, "easting_ptn": 12, "northing_ptn": 12}
+    ]
+    src_geom_1 = [
+        {
+            "way_inx": 1,
+            "src_lat": 1.0,
+            "src_lon": 1.0,
+            "src_elevation": 1.0,
+            "src_dead_end_flag": 0,
+        }
+    ]
+    dst_geom_1 = [
+        {
+            "way_inx": 1,
+            "dst_lat": 1.1,
+            "dst_lon": 1.1,
+            "dst_elevation": 1.1,
+            "dst_dead_end_flag": 0,
+        }
+    ]
+
+    # Complex fields - Two records
+    geom_2 = [
+        {"way_inx": 1, "distance": 1.0, "easting_ptn": 12, "northing_ptn": 12},
+        {"way_inx": 2, "distance": 1.0, "easting_ptn": 12, "northing_ptn": 12},
+    ]
+    src_geom_2 = [
+        {
+            "way_inx": 1,
+            "src_lat": 1.0,
+            "src_lon": 1.0,
+            "src_elevation": 1.0,
+            "src_dead_end_flag": 0,
+        },
+        {
+            "way_inx": 2,
+            "src_lat": 1.1,
+            "src_lon": 1.1,
+            "src_elevation": 1.1,
+            "src_dead_end_flag": 0,
+        },
+    ]
+    dst_geom_2 = [
+        {
+            "way_inx": 1,
+            "dst_lat": 1.1,
+            "dst_lon": 1.1,
+            "dst_elevation": 1.1,
+            "dst_dead_end_flag": 0,
+        },
+        {
+            "way_inx": 2,
+            "dst_lat": 1.2,
+            "dst_lon": 1.2,
+            "dst_elevation": 1.2,
+            "dst_dead_end_flag": 0,
+        },
+    ]
+
+    # Complex fields - Three records
+    geom_3 = [
+        {"way_inx": 1, "distance": 1.0, "easting_ptn": 12, "northing_ptn": 12},
+        {"way_inx": 2, "distance": 1.0, "easting_ptn": 12, "northing_ptn": 12},
+        {"way_inx": 3, "distance": 1.0, "easting_ptn": 12, "northing_ptn": 12},
+    ]
+    src_geom_3 = [
+        {
+            "way_inx": 1,
+            "src_lat": 1.0,
+            "src_lon": 1.0,
+            "src_elevation": 1.0,
+            "src_dead_end_flag": 0,
+        },
+        {
+            "way_inx": 2,
+            "src_lat": 1.1,
+            "src_lon": 1.1,
+            "src_elevation": 1.1,
+            "src_dead_end_flag": 0,
+        },
+        {
+            "way_inx": 3,
+            "src_lat": 1.2,
+            "src_lon": 1.2,
+            "src_elevation": 1.2,
+            "src_dead_end_flag": 0,
+        },
+    ]
+    dst_geom_3 = [
+        {
+            "way_inx": 1,
+            "dst_lat": 1.1,
+            "dst_lon": 1.1,
+            "dst_elevation": 1.1,
+            "dst_dead_end_flag": 0,
+        },
+        {
+            "way_inx": 2,
+            "dst_lat": 1.2,
+            "dst_lon": 1.2,
+            "dst_elevation": 1.2,
+            "dst_dead_end_flag": 0,
+        },
+        {
+            "way_inx": 3,
+            "dst_lat": 1.3,
+            "dst_lon": 1.3,
+            "dst_elevation": 1.3,
+            "dst_dead_end_flag": 0,
+        },
+    ]
+
+    # fmt: off
+    _ = (
+        ['chain_src', 'chain_dst', 'highway'                 , 'surface'                 , 'elevation_gain', 'elevation_loss', 'distance', 'geom', 'src_geom', 'dst_geom'])
+
+    test_data = [
+        # Single record
+        [0          , 1          , ['highway_1']             , ['surface_1']             , 1.0             , 1.0             , 1.0       , geom_1, src_geom_1, dst_geom_1],
+        # Two records
+        [1          , 2          , ['highway_1']             , ['surface_1']             , 2.0             , 2.0             , 2.0       , geom_2, src_geom_2, dst_geom_2],
+        # Three records
+        [2          , 3          , ['highway_1', 'highway_2'], ['surface_1', 'surface_2'], 3.0             , 3.0             , 3.0       , geom_3, src_geom_3, dst_geom_3],
+    ]
+    # fmt: on
+
+    test_schema = StructType(
+        [
+            StructField("chain_src", IntegerType()),
+            StructField("chain_dst", IntegerType()),
+            StructField("highway", ArrayType(StringType(), False), False),
+            StructField("surface", ArrayType(StringType(), False), False),
+            StructField("elevation_gain", DoubleType()),
+            StructField("elevation_loss", DoubleType()),
+            StructField("distance", DoubleType()),
+            StructField(
+                "geom",
+                ArrayType(
+                    StructType(
+                        [
+                            StructField("way_inx", IntegerType()),
+                            StructField("distance", DoubleType()),
+                            StructField("easting_ptn", IntegerType()),
+                            StructField("northing_ptn", IntegerType()),
+                        ]
+                    ),
+                    False,
+                ),
+                False,
+            ),
+            StructField(
+                "src_geom",
+                ArrayType(
+                    StructType(
+                        [
+                            StructField("way_inx", IntegerType()),
+                            StructField("src_lat", DoubleType()),
+                            StructField("src_lon", DoubleType()),
+                            StructField("src_elevation", DoubleType()),
+                            StructField("src_dead_end_flag", IntegerType()),
+                        ]
+                    ),
+                    False,
+                ),
+                False,
+            ),
+            StructField(
+                "dst_geom",
+                ArrayType(
+                    StructType(
+                        [
+                            StructField("way_inx", IntegerType()),
+                            StructField("dst_lat", DoubleType()),
+                            StructField("dst_lon", DoubleType()),
+                            StructField("dst_elevation", DoubleType()),
+                            StructField("dst_dead_end_flag", IntegerType()),
+                        ]
+                    ),
+                    False,
+                ),
+                False,
+            ),
+        ]
+    )
+
+    test_df = test_session.createDataFrame(test_data, test_schema)
+
+    # Target Data -------------------------------------------------------------
+
+    # fmt: off
+    _ = (
+        ['src', 'dst', 'highway'     , 'surface'     , 'elevation_gain', 'elevation_loss', 'distance', 'geom_lat'          , 'geom_lon'          , 'geom_elevation'    , 'geom_distance'      , 'src_dead_end_flag', 'dst_dead_end_flag', 'easting_ptn', 'northing_ptn'])
+
+    tgt_data = [
+        # Single record
+        [0    , 1    , 'highway_1'   , 'surface_1'   , 1.0             , 1.0             , 1.0       , [1.0, 1.1]          , [1.0, 1.1]          , [1.0, 1.1]          , [0.0, 1.0]           , 0                  , 0                  , 12           , 12],
+        # Two records
+        [1    , 2    , 'highway_1'   , 'surface_1'   , 2.0             , 2.0             , 2.0       , [1.0, 1.1, 1.2]     , [1.0, 1.1, 1.2]     , [1.0, 1.1, 1.2]     , [0.0, 1.0, 1.0]      , 0                  , 0                  , 12           , 12],
+        # Three records
+        [2    , 3    , 'unclassified', 'unclassified', 3.0             , 3.0             , 3.0       , [1.0, 1.1, 1.2, 1.3], [1.0, 1.1, 1.2, 1.3], [1.0, 1.1, 1.2, 1.3], [0.0, 1.0, 1.0, 1.0] , 0                  , 0                  , 12           , 12],
+    ]
+
+    # fmt: on
+
+    tgt_schema = StructType(
+        [
+            StructField("src", IntegerType()),
+            StructField("dst", IntegerType()),
+            StructField("highway", StringType(), False),
+            StructField("surface", StringType(), False),
+            StructField("elevation_gain", DoubleType()),
+            StructField("elevation_loss", DoubleType()),
+            StructField("distance", DoubleType()),
+            StructField("geom_lat", ArrayType(DoubleType())),
+            StructField("geom_lon", ArrayType(DoubleType())),
+            StructField("geom_elevation", ArrayType(DoubleType())),
+            StructField("geom_distance", ArrayType(DoubleType())),
+            StructField("src_dead_end_flag", IntegerType()),
+            StructField("dst_dead_end_flag", IntegerType()),
+            StructField("easting_ptn", IntegerType()),
+            StructField("northing_ptn", IntegerType()),
+        ]
+    )
+
+    tgt_df = test_session.createDataFrame(tgt_data, tgt_schema)
+
+    # Act #####################################################################
+    res_df = GraphContractor.generate_new_edges_from_chains(test_df)
+
+    # Assert ##################################################################
+    assertDataFrameEqual(res_df, tgt_df)
 
 
-def test_drop_dead_ends():
+def test_drop_dead_ends(test_session: SparkSession):
     """Make sure that any dead ends are being removed cleanly"""
-    raise AssertionError()
+
+    # Arrange #################################################################
+
+    # Test Data ---------------------------------------------------------------
+
+    # fmt: off
+    _ = (
+        ['src_dead_end_flag', 'dst_dead_end_flag'])
+
+    test_data = [
+        [0                  , 0],
+        [0                  , 1],
+        [1                  , 0],
+        [1                  , 1]
+    ]
+    # fmt: on
+
+    test_schema = StructType(
+        [
+            StructField("src_dead_end_flag", IntegerType()),
+            StructField("dst_dead_end_flag", IntegerType()),
+        ]
+    )
+
+    test_df = test_session.createDataFrame(test_data, test_schema)
+
+    # Target Data -------------------------------------------------------------
+
+    # fmt: off
+    _ = (
+        ['src_dead_end_flag', 'dst_dead_end_flag'])
+
+    tgt_data = [
+        [0                  , 0],
+    ]
+
+    # fmt: on
+
+    tgt_schema = StructType(
+        [
+            StructField("src_dead_end_flag", IntegerType()),
+            StructField("dst_dead_end_flag", IntegerType()),
+        ]
+    )
+
+    tgt_df = test_session.createDataFrame(tgt_data, tgt_schema)
+
+    # Act #####################################################################
+    res_df = GraphContractor.drop_dead_ends(test_df)
+
+    # Assert ##################################################################
+    assertDataFrameEqual(res_df, tgt_df)
 
 
-def test_set_edge_output_schema():
+def test_set_edge_output_schema(test_session: SparkSession):
     """Make sure that the correct output schema is being set"""
-    raise AssertionError()
+
+    # Arrange #################################################################
+
+    # Test Data ---------------------------------------------------------------
+
+    # fmt: off
+    _ = (
+        ['src', 'dst', 'highway', 'surface', 'elevation_gain', 'elevation_loss', 'distance', 'geom_lat'  , 'geom_lon'  , 'geom_elevation'  , 'geom_distance'  , 'easting_ptn', 'northing_ptn', 'other'])
+
+    test_data = [
+        ['src', 'dst', 'highway', 'surface', 'elevation_gain', 'elevation_loss', 'distance', ['geom_lat'], ['geom_lon'], ['geom_elevation'], ['geom_distance'], 'easting_ptn', 'northing_ptn', 'other']
+    ]
+    # fmt: on
+
+    test_schema = StructType(
+        [
+            StructField("src", StringType()),
+            StructField("dst", StringType()),
+            StructField("highway", StringType()),
+            StructField("surface", StringType()),
+            StructField("elevation_gain", StringType()),
+            StructField("elevation_loss", StringType()),
+            StructField("distance", StringType()),
+            StructField("geom_lat", ArrayType(StringType())),
+            StructField("geom_lon", ArrayType(StringType())),
+            StructField("geom_elevation", ArrayType(StringType())),
+            StructField("geom_distance", ArrayType(StringType())),
+            StructField("easting_ptn", StringType()),
+            StructField("northing_ptn", StringType()),
+            StructField("other", StringType()),
+        ]
+    )
+
+    test_df = test_session.createDataFrame(test_data, test_schema)
+
+    # Target Data -------------------------------------------------------------
+
+    geometry = {
+        "lat": ["geom_lat"],
+        "lon": ["geom_lon"],
+        "elevation": ["geom_elevation"],
+        "distance": ["geom_distance"],
+    }
+
+    # fmt: off
+    _ = (
+        ['src', 'dst', 'highway', 'surface', 'elevation_gain', 'elevation_loss', 'distance', 'geometry', 'easting_ptn', 'northing_ptn'])
+
+    tgt_data = [
+        ['src', 'dst', 'highway', 'surface', 'elevation_gain', 'elevation_loss', 'distance', geometry  , 'easting_ptn', 'northing_ptn']
+    ]
+
+    # fmt: on
+
+    tgt_schema = StructType(
+        [
+            StructField("src", StringType()),
+            StructField("dst", StringType()),
+            StructField("highway", StringType()),
+            StructField("surface", StringType()),
+            StructField("elevation_gain", StringType()),
+            StructField("elevation_loss", StringType()),
+            StructField("distance", StringType()),
+            StructField(
+                "geometry",
+                StructType(
+                    [
+                        StructField("lat", ArrayType(StringType())),
+                        StructField("lon", ArrayType(StringType())),
+                        StructField("elevation", ArrayType(StringType())),
+                        StructField("distance", ArrayType(StringType())),
+                    ]
+                ),
+            ),
+            StructField("easting_ptn", StringType()),
+            StructField("northing_ptn", StringType()),
+        ]
+    )
+
+    tgt_df = test_session.createDataFrame(tgt_data, tgt_schema)
+
+    # Act #####################################################################
+    res_df = GraphContractor.set_edge_output_schema(test_df)
+
+    # Assert ##################################################################
+    assertDataFrameEqual(res_df, tgt_df)
 
 
-def test_drop_unused_nodes():
+def test_drop_unused_nodes(test_session: SparkSession):
     """Make sure that any nodes without a corresponding edge (i.e. those which
     were along the middle of a chain) are being removed"""
-    raise AssertionError()
+
+    # Arrange #################################################################
+
+    # Test Data ---------------------------------------------------------------
+
+    # ----- Nodes -----
+    # fmt: off
+    _ = (
+        ['id'])
+
+    test_node_data = [
+        # Source and dest
+        [0],
+        # Source only
+        [1],
+        # Dest only
+        [2],
+        # Neither
+        [3]
+    ]
+    # fmt: on
+
+    test_node_schema = StructType(
+        [
+            StructField("id", IntegerType()),
+        ]
+    )
+
+    test_node_df = test_session.createDataFrame(
+        test_node_data, test_node_schema
+    )
+
+    # ----- Edges -----
+    # fmt: off
+    _ = (
+        ['src', 'dst'])
+
+    test_edge_data = [
+        # Source and dest
+        [0, 2],
+        [1, 0],
+        # Source only
+        [1, 2],
+        # Dest only
+        [4, 2],
+        # Neither
+    ]
+    # fmt: on
+
+    test_edge_schema = StructType(
+        [
+            StructField("src", IntegerType()),
+            StructField("dst", IntegerType()),
+        ]
+    )
+
+    test_edge_df = test_session.createDataFrame(
+        test_edge_data, test_edge_schema
+    )
+
+    # Target Data -------------------------------------------------------------
+
+    # fmt: off
+    _ = (
+        ['id'])
+
+    tgt_data = [
+        # Source and dest
+        [0],
+        # Source only
+        [1],
+        # Dest only
+        [2],
+        # Neither
+    ]
+
+    # fmt: on
+
+    tgt_schema = StructType(
+        [
+            StructField("id", IntegerType()),
+        ]
+    )
+
+    tgt_df = test_session.createDataFrame(tgt_data, tgt_schema)
+
+    # Act #####################################################################
+    res_df = GraphContractor.drop_unused_nodes(test_node_df, test_edge_df)
+
+    # Assert ##################################################################
+    assertDataFrameEqual(res_df, tgt_df)
 
 
-def test_set_node_output_schema():
+def test_set_node_output_schema(test_session: SparkSession):
     """Make sure that the output schema for the nodes dataset is being set
     properly"""
-    raise AssertionError()
+
+    # Arrange #################################################################
+
+    # Test Data ---------------------------------------------------------------
+
+    # fmt: off
+    _ = (
+        ["id", "lat", "lon", "elevation", "easting_ptn", "northing_ptn", "other"])
+
+    test_data = [
+        ["id", "lat", "lon", "elevation", "easting_ptn", "northing_ptn", "other"],
+        [None, "lat", "lon", "elevation", "easting_ptn", "northing_ptn", "other"],
+    ]
+    # fmt: on
+
+    test_schema = StructType(
+        [
+            StructField("id", StringType()),
+            StructField("lat", StringType()),
+            StructField("lon", StringType()),
+            StructField("elevation", StringType()),
+            StructField("easting_ptn", StringType()),
+            StructField("northing_ptn", StringType()),
+            StructField("other", StringType()),
+        ],
+    )
+
+    test_df = test_session.createDataFrame(test_data, test_schema)
+
+    # Target Data -------------------------------------------------------------
+
+    # fmt: off
+    _ = (
+        ["id", "lat", "lon", "elevation", "easting_ptn", "northing_ptn"])
+
+    tgt_data = [
+        ["id", "lat", "lon", "elevation", "easting_ptn", "northing_ptn"],
+    ]
+
+    # fmt: on
+
+    tgt_schema = StructType(
+        [
+            StructField("id", StringType()),
+            StructField("lat", StringType()),
+            StructField("lon", StringType()),
+            StructField("elevation", StringType()),
+            StructField("easting_ptn", StringType()),
+            StructField("northing_ptn", StringType()),
+        ]
+    )
+
+    tgt_df = test_session.createDataFrame(tgt_data, tgt_schema)
+
+    # Act #####################################################################
+    res_df = GraphContractor.set_node_output_schema(test_df)
+
+    # Assert ##################################################################
+    assertDataFrameEqual(res_df, tgt_df)
 
 
 def test_store_df():
     """Make sure that the correct calls are being generated when storing data
     back to disk"""
-    raise AssertionError()
+
+    # Arrange
+    test_contractor = GraphContractor("data_dir", "spark")  # type: ignore
+
+    test_df = MagicMock()
+    test_df.repartition.return_value = test_df
+    test_df.write.partitionBy.return_value = test_df
+    test_df.mode.return_value = test_df
+    test_df.parquet.return_value = test_df
+
+    test_target = "target"
+
+    target_path = "data_dir/optimised/target"
+
+    # Act
+    test_contractor.store_df(test_df, test_target)
+
+    # Assert
+    test_df.repartition.assert_called_once()
+    test_df.write.partitionBy.assert_called_once_with(
+        "easting_ptn", "northing_ptn"
+    )
+    test_df.mode.assert_called_once_with("overwrite")
+    test_df.parquet.assert_called_once_with(target_path)
 
 
 def test_contract():
     """Make sure that the end-to-end process is generating the correct
     method calls"""
-    raise AssertionError()
+
+    # Arrange #################################################################
+
+    # Creation, partition discovery
+    mock_spark = MagicMock()
+    mock_spark.conf.get.return_value = "42"
+    test_contractor = GraphContractor("data_dir", mock_spark)
+
+    test_contractor.get_available_partitions = MagicMock(
+        return_value=list(range(56))
+    )
+
+    # Method calls
+    methods = inspect.getmembers(GraphContractor, predicate=inspect.isroutine)
+
+    method_names = [name for name, _ in methods if name[0] != "_"]
+
+    method_names.remove("contract")
+    method_names.remove("get_available_partitions")
+
+    for method_name in method_names:
+        setattr(test_contractor, method_name, MagicMock())
+
+    # Act #####################################################################
+    test_contractor.contract()
+
+    # Assert ##################################################################
+
+    # Shuffle partitions get set then un-set
+    mock_spark.conf.set.assert_has_calls(
+        [
+            call("spark.sql.shuffle.partitions", "56"),
+            call("spark.sql.shuffle.partitions", "42"),
+        ]
+    )
+
+    # All defined methods should be called
+    for method_name in method_names:
+        method_mock = getattr(test_contractor, method_name)
+        method_mock.assert_called()
