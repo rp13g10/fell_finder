@@ -6,41 +6,21 @@ from typing import List, Set
 
 
 @dataclass
-class StepMetrics:
-    """Container for metrics calculated when stepping from the end of one
-    route to a neighbouring node.
-
-    Args:
-        distance (float): The distance change
-        elevation_gain (float): The elevation increase
-        elevation_loss (float): The elevation los
-    """
-
-    distance: float
-    elevation_gain: float
-    elevation_loss: float
-
-
-@dataclass
 class Route:
     """Container for the information required to represent a single route
 
     Args:
-        route (List[int]): A list of the node IDs which are crossed as part of
+        route: A list of the node IDs which are crossed as part of
           this route, in the order that they are crossed
-        visited (Set[int]): A set of all the unique nodes which are visited as
-          part of this route
-        distance (float): The total distance of the route
-        elevation_gain (float): The elevation gain for this route
-        elevation_loss (float): The elevation loss for this route
-        elevation_gain_potential (float): The elevation gain required in order
+        visited: A set of all the unique nodes which are visited as part of
+          this route
+        distance: The total distance of the route
+        elevation_gain: The elevation gain for this route
+        elevation_loss: The elevation loss for this route
+        elevation_gain_potential: The elevation gain required in order
           to get back to the route's starting point
-        elevation_loss_potential (float): The elevation loss required in order
-          to get back to the route's starting point
-        ratio (float): The ratio of elevation gained to distance travelled
-        terminal_square (Optional[Tuple[int, int]]): The grid square in which
-          this route terminates, used only while pruning a list of candidate
-          routes"""
+        elevation_loss_potential: The elevation loss required in order
+          to get back to the route's starting point"""
 
     route: List[int]
     route_id: str
@@ -55,7 +35,8 @@ class Route:
     elevation_loss_potential: float = 0.0
 
     @property
-    def ratio(self):
+    def ratio(self) -> float:
+        """Calculate the ratio of elevation gain to distance travelled"""
         return self.elevation_gain / self.distance
 
 
@@ -64,19 +45,19 @@ class RouteConfig:
     """Contains user configuration options for route calculation
 
     Args:
-        start_lat (float): Latitude for the route start point
-        start_lon (float): Longitude for the route start point
-        target_distance (float): Target distance for the route (in m)
-        tolerance (float): How far above/below the target distance a
-          completed route can be while still being considered valid
-        route_mode (str): Set to 'hilly' to generate the hilliest possible
+        start_lat: Latitude for the route start point
+        start_lon: Longitude for the route start point
+        target_distance: Target distance for the route (in m)
+        tolerance: How far above/below the target distance a completed route
+          can be while still being considered valid
+        route_mode: Set to 'hilly' to generate the hilliest possible
           route, or 'flat' for the flattest possible route
-        max_candidates (int): The maximum number of candidate routes which
+        max_candidates: The maximum number of candidate routes which
           should be held in memory. Lower this to increase calculation speed,
           increase it to potentially increase the quality of routes generated.
-        terrain_types (List[str]): The different types of terrain which should
+        terrain_types: The different types of terrain which should
           be considered for this route. If not provided, all terrain types
-          will be considered. Defaults to None. Possible options are:
+          will be considered. Defaults to None. Possible options are::
 
           - footway
           - living_street
@@ -107,7 +88,7 @@ class RouteConfig:
 
     terrain_types: List[str] = field(default_factory=list)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Calculate min_distance and max_distance based on user provided
         target_distance and tolerance"""
 

@@ -2,12 +2,29 @@
 route."""
 
 from copy import deepcopy
-from typing import Iterable, Tuple
+from dataclasses import dataclass
+from typing import Iterable, Tuple, Literal
 
 from rustworkx import PyDiGraph, dijkstra_shortest_path_lengths
-from fell_finder.containers.routes import Route, RouteConfig, StepMetrics
+from fell_finder.routing.containers import Route, RouteConfig
 
 ALL_REMOVALS = []
+
+
+@dataclass
+class StepMetrics:
+    """Container for metrics calculated when stepping from the end of one
+    route to a neighbouring node.
+
+    Args:
+        distance: The distance change
+        elevation_gain: The elevation increase
+        elevation_loss: The elevation loss
+    """
+
+    distance: float
+    elevation_gain: float
+    elevation_loss: float
 
 
 class Zimmer:
@@ -15,13 +32,13 @@ class Zimmer:
     provided which will generate a list of possible nodes to step to, and
     applying those steps to a given route."""
 
-    def __init__(self, graph: PyDiGraph, config: RouteConfig):
+    def __init__(self, graph: PyDiGraph, config: RouteConfig) -> None:
         """Store down the required information to handle processing of routes
 
         Args:
-            graph (Graph): The network graph representing the geographical
+            graph: The network graph representing the geographical
               area in which routes are being generated
-            config (RouteConfig): The user-provided configuration for the
+            config: The user-provided configuration for the
               routes to be created
         """
 
@@ -37,12 +54,12 @@ class Zimmer:
         the route, to make it easier to get back to the start point.
 
         Args:
-            route (Route): An (incomplete) candidate route
-            node_id (int): The ID for the node to be stepped to
+            graph: The graph being used for route creation
+            route: An (incomplete) candidate route
+            node_id: The ID for the node to be stepped to
 
         Returns:
-            bool: Whether or not the provided node_id would be a valid step
-              to take
+            Whether or not the provided node_id would be a valid step to take
         """
 
         start_node = route.route[0]
@@ -55,7 +72,7 @@ class Zimmer:
                 edge_cost_fn=lambda attrs: attrs.distance,
             )[start_node]
         except IndexError:
-            # TODO: Need to verify that this is actually what happen when no
+            # TODO: Need to verify that this is actually what happens when no
             #       path exists. Can't find any other reasonable explanation.
             return False
 
@@ -85,11 +102,11 @@ class Zimmer:
         breaching the conditions of the route finding algorithm.
 
         Args:
-            route (Route): An incomplete route
+            route: An incomplete route
 
         Returns:
-            Iterable[int]: An iterator containing all of the IDs which can
-              be stepped to from the current position of the provided route
+            An iterator containing all of the IDs which can be stepped to from
+            the current position of the provided route
         """
 
         global ALL_REMOVALS
@@ -127,11 +144,11 @@ class Zimmer:
         intermediate nodes which are traversed when making this journey.
 
         Args:
-            route (Route): A candidate route
-            next_node (int): The ID of a neighbouring node
+            route: A candidate route
+            next_node: The ID of a neighbouring node
 
         Returns:
-            StepMetrics: The calculated metrics for this step
+            The calculated metrics for this step
         """
         cur_node = route.route[-1]
 
@@ -151,10 +168,8 @@ class Zimmer:
         processed so far.
 
         Args:
-            route (Route): A candidate route
-            cand_inx (int): The number of candidate routes processed so far
-            neigh_inx (int): The number of neighbours processed for the current
-              candidate so far
+            route: A candidate route
+            new_id: The ID to be given to the new route
 
         Returns:
             Route: A copy of the candidate route with an updated route_id
@@ -171,9 +186,9 @@ class Zimmer:
         taking a step to a neighbouring node
 
         Args:
-            route (Route): A candidate route
-            next_node (int): The neighbouring node to step to
-            step_metrics (StepMetrics): The impact of making this step
+            route: A candidate route
+            next_node: The neighbouring node to step to
+            step_metrics: The impact of making this step
 
         Returns:
             Route: An updated candidate route, which now ends at 'next_node'
@@ -189,18 +204,17 @@ class Zimmer:
 
         return route
 
-    def _validate_route(self, route: Route) -> str:
+    def _validate_route(
+        self, route: Route
+    ) -> Literal["complete", "valid", "invalid"]:
         """For a newly generated candidate route, validate that it is still
         within the required parameters. If not, then it should be discarded.
 
         Args:
-            route (Route): A candidate route
+            route: A candidate route
 
         Returns:
-            str: The status of the route, one of:
-              - complete
-              - valid
-              - invalid
+            str: The status of the route
         """
         cur_pos = route.route[-1]
 
@@ -230,19 +244,18 @@ class Zimmer:
 
     def step_to_next_node(
         self, route: Route, next_node: int, new_id: str
-    ) -> Tuple[str, Route]:
+    ) -> Tuple[Literal["complete", "valid", "invalid"], Route]:
         """For a given route and node to step to, perform the step and update
         the route metrics, then validate that the route is still within the
         user-provided parameters.
 
         Args:
-            route (Route): An incomplete route
-            next_node (int): The node to be stepped to
-            new_id (str): The ID for the new route
+            route: An incomplete route
+            next_node: The node to be stepped to
+            new_id: The ID for the new route
 
         Returns:
-            Tuple[str, Route]: The status of the new route (complete, valid or
-              invalid), and the new route itself
+            The status of the new route, and the new route itself
         """
         # Create a new candidate route
         candidate = self._generate_new_route(route, new_id)

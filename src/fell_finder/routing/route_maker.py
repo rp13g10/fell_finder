@@ -1,14 +1,12 @@
 """Primary class which handles the creation of circular routes according
 to the user provided configuration."""
 
-from typing import List, Tuple, Dict, Generator, Union
+from typing import List, Tuple, Dict, Generator, Union, Any
 
-import tqdm
-
-from fell_finder.containers.routes import Route, RouteConfig
-from fell_finder.selection.selector import Selector
+from fell_finder.routing.containers import Route, RouteConfig
+from fell_finder.retrieval.graph_fetcher import GraphFetcher
 from fell_finder.routing.zimmer import Zimmer
-from fell_finder.routing.route_selector import FZRouteSelector, PyRouteSelector
+from fell_finder.routing.route_selector import PyRouteSelector
 
 # TODO: Make this more configurable
 
@@ -19,18 +17,21 @@ class RouteMaker:
     point & a max distance.
     """
 
-    def __init__(self, config: RouteConfig, data_dir: str):
+    def __init__(self, config: RouteConfig, data_dir: str) -> None:
         """Create a route finder based on user preferences.
 
         Args:
-            config (RouteConfig): The user-generated route configuration
+            config: The user-generated route configuration
+            data_dir: The path to the folder containing the optimised graph
+              data
+
         """
 
         self.config = config
 
         # Fetch networkx graph from enriched parquet dataset
-        selector = Selector(self.config, data_dir)
-        start_node, graph = selector.create_graph()
+        fetcher = GraphFetcher(self.config, data_dir)
+        start_node, graph = fetcher.create_graph()
         self.start_node = start_node
         self.graph = graph
 
@@ -47,7 +48,7 @@ class RouteMaker:
         single node in a graph.
 
         Args:
-            node_id (int): The ID of the node to fetch lat/lon for
+            node_id: The ID of the node to fetch lat/lon for
         """
         node = self.graph[node_id][1]
         lat = node.lat
@@ -61,8 +62,8 @@ class RouteMaker:
         starting at the closest available node.
 
         Returns:
-            Route: A candidate route of zero distance, starting at the node
-              closest to the specified start point.
+            A candidate route of zero distance, starting at the node closest to
+            the specified start point.
         """
 
         seed = [
@@ -86,18 +87,18 @@ class RouteMaker:
         starting point.
 
         Args:
-            route (Route): A candidate route
+            route: A candidate route
 
         Returns:
-            Route: A copy of the input route, with the first visited
-              node removed from the 'visited' key
+            A copy of the input route, with the first visited node removed from
+            the 'visited' key
         """
 
         start_pos = route.route[0]
         route.visited.remove(start_pos)
         return route
 
-    def _update_progress(self):
+    def _update_progress(self) -> Dict[str, Any]:
         """Update the progress bar with relevant metrics which enable the
         user to track the calculation as it progresses
         """
@@ -131,7 +132,7 @@ class RouteMaker:
         circular routes according to the user's preferences.
 
         Returns:
-            List[Route]: A list of completed routes
+            A list of completed routes
         """
 
         # Recursively check for circular routes

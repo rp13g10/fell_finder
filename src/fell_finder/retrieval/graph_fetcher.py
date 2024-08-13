@@ -40,10 +40,10 @@ class BBox:
     routes
 
     Args:
-        min_lat (float): Minimum latitude
-        min_lon (float): Minimum longitude
-        max_lat (float): Maximum latitude
-        max_lon (float): Maximum longitude"""
+        min_lat: Minimum latitude
+        min_lon: Minimum longitude
+        max_lat: Maximum latitude
+        max_lon: Maximum longitude"""
 
     min_lat: float
     min_lon: float
@@ -70,7 +70,10 @@ class BBox:
 
 
 class GraphNode:
-    def __init__(self, node_dict: Dict[str, Any]):
+    """Container for additional node attributes which are not supported
+    natively by rustworkx"""
+
+    def __init__(self, node_dict: Dict[str, Any]) -> None:
         self.index = None
 
         self.lat = node_dict["lat"]
@@ -79,15 +82,20 @@ class GraphNode:
 
         self.dist_to_start = None
 
-    def set_index(self, index) -> None:
+    def set_index(self, index: int) -> None:
+        """Set the node index to the provided value"""
         self.index = index
 
     def set_dist_to_start(self, dist: float) -> None:
+        """Set the distance from the node to the start point"""
         self.dist_to_start = dist
 
 
 class GraphEdge:
-    def __init__(self, edge_dict: Dict[str, Any]):
+    """Container for additional edge attributes which are not supported
+    natively by rustworkx"""
+
+    def __init__(self, edge_dict: Dict[str, Any]) -> None:
         self.index = None
 
         self.highway = edge_dict["highway"]
@@ -97,7 +105,8 @@ class GraphEdge:
         self.elevation_loss = edge_dict["elevation_loss"]
         self.geometry = edge_dict["geometry"]
 
-    def set_index(self, index) -> None:
+    def set_index(self, index: int) -> None:
+        """Set the edge index to the provided value"""
         self.index = index
 
 
@@ -106,13 +115,16 @@ class GraphFetcher:
     requested route start point without going over the max configured distance.
     """
 
-    def __init__(self, config: RouteConfig, data_dir: str):
+    def __init__(self, config: RouteConfig, data_dir: str) -> None:
         """Create an instance of the graph enricher class based on the
         contents of the networkx graph specified by `source_path`
 
         Args:
-            config (RouteConfig): A configuration file detailing the route
-              requested by the user.
+            config: A configuration file detailing the route requested by the
+              user
+            data_dir: The location of the folder containing the graph data
+              required for the webapp, data is loaded from the 'optimised'
+              subfolder
         """
 
         # Store down core attributes
@@ -132,7 +144,7 @@ class GraphFetcher:
         equal to the max requested distance.
 
         Returns:
-            BBox: A bounding box for the entire route
+            A bounding box for the entire route
         """
         start_point = point.Point(self.config.start_lat, self.config.start_lon)
 
@@ -163,7 +175,7 @@ class GraphFetcher:
         node in the graph.
 
         Returns:
-            List[Dict]: A list of node metadata
+            A list of node metadata
         """
         nodes_dataset = ParquetDataset(
             os.path.join(self.data_dir, "optimised/nodes"),
@@ -190,6 +202,17 @@ class GraphFetcher:
     def get_id_index_mappings(
         self, all_nodes: List[int], indices: List[int]
     ) -> Dict[int, int]:
+        """Rustworkx references nodes by their index, but internally we want
+        to use their actual IDs. This script generates a mapping from their
+        ids to their indices
+
+        Args:
+            all_nodes: A list of all of the node IDs in the graph
+            indices: A list of all of the node indices in the graph
+
+        Returns:
+            A dictionary mapping node IDs to indices
+        """
         maps = {id_: ind for id_, ind in zip(all_nodes, indices)}
 
         return maps
@@ -202,7 +225,7 @@ class GraphFetcher:
         in the graph.
 
         Returns:
-            List[Tuple]: A list of edges & the corresponding metadata
+            A list of edges & the corresponding metadata
         """
 
         filters = [
@@ -247,7 +270,8 @@ class GraphFetcher:
         return edges_list
 
     def _initialize_graph(self, graph: rx.PyDiGraph) -> rx.PyDiGraph:
-        # Store down indexes, as recommended by rustworkx documentation
+        """Perform the graph initialization steps recommended by the
+        RustworkX documentation"""
         for index in graph.node_indices():
             graph[index][1].index = index
 
@@ -297,6 +321,21 @@ class GraphFetcher:
     def find_nearest_node(
         self, graph: rx.PyDiGraph, lat: float, lon: float
     ) -> int:
+        """Given a single point on the map, retrieve the node which is
+        geographically closest to it.
+
+        Args:
+            graph: A graph representing the local area
+            lat: The selected latitude
+            lon: The selected longitude
+
+        Raises:
+            ValueError: If no nodes are present in the graph, an exception will
+              be raised
+
+        Returns:
+            The index of the nearest node
+        """
         closest_node = None
         closest_dist = None
 
@@ -320,7 +359,16 @@ class GraphFetcher:
 
         return closest_node
 
-    def inverse_inx_to_node_inx(self, inverse_inx: int):
+    def inverse_inx_to_node_inx(self, inverse_inx: int) -> int:
+        """Using a pre-populated dictionary, fetch the ID for a node based
+        on its index in the inverted graph.
+
+        Args:
+            inverse_inx: A node index from the inverted graph
+
+        Returns:
+            The ID for the provided node index
+        """
         id_ = self.inv_to_id[inverse_inx]
 
         inx = self.id_maps[id_]
@@ -345,12 +393,38 @@ class GraphFetcher:
 
         return graph
 
-    def generate_fine_subgraph(self, graph: rx.PyDiGraph, start_node: int):
+    def generate_fine_subgraph(
+        self, graph: rx.PyDiGraph, start_node: int
+    ) -> rx.PyDiGraph:
+        """Generate a graph which contains only those nodes which can be
+        reached without going over the max configured distance. Distances are
+        calculated using the true shortest path distance, rather than going
+        'as the crow flies'
+
+        Args:
+            graph: The graph to be filtered
+            start_node: The start point for the route
+
+        Returns:
+            A filtered copy of the provided graph
+        """
         search_radius = self.config.max_distance / 2
 
         def check_removal_cond(
             data: Tuple[int, GraphNode], search_radius: float, start_node: int
-        ):
+        ) -> bool:
+            """For a single node, check whether it should be included in the
+            final subgraph used for route creation
+
+            Args:
+                data: The data for the provided node
+                search_radius: The max distance that any point can be from the
+                  start node
+                start_node: The start point of the route
+
+            Returns:
+                True if the node should be kept, False if it should be removed
+            """
             node_inx, attrs = data
             if attrs.dist_to_start is None:
                 # Remove if no path back to start
@@ -370,6 +444,13 @@ class GraphFetcher:
         return graph
 
     def create_graph(self) -> Tuple[int, rx.PyDiGraph]:
+        """Based on the provided config, retrieve the smallest possible graph
+        which contains all of the data required to generate a circular route.
+
+        Returns:
+            The index (not the ID) of the nearest node to the selected
+            start point, and the graph data required to make a route.
+        """
         graph, inverse_graph = self.fetch_coarse_subgraph()
 
         start_node = self.find_nearest_node(
