@@ -1,5 +1,5 @@
 """Utility functions which are used across the different modules within this
-package"""
+package."""
 
 from typing import Tuple
 
@@ -11,6 +11,8 @@ from pyspark.sql.types import IntegerType
 
 # NOTE: Polars doesn't seem to support bankers rounding, so all of these
 #       functions use half-up rounding
+
+PTN_EDGE_SIZE_M = 5000
 
 
 def _round_half_up(num: int | float) -> int:
@@ -24,11 +26,11 @@ def get_coordinates(lat: float, lon: float) -> Tuple[int, int]:
     data is stored.
 
     Args:
-        lat (float): The latitude for the target point
-        lon (float): The longitude for the target point
+        lat: The latitude for the target point
+        lon: The longitude for the target point
 
     Returns:
-        Tuple[int, int]: The easting and northing for the target point
+        The easting and northing for the target point
     """
 
     easting, northing = WGS84toOSGB36(lat, lon)
@@ -42,15 +44,15 @@ def get_partitions(easting: int, northing: int) -> Tuple[int, int]:
     northing partitions.
 
     Args:
-        easting (int): The easting for the target point
-        northing (int): The northing for the target point
+        easting: The easting for the target point
+        northing: The northing for the target point
 
     Returns:
-        Tuple[int, int]: The easting partition and the northing partition
+        The easting partition and the northing partition
     """
 
-    easting_ptn = _round_half_up(easting / 5000)
-    northing_ptn = _round_half_up(northing / 5000)
+    easting_ptn = _round_half_up(easting / PTN_EDGE_SIZE_M)
+    northing_ptn = _round_half_up(northing / PTN_EDGE_SIZE_M)
 
     return easting_ptn, northing_ptn
 
@@ -63,20 +65,22 @@ def add_partitions_to_spark_df(
     stored in the easting_ptn and northing_ptn columns respectively.
 
     Args:
-        df (DataFrame): A dataframe containing both `easting` and `northing`
-          columns
+        df: A dataframe containing both `easting` and `northing` columns
+        easting_col: The column containg the eastings to be converted
+        northing_col: The column containing the northings to be converted
 
     Returns:
-        DataFrame: A copy of the input dataset with additional `easting_ptn`
-          and `northing_ptn` columns
+        A copy of the input dataset with additional `easting_ptn` and
+        `northing_ptn` columns
     """
     df = df.withColumn(
-        "easting_ptn", F.round(F.col(easting_col) / 5000).astype(IntegerType())
+        "easting_ptn",
+        F.round(F.col(easting_col) / PTN_EDGE_SIZE_M).astype(IntegerType()),
     )
 
     df = df.withColumn(
         "northing_ptn",
-        F.round(F.col(northing_col) / 5000).astype(IntegerType()),
+        F.round(F.col(northing_col) / PTN_EDGE_SIZE_M).astype(IntegerType()),
     )
 
     return df
@@ -88,19 +92,18 @@ def add_partitions_to_polars_df(df: pl.DataFrame) -> pl.DataFrame:
     stored in the easting_ptn and northing_ptn columns respectively.
 
     Args:
-        df (pl.DataFrame): A dataframe containing both `easting` and `northing`
-          columns
+        df: A dataframe containing both `easting` and `northing` columns
 
     Returns:
-        pl.DataFrame: A copy of the input dataset with additional `easting_ptn`
-          and `northing_ptn` columns
+        A copy of the input dataset with additional `easting_ptn` and
+        `northing_ptn` columns
     """
     df = df.with_columns(
-        (pl.col("easting") / 5000)
+        (pl.col("easting") / PTN_EDGE_SIZE_M)
         .round()
         .cast(pl.Int32())
         .alias("easting_ptn"),
-        (pl.col("northing") / 5000)
+        (pl.col("northing") / PTN_EDGE_SIZE_M)
         .round()
         .cast(pl.Int32())
         .alias("northing_ptn"),
