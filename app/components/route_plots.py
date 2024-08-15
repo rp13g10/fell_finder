@@ -2,7 +2,7 @@ import dash_leaflet as dl
 from plotly import graph_objects as go
 from rustworkx import PyDiGraph
 
-from fell_finder.containers.routes import Route
+from fell_finder.routing.containers import Route
 from fell_finder.plotting.plotting import get_geometry_from_route
 
 

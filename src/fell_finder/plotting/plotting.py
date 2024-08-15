@@ -10,7 +10,7 @@ from rustworkx import PyDiGraph
 # from networkx import DiGraph
 from plotly import graph_objects as go
 
-from fell_finder.containers.routes import Route
+from fell_finder.routing.containers import Route
 
 
 def generate_filename(route: Route) -> str:

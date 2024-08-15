@@ -14,7 +14,7 @@ from dash import (
     CeleryManager,
 )
 
-from fell_finder.containers.routes import RouteConfig
+from fell_finder.routing.containers import RouteConfig
 from fell_finder.routing.route_maker import RouteMaker
 
 from components.route_plots import (
@@ -24,9 +24,6 @@ from components.route_plots import (
 
 from index import index
 from layout.route_maker import update_progress_bar
-
-# TODO: Update route plotting functions to account for new format of vias, lat
-#       and lon are now available in the vias
 
 DATA_DIR = "/home/ross/repos/fell_finder/data"
 
