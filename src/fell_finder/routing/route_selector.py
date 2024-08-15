@@ -70,6 +70,7 @@ class BaseRouteSelector(ABC):
             selected_routes = self._get_dissimilar_routes(
                 self.routes, current_threshold, self.n_routes
             )
+            num_selected = len(selected_routes)
             current_threshold = min(current_threshold + 0.01, 0.99)
 
         return selected_routes
@@ -116,6 +117,7 @@ class PyRouteSelector(BaseRouteSelector):
             The similarity between the two routes, 0 being completely different
             and 1 being identical
         """
+
         union = len(route_1.visited.union(route_2.visited))
         intersection = len(route_1.visited.intersection(route_2.visited))
         ratio = intersection / union
@@ -142,14 +144,17 @@ class PyRouteSelector(BaseRouteSelector):
 
         while to_process and len(selected_routes) < n_routes:
             route = to_process.pop(0)
+
+            current_distance = route.distance
+            check_threshold = current_distance * threshold
+
             selected_routes.append(route)
-            maybe_similar_routes = self.get_routes_to_check(
-                route, to_process, threshold
-            )
-            for candidate in maybe_similar_routes:
-                similarity = self.get_similarity(route, candidate)
-                if similarity > threshold:
-                    to_process.remove(candidate)
+
+            for candidate in to_process[:]:
+                if candidate.distance > check_threshold:
+                    similarity = self.get_similarity(route, candidate)
+                    if similarity > threshold:
+                        to_process.remove(candidate)
 
         return selected_routes
 
