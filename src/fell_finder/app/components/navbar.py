@@ -1,7 +1,9 @@
+"""Set up the navbar which is displayed at the top of the page"""
+
 from dash import html
 
 navbar = html.Nav(
-    className="navbar navbar-light bg-light",
+    className="navbar navbar-light bg-light py-1 my-0",
     children=html.Div(
         className="container-fluid",
         children=[

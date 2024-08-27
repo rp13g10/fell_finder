@@ -215,13 +215,13 @@ class GraphEnricher(NodeMixin, EdgeMixin):
         """
 
         common_ptns = self.get_common_partitions()
-        num_ptns = len(common_ptns)
+        self.num_ptns = len(common_ptns)
 
         start_shuffle_ptns = self.spark.conf.get(
             "spark.sql.shuffle.partitions", "200"
         )
 
-        self.spark.conf.set("spark.sql.shuffle.partitions", str(num_ptns))
+        self.spark.conf.set("spark.sql.shuffle.partitions", str(self.num_ptns))
 
         common_ptns_df = self.get_common_partitions_df(common_ptns)
 

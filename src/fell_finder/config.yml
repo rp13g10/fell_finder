@@ -1,0 +1,89 @@
+data_dir: /home/ross/repos/fell_finder/data
+debug: True
+routing:
+  pruning_level: 2
+  max_candidates: 64
+highway_types:
+  "Major Roads":
+    - motorway
+    - motorway_link
+    - trunk
+    - trunk_link
+    - primary_link
+    - secondary
+    - secondary_link
+    - tertiary
+    - tertiary_link
+  "Minor Roads":
+    - residential
+    - living_street
+    - track
+  "Service Roads (Not Recommended)":
+    - service
+    - bus_guideway
+    - escape
+    - raceway
+    - busway
+    - proposed
+    - construction
+  "Footpaths":
+    - pedestrian
+    - footway
+    - bridleway
+    - steps
+    - corridor
+    - path
+    - sidewalk
+    - crossing
+    - traffic_island
+  "Cycle Routes":
+    - cycleway
+    - lane
+    - share_busway
+    - shared_lane
+  "Technical Paths":
+    - via_ferrata
+  "Unclassified":
+    - unclassified
+    - road
+surface_types:
+  "Paved":
+    - paved
+    - asphalt
+    - chipseal
+    - concrete
+    - concrete:lanes
+    - concrete:plates
+    - paving_stones
+    - sett
+    - unhewn_cobblestone
+    - cobblestone
+  "Other Surfaces":
+    - bricks
+    - metal
+    - rubber
+    - metal_grid
+    - clay
+    - tartan
+    - artificial_turf
+    - acrylic
+    - carpet
+  "Maintained Trails":
+    - unpaved
+    - compacted
+    - fine_gravel
+    - shells
+    - rock
+    - pebblestone
+    - grass_paver
+    - woodchips
+  "Unmaintained Trails":
+    - ground
+    - dirt
+    - earth
+    - grass
+    - mud
+    - snow
+    - ice
+  "Unclassified":
+    - unclassified

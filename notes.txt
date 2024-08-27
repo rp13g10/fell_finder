@@ -1,0 +1,8 @@
+Next Steps:
+
+Need to bring back the big plots using stored route information
+Add a 'view' button to each card
+Figure out what the actual layout needs to look like, get everything in place and tidy
+Prettify large plot as much as possible, colour by surface?
+Update user input section, add filtering by surface as well as highway, for each make displayed options more human-readable
+Try to set up auto-zooming for dash-leaflet plots

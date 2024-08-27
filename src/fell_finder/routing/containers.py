@@ -55,26 +55,12 @@ class RouteConfig:
         max_candidates: The maximum number of candidate routes which
           should be held in memory. Lower this to increase calculation speed,
           increase it to potentially increase the quality of routes generated.
-        terrain_types: The different types of terrain which should
+        highway_types: The different types of terrain which should
           be considered for this route. If not provided, all terrain types
-          will be considered. Defaults to None. Possible options are::
-
-          - footway
-          - living_street
-          - path
-          - pedestrian
-          - primary
-          - primary_link
-          - residential
-          - secondary
-          - secondary_link
-          - service
-          - steps
-          - tertiary
-          - tertiary_link
-          - track
-          - unclassified
-          - compound
+          will be considered. Defaults to None.
+        surface_types: The different  types of surface which should be
+          considered for this route. If not provided, all surface types will be
+          considered. Defaults to None.
     """
 
     start_lat: float
@@ -86,7 +72,8 @@ class RouteConfig:
     route_mode: str
     max_candidates: int
 
-    terrain_types: List[str] = field(default_factory=list)
+    highway_types: List[str] = field(default_factory=list)
+    surface_types: List[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         """Calculate min_distance and max_distance based on user provided

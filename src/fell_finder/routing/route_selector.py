@@ -3,8 +3,7 @@ used to remove near-duplicate routes from it."""
 
 # from thefuzz import fuzz
 from abc import ABC, abstractmethod
-from rapidfuzz import process
-from typing import List
+from typing import List, Literal
 from fell_finder.routing.containers import Route
 
 
@@ -12,41 +11,28 @@ class BaseRouteSelector(ABC):
     """Base class containing methods useful for all child route selectors"""
 
     def __init__(
-        self, routes: List[Route], threshold: float, n_routes: int
+        self,
+        routes: List[Route],
+        threshold: float,
+        n_routes: int,
+        sort_attr: str,
+        sort_order: Literal["asc", "desc"],
     ) -> None:
         """Base class containing methods useful for all child route
         selectors"""
-        self.routes = routes
+
         self.threshold = threshold
         self.n_routes = n_routes
+        self.sort_attr = sort_attr
+        self.sort_order = sort_order
 
-    def get_routes_to_check(
-        self, route: Route, to_check: List[Route], threshold: float
-    ) -> List[Route]:
-        """Fetch a subset of the provided list of routes which contains only
-        those with a total distance within the configured similarity
-        threshold of the primary route. This is assumed to be less
-        computationally expensive than comparing them all individually.
+        routes = sorted(
+            routes,
+            key=lambda x: getattr(x, sort_attr),
+            reverse=self.sort_order == "desc",
+        )
 
-        Args:
-            route: The primary route, any routes with a similar length to this
-              will be returned. Others will be discarded.
-            to_check: A list of routes which may or may not be similar to the
-              primary route.
-            threshold: The maximum similarity between two routes, must be
-              a value between 0 and 1.
-
-        Returns:
-            A filtered copy of the provided list of routes
-        """
-        current_distance = route.distance
-        min_distance = current_distance * threshold
-
-        to_check = [
-            route_ for route_ in to_check if route.distance > min_distance
-        ]
-
-        return to_check
+        self.routes = routes
 
     @abstractmethod
     def _get_dissimilar_routes(
@@ -73,6 +59,12 @@ class BaseRouteSelector(ABC):
             num_selected = len(selected_routes)
             current_threshold = min(current_threshold + 0.01, 0.99)
 
+        selected_routes = sorted(
+            selected_routes,
+            key=lambda x: getattr(x, self.sort_attr),
+            reverse=self.sort_order == "desc",
+        )
+
         return selected_routes
 
 
@@ -87,6 +79,8 @@ class PyRouteSelector(BaseRouteSelector):
         routes: List[Route],
         n_routes: int,
         threshold: float,
+        sort_attr: str,
+        sort_order: Literal["asc", "desc"],
     ) -> None:
         """Create a route selector with the provided parameters
 
@@ -101,8 +95,10 @@ class PyRouteSelector(BaseRouteSelector):
             depth: How many prior selectors have been created with a reduced
               similarity threshold. Used as a safety net to prevent
               recursion erros.
+            sort_attr: The route attribute to sort by
+            sort_order: The order to sort routes in
         """
-        super().__init__(routes, threshold, n_routes)
+        super().__init__(routes, threshold, n_routes, sort_attr, sort_order)
 
     @staticmethod
     def get_similarity(route_1: Route, route_2: Route) -> float:
@@ -155,82 +151,5 @@ class PyRouteSelector(BaseRouteSelector):
                     similarity = self.get_similarity(route, candidate)
                     if similarity > threshold:
                         to_process.remove(candidate)
-
-        return selected_routes
-
-
-class FZRouteSelector(BaseRouteSelector):
-    """Takes the top N routes from a pre-sorted list of candidates, ensuring
-    that each route is sufficiently different to all of the routes which
-    preceeded it. RapidFuzz implementation, processes the route as a string
-    in order to select sufficiently different routes."""
-
-    # NOTE: 5:25, route couldn't complete as it needed to step over 2
-    #       consecutive nodes
-
-    def __init__(
-        self, routes: List[Route], n_routes: int, threshold: float
-    ) -> None:
-        """Create a route selector with the provided parameters
-
-        Args:
-            routes: A list of valid route, sorted according to
-              their desired elevation profile
-            n_routes: How many distinct routes should be
-              pulled from the provided list
-            threshold: How similar can each route be to the next.
-              Set to 0 to allow absolutely no overlap, set to 1 to allow
-              even completely identical routes.
-        """
-        super().__init__(routes, threshold, n_routes)
-
-    def _get_dissimilar_routes(
-        self, routes: List[Route], threshold: float, n_routes: int
-    ) -> List[Route]:
-        """Retain only sufficiently different routes, with the maximum level
-        of similarity defined by the provided threshold
-
-        Args:
-            routes: A list of routes which may be similar
-            threshold: The maximum similarity between two routes, must be a
-              number between 0 and 1
-            n_routes: The maximum number of routes to retain
-
-        Returns:
-            A list of dissimilar routes
-        """
-        score_cutoff = threshold * 100
-
-        def _get_route_str(route: Route) -> str:
-            """Generate a string representation of a route, so that it can be
-            parsed by rapidfuzz
-
-            Args:
-                route: The route to be represented
-
-            Returns:
-                A string containing all of the visited nodes in the route
-            """
-            route_list = [str(x) for x in route.route]
-            route_str = " ".join(route_list)
-            return route_str
-
-        to_process = routes[:]
-        selected_routes = []
-
-        while to_process and len(selected_routes) < n_routes:
-            route = to_process.pop(0)
-            selected_routes.append(route)
-            maybe_similar_routes = self.get_routes_to_check(
-                route, to_process, threshold
-            )
-            similar_routes = process.extract(
-                query=route,
-                choices=maybe_similar_routes,
-                processor=_get_route_str,
-                score_cutoff=score_cutoff,
-            )
-            for similar_route, _, _ in similar_routes:
-                to_process.remove(similar_route)
 
         return selected_routes

@@ -13,7 +13,7 @@ networkx
 geopy
 thefuzz
 plotly
-dash[celery]
+dash[celery, diskcache]
 dash-leaflet
 pyrosm
 rustworkx

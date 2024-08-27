@@ -10,9 +10,9 @@ from fell_finder.ingestion import (
     GraphEnricher,
     GraphContractor,
 )
+from fell_finder import app_config
 
-
-DATA_DIR = "/home/ross/repos/fell_finder/data"
+DATA_DIR = app_config["data_dir"]
 
 lidar_loader = LidarLoader(DATA_DIR)
 lidar_loader.load()
@@ -46,30 +46,3 @@ graph_contractor.contract()
 del graph_contractor
 
 spark.stop()
-
-# config = RouteConfig(
-#     start_lat=50.9690528,
-#     start_lon=-1.3832098,
-#     target_distance=10000.0,
-#     tolerance=0.05,
-#     route_mode="hilly",
-#     max_candidates=512,
-# )
-
-# maker = RouteMaker(config, DATA_DIR)
-
-# routes = maker.find_routes()
-
-# best_route = routes[0]
-# geometry = get_geometry_from_route(maker.graph, best_route)
-
-
-# """
-# Next steps:
-# Switch routing algorithm back to networkx, seems faster
-# Investigate ways to speed up performance of route selector
-# Need to improve candidate quality, filter out routes which are forming loops
-#   which cannot be escaped, but still have available 'steps' and are thus
-#   considered valid for the current iteration. Could either check the shortest
-#   path, or N steps ahead?
-# """

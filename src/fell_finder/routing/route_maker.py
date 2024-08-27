@@ -7,6 +7,7 @@ from fell_finder.routing.containers import Route, RouteConfig
 from fell_finder.retrieval.graph_fetcher import GraphFetcher
 from fell_finder.routing.zimmer import Zimmer
 from fell_finder.routing.route_selector import PyRouteSelector
+from fell_finder import app_config
 
 # TODO: Make this more configurable
 
@@ -171,13 +172,14 @@ class RouteMaker:
             # limit
             if len(new_candidates) > self.config.max_candidates:
                 selector = PyRouteSelector(
-                    routes=sorted(
-                        new_candidates,
-                        key=lambda x: x.ratio,
-                        reverse=self.config.route_mode == "hilly",
-                    ),
-                    n_routes=self.config.max_candidates // 2,
+                    routes=new_candidates,
+                    n_routes=self.config.max_candidates
+                    // app_config["routing"]["pruning_level"],
                     threshold=0.95,
+                    sort_attr="ratio",
+                    sort_order="desc"
+                    if self.config.route_mode == "hilly"
+                    else "asc",
                 )
 
                 new_candidates = selector.select_routes()
@@ -192,13 +194,19 @@ class RouteMaker:
             yield progress, None
 
         if self.completed_routes:
-            self.completed_routes = sorted(
-                self.completed_routes,
-                key=lambda x: x.ratio,
-                reverse=self.config.route_mode == "hilly",
+            selector = PyRouteSelector(
+                routes=self.completed_routes,
+                n_routes=25,
+                threshold=0.5,
+                sort_attr="ratio",
+                sort_order="desc"
+                if self.config.route_mode == "hilly"
+                else "asc",
             )
 
-            yield progress, self.completed_routes
+            final_routes = selector.select_routes()
+
+            yield progress, final_routes
             return
 
         yield progress, []

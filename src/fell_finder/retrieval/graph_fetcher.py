@@ -15,24 +15,6 @@ import rustworkx as rx
 from fell_finder.routing.containers import RouteConfig
 from fell_finder.utils.partitioning import get_partitions
 
-VALID_TYPES = {
-    "footway",
-    "living_street",
-    "path",
-    "pedestrian",
-    "primary",
-    "primary_link",
-    "residential",
-    "secondary",
-    "secondary_link",
-    "service",
-    "steps",
-    "tertiary",
-    "tertiary_link",
-    "track",
-    "unclassified",
-}
-
 
 @dataclass
 class BBox:
@@ -131,9 +113,6 @@ class GraphFetcher:
         self.config = config
         self.bbox = self.get_bounding_box_for_route()
         self.data_dir = data_dir
-
-        if self.config.terrain_types:
-            assert all(x in VALID_TYPES for x in self.config.terrain_types)
 
         self.id_maps = {}
         self.inverse_maps = {}
@@ -235,9 +214,13 @@ class GraphFetcher:
             ("northing_ptn", "<=", self.bbox.max_northing_ptn),
         ]
 
-        if self.config.terrain_types:
-            terrain_filter = ("highway", "in", self.config.terrain_types)
+        if self.config.highway_types:
+            terrain_filter = ("highway", "in", self.config.highway_types)
             filters.append(terrain_filter)  # type: ignore
+
+        if self.config.surface_types:
+            surface_filter = ("surface", "in", self.config.surface_types)
+            filters.append(surface_filter)  # type: ignore
 
         edges_dataset = ParquetDataset(
             os.path.join(self.data_dir, "optimised/edges"),

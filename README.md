@@ -16,16 +16,17 @@ This project is still in early development, with significant work still required
 
 
 ## Instructions for use
-* After cloning, you'll need to select a folder which will hold all of the source data. In `app.py` and `ingestion.py`, set this directory as your `DATA_DIR`.
-  * This will eventually be moved into a proper config file
-* Your data folder will need the following subdirectories:
-  * extracts
-    * osm
-    * lidar
-  * parsed
-  * enriched
-  * optimised
-  * temp
+* Configure the app for your system
+  * As a short-term implementation, the config file is stored in `src/fell_finder/config.yml`
+  * Set the data_dir to the (absolute) location of the 'data' subfolder on your device
+  * Your data folder will need the following subdirectories:
+    * extracts
+      * osm
+      * lidar
+    * parsed
+    * enriched
+    * optimised
+    * temp
 * In extracts/osm, you'll need to place a .osm.pbf file covering the area you want
 * In extracts/lidar, you'll need to place the corresponding (extracted) LIDAR data
   * This can be downloaded [here](https://environment.data.gov.uk/survey)
@@ -35,10 +36,16 @@ This project is still in early development, with significant work still required
   * `sudo systemctl start redis` to run it once, or `sudo systemctl enable redis` to run it every time your computer boots
 * Run `ingestion.py` to process your extracts.
   * In my own testing, it takes ~1 hour to completely process the data for all of Hampshire
-* Once ingestion has completed, you can start the webapp in development mode
-  * First, `cd` into the app folder. Start Celery with: `celery -A app.celery_app worker --loglevel=INFO`
-  * Then, without closing the celery process, start the webapp with `python app.py`
+* Once ingestion has completed, you can start the webapp in two modes
+
+* For a 'standard' launch
+  * Make sure 'debug' is set to False in `src/fell_finder/config.yml`
+  * First, start Celery with: `celery -A webapp.celery_app worker --loglevel=INFO`
+  * Then, without closing the celery process, start the webapp with `python webapp.py`
   * You can then access the webapp by opening 'http://localhost:8050/' in your browser
+* For a 'debug' launch
+  * Make sure 'debug' is set to True in `src/fell_finder/config.yml`
+  * Start the webapp with `python webapp.py`
 
 ## Roadmap
 
@@ -46,13 +53,11 @@ These new features are listed in approximate order of priority
 
 ### Backend
 
-* Improve the route finding algorithm, try to ensure that at least one circuit is always completed
-  * One potential approach may be the use of a 'max distance to start' type filter to kill routes early if they can't reach the target distance.
-  * If possible, switching over to using the rustworkx api to generate routes may yield performance benefits and improve completion rates
-  * Neo4j also needs to be evaluated, this may prove a more suitable store for the optimised graph data and has its own query language for graph operations
 * Build out support for GPX exports
 * Update routing to include threshold for tarmac/trail composition
   * e.g. only return routes which are on tarmac for 25% or less of the total distance
+  * This will also need to ensure full testing of all routing code, as dramatic performance gains seem unlikely without implementing the algorithm in a lower level language.
+* Ensure full test coverage on any code which is not app-specific
 * Containerise everything
 * Set up an airflow pipeline for ingestion
 * Deploy to the cloud
@@ -61,7 +66,7 @@ These new features are listed in approximate order of priority
 
 ### Frontend
 * Build out the route finding page of the webapp
-  * The user should be presented with more than one candidate route if available
+  * Page layout could stand to be improved, collapsible sidebars may help
   * Once the exporter is available, a download as GPX button needs adding
 * Formally define the expected end state of the webapp
   * Set out all of the different features to be built out
