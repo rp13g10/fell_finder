@@ -3,13 +3,12 @@ to the user provided configuration."""
 
 from typing import List, Tuple, Dict, Generator, Union, Any
 
-from fell_finder.routing.containers import Route, RouteConfig
+from fell_finder.containers.routes import Route
+from fell_finder.containers.config import RouteConfig
 from fell_finder.retrieval.graph_fetcher import GraphFetcher
 from fell_finder.routing.zimmer import Zimmer
 from fell_finder.routing.route_selector import PyRouteSelector
 from fell_finder import app_config
-
-# TODO: Make this more configurable
 
 
 class RouteMaker:
@@ -67,14 +66,7 @@ class RouteMaker:
             the specified start point.
         """
 
-        seed = [
-            Route(
-                route_id="seed",
-                current_position=start_node,
-                route=[start_node],
-                visited={start_node},
-            )
-        ]
+        seed = [Route(start_node=start_node)]
 
         return seed
 
@@ -95,8 +87,7 @@ class RouteMaker:
             the 'visited' key
         """
 
-        start_pos = route.route[0]
-        route.visited.remove(start_pos)
+        route.visited.remove(route.start_node)
         return route
 
     def _update_progress(self) -> Dict[str, Any]:
@@ -108,8 +99,12 @@ class RouteMaker:
         n_valid = len(self.completed_routes)
 
         if n_candidates:
-            iter_dist = sum(route.distance for route in self.candidates)
-            iter_dist += sum(route.distance for route in self.completed_routes)
+            iter_dist = sum(
+                route.metrics.distance for route in self.candidates
+            )
+            iter_dist += sum(
+                route.metrics.distance for route in self.completed_routes
+            )
             avg_distance = iter_dist / (n_candidates + n_valid)
         else:
             avg_distance = self.config.max_distance
@@ -121,10 +116,6 @@ class RouteMaker:
         progress_dict["max_distance"] = self.config.max_distance
 
         return progress_dict
-
-    def _generate_route_id(self, cand_inx: int, step_inx: int) -> str:
-        """Generate a unique identifier for a route"""
-        return f"{cand_inx}_{step_inx}"
 
     def find_routes(
         self,
@@ -149,11 +140,8 @@ class RouteMaker:
                 # For each node which can be reached
                 for step_inx, possible_step in enumerate(possible_steps):
                     # Step to the next node and validate the resulting route
-                    new_id = self._generate_route_id(cand_inx, step_inx)
                     candidate_status, new_candidate = (
-                        self.zimmer.step_to_next_node(
-                            candidate, possible_step, new_id
-                        )
+                        self.zimmer.step_to_next_node(candidate, possible_step)
                     )
 
                     # Make sure the route can get back to the starting node
@@ -175,14 +163,13 @@ class RouteMaker:
                     routes=new_candidates,
                     n_routes=self.config.max_candidates
                     // app_config["routing"]["pruning_level"],
-                    threshold=0.95,
                     sort_attr="ratio",
                     sort_order="desc"
                     if self.config.route_mode == "hilly"
                     else "asc",
                 )
 
-                new_candidates = selector.select_routes()
+                new_candidates = selector.select_routes_with_binning()
 
             self.last_candidates = self.candidates
             self.candidates = new_candidates
@@ -196,15 +183,15 @@ class RouteMaker:
         if self.completed_routes:
             selector = PyRouteSelector(
                 routes=self.completed_routes,
-                n_routes=25,
-                threshold=0.5,
+                n_routes=app_config["webapp"]["routes_to_display"],
                 sort_attr="ratio",
                 sort_order="desc"
                 if self.config.route_mode == "hilly"
                 else "asc",
             )
 
-            final_routes = selector.select_routes()
+            final_routes = selector.select_routes_with_binning()
+            [route.finalize() for route in final_routes]
 
             yield progress, final_routes
             return

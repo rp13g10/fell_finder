@@ -1,8 +1,18 @@
 data_dir: /home/ross/repos/fell_finder/data
 debug: True
+ingestion:
+  partition_size: 5000
 routing:
   pruning_level: 2
   max_candidates: 64
+  initial_similarity_threshold: 0.75
+  max_similarity_threshold: 0.99
+  similarity_threshold_increment: 0.05
+  route_overlap_threshold: 0.025
+  distance_tolerance: 0.1
+  selection_bins: 5
+webapp:
+  routes_to_display: 10
 highway_types:
   "Major Roads":
     - motorway
@@ -18,7 +28,7 @@ highway_types:
     - residential
     - living_street
     - track
-  "Service Roads (Not Recommended)":
+  "Service Roads*":
     - service
     - bus_guideway
     - escape

@@ -1,30 +1,11 @@
-"""This class handles the process of taking steps to increment the current
-route."""
+"""This class calculates the impact of taking a step across the graph."""
 
-from copy import deepcopy
-from dataclasses import dataclass
-from typing import Iterable, Tuple, Literal
+from typing import Iterable, Tuple, Literal, Union
 
 from rustworkx import PyDiGraph, dijkstra_shortest_path_lengths
-from fell_finder.routing.containers import Route, RouteConfig
-
-ALL_REMOVALS = []
-
-
-@dataclass
-class StepMetrics:
-    """Container for metrics calculated when stepping from the end of one
-    route to a neighbouring node.
-
-    Args:
-        distance: The distance change
-        elevation_gain: The elevation increase
-        elevation_loss: The elevation loss
-    """
-
-    distance: float
-    elevation_gain: float
-    elevation_loss: float
+from fell_finder.containers.routes import Route, StepData
+from fell_finder.containers.config import RouteConfig
+from fell_finder.containers.graph_data import GraphEdge
 
 
 class Zimmer:
@@ -45,6 +26,23 @@ class Zimmer:
         self.graph = graph
         self.config = config
 
+    def _get_distance_to_start(
+        self, graph: PyDiGraph, route: Route, node_id: int
+    ) -> Union[float, None]:
+        try:
+            dist_to_start = dijkstra_shortest_path_lengths(
+                graph,
+                node_id,
+                goal=route.start_node,
+                edge_cost_fn=lambda attrs: attrs.distance,
+            )[route.start_node]
+        except IndexError:
+            # TODO: Need to verify that this is actually what happens when no
+            #       path exists. Can't find any other reasonable explanation.
+            return None
+
+        return dist_to_start
+
     def _validate_step(
         self, graph: PyDiGraph, route: Route, node_id: int
     ) -> bool:
@@ -62,24 +60,12 @@ class Zimmer:
             Whether or not the provided node_id would be a valid step to take
         """
 
-        start_node = route.route[0]
-
-        try:
-            dist_to_start = dijkstra_shortest_path_lengths(
-                graph,
-                node_id,
-                goal=start_node,
-                edge_cost_fn=lambda attrs: attrs.distance,
-            )[start_node]
-        except IndexError:
-            # TODO: Need to verify that this is actually what happens when no
-            #       path exists. Can't find any other reasonable explanation.
-            return False
+        dist_to_start = self._get_distance_to_start(graph, route, node_id)
 
         if dist_to_start is None:
             return False
 
-        dist_remaining = self.config.max_distance - route.distance
+        dist_remaining = self.config.max_distance - route.metrics.distance
         if dist_to_start > dist_remaining:
             return False
 
@@ -89,10 +75,11 @@ class Zimmer:
         if node_id not in visited:
             return True
 
-        # Allow steps back to the first 3 nodes, but prevent backtracking
-        first_3_nodes = set(route.route[:3])
-        last_3_nodes = set(route.route[-3:])
-        if node_id in first_3_nodes and node_id not in last_3_nodes:
+        # Allow steps back to the first few nodes, but prevent backtracking
+        if (
+            node_id in route.first_n_nodes
+            and node_id not in route.last_3_nodes
+        ):
             return True
 
         return False
@@ -109,36 +96,29 @@ class Zimmer:
             the current position of the provided route
         """
 
-        global ALL_REMOVALS
-
-        cur_node = route.route[-1]
-        # first_node = route.route[0]
-
         valid_graph = self.graph.copy()
-        if len(route.visited) > 3:
-            to_remove = route.visited.difference(set(route.route[:3]))
+        if len(route.visited) > route.overlap_n_nodes:
+            # Remove all visited nodes from the graph which are not allowed to
+            # overlap
+            to_remove = route.visited.difference(route.first_n_nodes)
             try:
-                to_remove.remove(cur_node)
+                # Ensure the current node stays in the graph
+                to_remove.remove(route.cur_node)
             except KeyError:
                 pass
             to_remove = list(to_remove)
             valid_graph.remove_nodes_from(to_remove)
 
-            ALL_REMOVALS += to_remove
-
+        # Get all nodes which we can potentially step to
         neighbours = filter(
             lambda node: self._validate_step(valid_graph, route, node),
-            valid_graph.neighbors(cur_node),
+            valid_graph.neighbors(route.cur_node),
         )
-
         neighbours = list(neighbours)
-        for neighbour in neighbours:
-            if len(route.visited) > 3 and neighbour in to_remove:
-                pass
 
         return neighbours
 
-    def _fetch_step_metrics(self, route: Route, next_node: int) -> StepMetrics:
+    def _fetch_step_metrics(self, route: Route, next_node: int) -> StepData:
         """For a candidate route, calculate the change in distance & elevation
         when moving from the end point to the specified neighbour. Record any
         intermediate nodes which are traversed when making this journey.
@@ -150,59 +130,57 @@ class Zimmer:
         Returns:
             The calculated metrics for this step
         """
-        cur_node = route.route[-1]
 
-        step = self.graph.get_edge_data(cur_node, next_node)
+        step: GraphEdge = self.graph.get_edge_data(route.cur_node, next_node)
 
-        step_metrics = StepMetrics(
+        step_metrics = StepData(
+            next_node=next_node,
             distance=step.distance,
             elevation_gain=step.elevation_gain,
             elevation_loss=step.elevation_loss,
+            surface=step.surface,
+            lats=step.geometry["lat"],
+            lons=step.geometry["lon"],
+            distances=step.geometry["distance"],
+            elevations=step.geometry["elevation"],
         )
 
         return step_metrics
 
-    def _generate_new_route(self, route: Route, new_id: str) -> Route:
-        """Generate a copy of the provided route, giving it a new route ID
-        based on the number of candidates & neighbours which have been
-        processed so far.
+    def _check_if_route_is_complete(self, route: Route) -> bool:
+        # Route is a closed loop
+        if route.is_closed_loop:
+            # Route is of correct distance
+            if (
+                (self.config.min_distance)
+                <= route.metrics.distance
+                <= (self.config.max_distance)
+            ):
+                return True
 
-        Args:
-            route: A candidate route
-            new_id: The ID to be given to the new route
+        return False
 
-        Returns:
-            Route: A copy of the candidate route with an updated route_id
-        """
-        new_route = deepcopy(route)
-        new_route.route_id = new_id
+    def _check_if_route_meets_surface_requirements(self, route: Route) -> bool:
+        surfaces = self.config.restricted_surfaces
+        perc = self.config.restricted_surfaces_perc
 
-        return new_route
+        if not (surfaces and perc):
+            return True
 
-    def _step_to_next_node(
-        self, route: Route, next_node: int, step_metrics: StepMetrics
-    ) -> Route:
-        """For a given route, update its properties to reflect the result of
-        taking a step to a neighbouring node
+        # Set max allowable distance on this surface type
+        surface_type_max_dist = perc * self.config.max_distance
 
-        Args:
-            route: A candidate route
-            next_node: The neighbouring node to step to
-            step_metrics: The impact of making this step
+        # Calculate total distance on this surface type
+        surface_type_dist = 0.0
+        for surface in surfaces:
+            surface_type_dist += route.metrics.surface_distances[surface]
 
-        Returns:
-            Route: An updated candidate route, which now ends at 'next_node'
-        """
+        # Check if criteria is satisfied
+        if surface_type_dist > surface_type_max_dist:
+            return False
 
-        route.route.append(next_node)
-        route.visited.add(next_node)
-
-        # TODO: Use dunder methods to enable arithmetic with these types
-        route.distance += step_metrics.distance
-        route.elevation_gain += step_metrics.elevation_gain
-        route.elevation_loss += step_metrics.elevation_loss
-
-        return route
+        # If all criteria satisfied, return True
+        return True
 
     def _validate_route(
         self, route: Route
@@ -216,34 +194,39 @@ class Zimmer:
         Returns:
             str: The status of the route
         """
-        cur_pos = route.route[-1]
 
-        # Route is circular
-        start_pos = route.route[0]
-        if start_pos == cur_pos:
-            # Route is of correct distance
-            if (
-                (self.config.min_distance)
-                <= route.distance
-                <= (self.config.max_distance)
-            ):
-                return "complete"
-            else:
+        # All routes
+        if route.metrics.distance >= self.config.max_distance:
+            return "invalid"
+        # --> Only routes below max distance
+
+        if route.is_closed_loop:
+            is_complete = self._check_if_route_is_complete(route)
+            if not is_complete:
                 return "invalid"
+        # --> Only open loops and completed routes
 
-        # Route is too long
-        if route.distance >= self.config.max_distance:
+        meets_surface_requirements = (
+            self._check_if_route_meets_surface_requirements(route)
+        )
+        if not meets_surface_requirements:
             return "invalid"
+        # --> Only routes which meet the surface requirements
 
-        # Route cannot be completed without becoming too long
-        remaining = self.graph[cur_pos][1].dist_to_start
-        if (route.distance + remaining) >= self.config.max_distance:
-            return "invalid"
+        if not route.is_closed_loop:
+            return "valid"
+
+        if (
+            self.config.min_distance
+            <= route.metrics.distance
+            <= self.config.max_distance
+        ):
+            return "complete"
 
         return "valid"
 
     def step_to_next_node(
-        self, route: Route, next_node: int, new_id: str
+        self, route: Route, next_node: int
     ) -> Tuple[Literal["complete", "valid", "invalid"], Route]:
         """For a given route and node to step to, perform the step and update
         the route metrics, then validate that the route is still within the
@@ -257,14 +240,12 @@ class Zimmer:
         Returns:
             The status of the new route, and the new route itself
         """
-        # Create a new candidate route
-        candidate = self._generate_new_route(route, new_id)
 
         # Calculate the impact of stepping to the neighbour
-        step_metrics = self._fetch_step_metrics(candidate, next_node)
+        step_metrics = self._fetch_step_metrics(route, next_node)
 
         # Update the new candidate to reflect this step
-        candidate = self._step_to_next_node(candidate, next_node, step_metrics)
+        candidate = route.take_step(step_metrics)
 
         candidate_status = self._validate_route(candidate)
 

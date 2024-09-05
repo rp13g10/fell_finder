@@ -1,43 +1,9 @@
-"""Container objects which are used to represent various structures used
-during the route finding process"""
+"""Containers which represent user/app configuration variables"""
 
 from dataclasses import dataclass, field
-from typing import List, Set
+from typing import List
 
-
-@dataclass
-class Route:
-    """Container for the information required to represent a single route
-
-    Args:
-        route: A list of the node IDs which are crossed as part of
-          this route, in the order that they are crossed
-        visited: A set of all the unique nodes which are visited as part of
-          this route
-        distance: The total distance of the route
-        elevation_gain: The elevation gain for this route
-        elevation_loss: The elevation loss for this route
-        elevation_gain_potential: The elevation gain required in order
-          to get back to the route's starting point
-        elevation_loss_potential: The elevation loss required in order
-          to get back to the route's starting point"""
-
-    route: List[int]
-    route_id: str
-
-    current_position: int
-    visited: Set[int]
-
-    distance: float = 0.0
-    elevation_gain: float = 0.0
-    elevation_loss: float = 0.0
-    elevation_gain_potential: float = 0.0
-    elevation_loss_potential: float = 0.0
-
-    @property
-    def ratio(self) -> float:
-        """Calculate the ratio of elevation gain to distance travelled"""
-        return self.elevation_gain / self.distance
+from fell_finder import app_config
 
 
 @dataclass
@@ -67,10 +33,12 @@ class RouteConfig:
     start_lon: float
 
     target_distance: float
-    tolerance: float
 
     route_mode: str
     max_candidates: int
+
+    restricted_surfaces_perc: float
+    restricted_surfaces: List[str] = field(default_factory=list)
 
     highway_types: List[str] = field(default_factory=list)
     surface_types: List[str] = field(default_factory=list)
@@ -79,5 +47,10 @@ class RouteConfig:
         """Calculate min_distance and max_distance based on user provided
         target_distance and tolerance"""
 
-        self.min_distance = self.target_distance / (1 + self.tolerance)
-        self.max_distance = self.target_distance * (1 + self.tolerance)
+        self.min_distance = self.target_distance / (
+            1 + app_config["routing"]["distance_tolerance"]
+        )
+        self.max_distance = self.target_distance * (
+            1 + app_config["routing"]["distance_tolerance"]
+        )
+        self.restricted_surfaces_perc = float(self.restricted_surfaces_perc)

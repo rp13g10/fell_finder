@@ -8,7 +8,7 @@ from dash._callback import NoUpdate
 from plotly.graph_objects import Figure
 import dash_leaflet as dl
 
-from fell_finder.routing.containers import RouteConfig
+from fell_finder.containers.config import RouteConfig
 from fell_finder import app_config
 from fell_finder.routing import RouteMaker
 from fell_finder.app.content.route_finder.generators import (
@@ -22,7 +22,6 @@ from fell_finder.app.utils.caching import (
 )
 from fell_finder.app.utils.plotting import (
     generate_polyline_from_route,
-    finalize_route,
 )
 from fell_finder.app.app import background_callback_manager
 
@@ -70,6 +69,13 @@ def init_callbacks() -> None:
         return new_children
 
     @callback(
+        Output("route-restricted-surfaces", "options"),
+        Input("route-allowed-surfaces", "value"),
+    )
+    def update_restriction_options(route_allowed_surfaces: List[str]):
+        return route_allowed_surfaces
+
+    @callback(
         [
             Output("route-store", "data", allow_duplicate=True),
             Output("url", "search"),
@@ -80,7 +86,9 @@ def init_callbacks() -> None:
             State("route-dist", "value"),
             State("route-mode", "value"),
             State("route-highway", "value"),
-            State("route-surface", "value"),
+            State("route-allowed-surfaces", "value"),
+            State("route-restricted-surfaces", "value"),
+            State("route-restricted-perc", "value"),
         ],
         background=True,
         prevent_initial_call=True,
@@ -94,7 +102,9 @@ def init_callbacks() -> None:
         route_dist: str,
         route_mode: str,
         route_highways: List[str],
-        route_surfaces: List[str],
+        route_allowed_surfaces: List[str],
+        route_restricted_surfaces: List[str],
+        route_restricted_perc: float,
     ) -> Union[Tuple[List[str], str], Tuple[NoUpdate, NoUpdate]]:
         """Based on the user's selection, generate a circular route which meets
         their requirements. Periodically update the progress bar to keep them
@@ -106,9 +116,13 @@ def init_callbacks() -> None:
             n_clicks: The number of times the calculate button has been clicked
             current_children: The contents of the current route plot
             route_dist: The user requested distance
-            route_mode: The user requested mode
+            route_mode: The user requested mode (hilly/flat)
             route_highways: The user requested highways
-            route_surfaces: The user requested surfaces
+            route_allowed_surfaces: The user requested surfaces
+            route_restricted_surfaces: Surfaces which are to be restricted to
+              a percentage of the total distance
+            route_restricted_perc: The max allowed percentage of the total
+              distance which can be travelled on the restricted surfaces
 
         Returns:
             A circular route starting at the selected point
@@ -130,7 +144,7 @@ def init_callbacks() -> None:
             highway_types += app_config["highway_types"][highway_type]
 
         surface_types = []
-        for surface_type in route_surfaces:
+        for surface_type in route_allowed_surfaces:
             surface_types += app_config["surface_types"][surface_type]
 
         config = RouteConfig(
@@ -139,9 +153,9 @@ def init_callbacks() -> None:
             target_distance=int(route_dist) * 1000,
             route_mode=route_mode,
             max_candidates=app_config["routing"]["max_candidates"],
-            tolerance=0.1,
             highway_types=highway_types,
-            surface_types=surface_types,
+            restricted_surfaces=route_restricted_surfaces,
+            restricted_surfaces_perc=route_restricted_perc,
         )
 
         no_attempts = 0
@@ -168,11 +182,6 @@ def init_callbacks() -> None:
         if not routes:
             # TODO: Set a proper message explaining that no routes were found
             return no_update, no_update
-
-        routes = routes[:25]
-        graph = maker.graph
-
-        routes = [finalize_route(graph, route) for route in routes]
 
         routes_str = store_routes_to_str(routes)
 
@@ -233,7 +242,10 @@ def init_callbacks() -> None:
 
         polyline = generate_polyline_from_route(route)
 
-        bounds = {"bounds": route.bounds, "center": route.centre}
+        bounds = {
+            "bounds": route.geometry.bounds,
+            "center": route.geometry.centre,
+        }
 
         new_children = [
             x
@@ -324,5 +336,23 @@ def init_callbacks() -> None:
             A string representation of selected_dist"""
 
         output = f"{selected_dist} km"
+
+        return output
+
+    @callback(
+        Output("route-restricted-perc-display", "children"),
+        Input("route-restricted-perc", "value"),
+    )
+    def update_restricted_perc_display(restricted_perc: str):
+        """When the user changes the selected % surface restriction, update
+        the indicator the reflect the new value.
+
+        Args:
+            restricted_perc: The user selected % restriction
+
+        Returns:
+            A string representation of restricted_perc"""
+        restricted_val = float(restricted_perc)
+        output = f"{restricted_val:,.2%}"
 
         return output

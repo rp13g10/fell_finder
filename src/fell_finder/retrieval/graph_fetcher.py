@@ -4,7 +4,7 @@ the max configured distance."""
 
 import os
 from dataclasses import dataclass
-from typing import Dict, List, Tuple, Any
+from typing import Dict, List, Tuple
 
 from bng_latlon import WGS84toOSGB36
 from geopy import distance, point
@@ -12,7 +12,8 @@ from pyarrow.parquet import ParquetDataset
 import rustworkx as rx
 
 
-from fell_finder.routing.containers import RouteConfig
+from fell_finder.containers.config import RouteConfig
+from fell_finder.containers.graph_data import GraphEdge, GraphNode
 from fell_finder.utils.partitioning import get_partitions
 
 
@@ -49,47 +50,6 @@ class BBox:
         self.min_northing_ptn = min_northing_ptn
         self.max_easting_ptn = max_easting_ptn
         self.max_northing_ptn = max_northing_ptn
-
-
-class GraphNode:
-    """Container for additional node attributes which are not supported
-    natively by rustworkx"""
-
-    def __init__(self, node_dict: Dict[str, Any]) -> None:
-        self.index = None
-
-        self.lat = node_dict["lat"]
-        self.lon = node_dict["lon"]
-        self.elevation = node_dict["elevation"]
-
-        self.dist_to_start = None
-
-    def set_index(self, index: int) -> None:
-        """Set the node index to the provided value"""
-        self.index = index
-
-    def set_dist_to_start(self, dist: float) -> None:
-        """Set the distance from the node to the start point"""
-        self.dist_to_start = dist
-
-
-class GraphEdge:
-    """Container for additional edge attributes which are not supported
-    natively by rustworkx"""
-
-    def __init__(self, edge_dict: Dict[str, Any]) -> None:
-        self.index = None
-
-        self.highway = edge_dict["highway"]
-        self.surface = edge_dict["surface"]
-        self.distance = edge_dict["distance"]
-        self.elevation_gain = edge_dict["elevation_gain"]
-        self.elevation_loss = edge_dict["elevation_loss"]
-        self.geometry = edge_dict["geometry"]
-
-    def set_index(self, index: int) -> None:
-        """Set the edge index to the provided value"""
-        self.index = index
 
 
 class GraphFetcher:

@@ -9,10 +9,12 @@ from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 from pyspark.sql.types import IntegerType
 
+from fell_finder import app_config
+
 # NOTE: Polars doesn't seem to support bankers rounding, so all of these
 #       functions use half-up rounding
 
-PTN_EDGE_SIZE_M = 5000
+PTN_EDGE_SIZE_M = app_config["ingestion"]["partition_size"]
 
 
 def _round_half_up(num: int | float) -> int:

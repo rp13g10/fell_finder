@@ -33,14 +33,17 @@ HIGHWAY_TYPES = list(app_config["highway_types"].keys())
 SURFACE_TYPES = list(app_config["surface_types"].keys())
 
 sidebar_contents = [
-    html.Div(className="sidebar-heading", children="Route Configuration"),
+    html.Div(className="sidebar-heading h5", children="Route Configuration"),
     html.Div(
         className="list-group list-group-flush",
         children=[
-            # TODO: Add an element to show selected value
             html.Div(
                 className="list-group-item",
                 children=[
+                    html.Div(
+                        className="h6",
+                        children="Target Distance",
+                    ),
                     html.Div(className="text", id="route-dist-display"),
                     dcc.Input(
                         type="range",
@@ -54,32 +57,75 @@ sidebar_contents = [
             ),
             html.Div(
                 className="list-group-item",
-                children=dcc.Dropdown(
-                    options=[
-                        {"label": "Hilly", "value": "hilly"},
-                        {"label": "Flat", "value": "flat"},
-                    ],
-                    value="hilly",
-                    id="route-mode",
-                ),
+                children=[
+                    html.Div(
+                        className="h6",
+                        children="Target Profile",
+                    ),
+                    dcc.Dropdown(
+                        options=[
+                            {"label": "Hilly", "value": "hilly"},
+                            {"label": "Flat", "value": "flat"},
+                        ],
+                        value="hilly",
+                        id="route-mode",
+                    ),
+                ],
             ),
             html.Div(
                 className="list-group-item",
-                children=dcc.Dropdown(
-                    options=HIGHWAY_TYPES,
-                    value=HIGHWAY_TYPES,
-                    multi=True,
-                    id="route-highway",
-                ),
+                children=[
+                    html.Div(
+                        className="h6",
+                        children="Allowed Way Types",
+                    ),
+                    dcc.Dropdown(
+                        options=HIGHWAY_TYPES,
+                        value=HIGHWAY_TYPES,
+                        multi=True,
+                        id="route-highway",
+                    ),
+                ],
             ),
             html.Div(
                 className="list-group-item",
-                children=dcc.Dropdown(
-                    options=SURFACE_TYPES,
-                    value=SURFACE_TYPES,
-                    multi=True,
-                    id="route-surface",
-                ),
+                children=[
+                    html.Div(
+                        className="h6",
+                        children="Allowed Surfaces",
+                    ),
+                    dcc.Dropdown(
+                        options=SURFACE_TYPES,
+                        value=[x for x in SURFACE_TYPES if "*" not in x],
+                        multi=True,
+                        id="route-allowed-surfaces",
+                    ),
+                ],
+            ),
+            html.Div(
+                className="list-group-item",
+                children=[
+                    html.Div("Surface Restriction", className="h5"),
+                    html.Div("Restricted surfaces", className="h6"),
+                    dcc.Dropdown(
+                        options=SURFACE_TYPES,
+                        value=[],
+                        multi=True,
+                        id="route-restricted-surfaces",
+                    ),
+                    html.Div(r"Max allowed % of total", className="h6"),
+                    html.Div(
+                        className="text", id="route-restricted-perc-display"
+                    ),
+                    dcc.Input(
+                        type="range",
+                        value=0.0,
+                        min=0,
+                        max=1,
+                        step=0.01,
+                        id="route-restricted-perc",
+                    ),
+                ],
             ),
             html.Div(
                 className="list-group-item",
@@ -95,7 +141,7 @@ sidebar_contents = [
                 children=html.Div(
                     "Clear",
                     id="route-clear",
-                    className="btn m-1 btn-danger disabled",
+                    className="btn m-1 btn-disabled disabled",
                     role="button",
                 ),
             ),

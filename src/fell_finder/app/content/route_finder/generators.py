@@ -2,7 +2,6 @@
 configurable inputs"""
 
 from datetime import datetime
-from typing import List
 from dash import html
 from dash.development.base_component import Component
 from plotly import graph_objects as go
@@ -13,10 +12,9 @@ from fell_finder.app.utils.element_generators import (
     NavButtonConfig,
 )
 from fell_finder.app.utils.plotting import (
-    get_elevation_data_from_route,
     generate_polyline_from_route,
-    CompletedRoute,
 )
+from fell_finder.containers.routes import Route
 
 
 def generate_progress_bar(
@@ -54,7 +52,7 @@ def generate_progress_bar(
     return bar
 
 
-def generate_elevation_plot(route: CompletedRoute) -> go.Figure:
+def generate_elevation_plot(route: Route) -> go.Figure:
     """For a generated route, generate a plotly graph which displays the
     elevation profile.
 
@@ -66,18 +64,17 @@ def generate_elevation_plot(route: CompletedRoute) -> go.Figure:
         A scatter plot with distance travelled on the X axis and elevation on
         the Y axis"""
 
-    data = get_elevation_data_from_route(route)
-
     route_trace = go.Scatter(
         mode="lines+markers",
-        x=data.distance,
-        y=data.elevation,
+        x=route.geometry.distances,
+        y=route.geometry.elevations,
         line=dict(shape="spline"),
-        customdata=data.coordinates,
+        customdata=route.geometry.coords,
     )
 
     layout = go.Layout(
-        margin=dict(l=20, r=0, t=20, b=20), xaxis_range=[0, route.distance]
+        margin=dict(l=20, r=0, t=20, b=20),
+        xaxis_range=[0, route.metrics.distance],
     )
 
     figure = go.Figure(data=[route_trace], layout=layout)
@@ -85,7 +82,7 @@ def generate_elevation_plot(route: CompletedRoute) -> go.Figure:
     return figure
 
 
-def generate_route_card(route: CompletedRoute) -> html.Div:
+def generate_route_card(route: Route) -> html.Div:
     """For a completed route, generate a bootstrap card element which contains
     a miniature map of the route, high-level stats about its distance/elevation
     and a link to view it properly.
@@ -100,11 +97,6 @@ def generate_route_card(route: CompletedRoute) -> html.Div:
     # Create a map of the route
     polyline = generate_polyline_from_route(route)
 
-    def mean(x: List[float]) -> float:
-        return sum(x) / len(x)
-
-    start_point = [mean(route.lats), mean(route.lons)]
-
     # Each plot must have a unique ID in order for the viewport to update
     # between runs
     unique_id = f"{route.route_id}{datetime.now()}"
@@ -112,15 +104,15 @@ def generate_route_card(route: CompletedRoute) -> html.Div:
     plot = dl.Map(
         id=unique_id,
         children=[dl.TileLayer(), polyline],
-        center=start_point,
+        center=route.geometry.centre,
         style={"width": "192px", "height": "128px"},
-        bounds=route.bounds,
+        bounds=route.geometry.bounds,
     )
 
     # Generate a summary of distance/elevation
     card_text = [
-        html.Div(f"Distance: {route.distance:,.0f}"),
-        html.Div(f"Elevation: {route.elevation_gain:,.0f}"),
+        html.Div(f"Distance: {route.metrics.distance:,.0f}"),
+        html.Div(f"Elevation: {route.metrics.elevation_gain:,.0f}"),
     ]
 
     # Generate a button to view the route

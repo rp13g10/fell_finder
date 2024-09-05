@@ -1,8 +1,19 @@
 Next Steps:
 
-Need to bring back the big plots using stored route information
-Add a 'view' button to each card
-Figure out what the actual layout needs to look like, get everything in place and tidy
-Prettify large plot as much as possible, colour by surface?
-Update user input section, add filtering by surface as well as highway, for each make displayed options more human-readable
-Try to set up auto-zooming for dash-leaflet plots
+Move all dataclasses into single folder
+Tidy up structure for routing code
+Implement filtering by surface ratio
+Build out tests for all routing code
+
+Proposed changes
+
+- Route class needs to keep track of its geometry
+  - Reimplement as a standard class, use slots to optimise footprint
+  - Zimmer can handle this as it already keeps graph as attribute
+- Add gain/loss potential as properties based on internal geometry
+- Update ratio property to factor in gain/loss potential
+- Update function to generate new route IDs to include timestamp
+- Remove extra timestamp from app element IDs as it's no longer required
+- Add step_to_next_node as method
+- Add surface ratios as property
+- Update routeselector to accept routeconfig, set params accordingly
