@@ -5,7 +5,7 @@ from unittest.mock import patch, MagicMock
 from fell_finder.containers.config import RouteConfig
 
 
-@patch("fell_finder.app_config")
+@patch("fell_finder.containers.config.app_config")
 def test_route_config(mock_app_config: MagicMock):
     """Ensure derived properties are set properly and appropriate datatypes
     are being enforced"""
@@ -23,7 +23,8 @@ def test_route_config(mock_app_config: MagicMock):
         surface_types=["surface", "restricted_surface"],
     )
 
-    mock_app_config["routing"] = {"distance_tolerance": 0.1}
+    test_config = {"routing": {"distance_tolerance": 0.1}}
+    mock_app_config.__getitem__.side_effect = test_config.__getitem__
 
     target_attrs = dict(
         start_lat=50.0,
