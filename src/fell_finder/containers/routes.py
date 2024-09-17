@@ -16,9 +16,6 @@ class StepData:
     """Container for metrics calculated when stepping from the end of one
     route to a neighbouring node."""
 
-    # TODO: Use __add__ to make this play nicely with RouteMetrics and
-    #       RouteGeometry classes
-
     next_node: int
 
     distance: float
