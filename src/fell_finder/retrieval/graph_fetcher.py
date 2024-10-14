@@ -103,8 +103,9 @@ class GraphFetcher:
 
         return nodes_list, all_nodes
 
+    @staticmethod
     def get_id_index_mappings(
-        self, all_nodes: List[int], indices: List[int]
+        all_nodes: List[int], indices: List[int]
     ) -> Dict[int, int]:
         """Rustworkx references nodes by their index, but internally we want
         to use their actual IDs. This script generates a mapping from their
