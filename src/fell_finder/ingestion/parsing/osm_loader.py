@@ -86,8 +86,8 @@ class OsmLoader:
         nodes = self._subset_nodes(nodes)  # type: ignore
         edges = self._subset_edges(edges)  # type: ignore
 
-        nodes = pl.DataFrame(nodes)
-        edges = pl.DataFrame(edges)
+        nodes = pl.DataFrame(nodes, orient="row")
+        edges = pl.DataFrame(edges, orient="row")
 
         return nodes, edges
 

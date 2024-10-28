@@ -25,7 +25,7 @@ lons = list(x / 100 for x in range(-30, 1))
 pairs = list(itertools.product(lats, lons))
 
 nodes_df = pl.DataFrame(
-    data=pairs, schema={"lat": pl.Float64(), "lon": pl.Float64()}
+    data=pairs, schema={"lat": pl.Float64(), "lon": pl.Float64()}, orient="row"
 )
 
 nodes_df = OsmLoader.assign_bng_coords(nodes_df)
@@ -115,6 +115,7 @@ invalid_edges_df = pl.DataFrame(
         "easting_ptn": pl.Int32(),
         "northing_ptn": pl.Int32(),
     },
+    orient="row",
 )
 invalid_edges_df = OsmLoader.set_edge_output_schema(invalid_edges_df)
 
