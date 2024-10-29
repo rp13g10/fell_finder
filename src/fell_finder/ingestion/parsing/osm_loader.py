@@ -285,7 +285,7 @@ class OsmLoader:
 
     @staticmethod
     def set_edge_output_schema(edges: pl.DataFrame) -> pl.DataFrame:
-        """Ensure the node output dataset contains only the required columns
+        """Ensure the edge output dataset contains only the required columns
 
         Args:
             edges: A polars dataframe containing details of all edges in the

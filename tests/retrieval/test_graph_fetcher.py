@@ -18,6 +18,8 @@ CONFIG_ARGS: Dict[str, Any] = dict(
     max_candidates=42,
 )
 
+DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data/")
+
 
 class TestGraphFetcher:
     """Make sure all functionality is working correctly"""
@@ -59,10 +61,8 @@ class TestGraphFetcher:
             restricted_surfaces_perc=0.0,
             restricted_surfaces=[],
         )
-        test_data_dir = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), "data/"
-        )
-        test_graph_fetcher = GraphFetcher(test_config, test_data_dir)
+
+        test_graph_fetcher = GraphFetcher(test_config, DATA_DIR)
 
         # Act
         res_nodes_list, res_all_nodes = (
@@ -102,25 +102,39 @@ class TestGraphFetcher:
         assert result == target
 
     def test_retrieve_edges_for_bounding_box(self):
-        raise AssertionError()
+        """Ensure edge data is being reaed in properly"""
+        # Arrange
+        test_config = RouteConfig(
+            **CONFIG_ARGS,
+            restricted_surfaces_perc=0.0,
+            restricted_surfaces=[],
+            highway_types=["valid"],
+            surface_types=["valid"],
+        )
 
-    def test_initialize_graph(self):
-        raise AssertionError()
+        # Only edges which start and end at a node which is inside the bounding
+        # box will be retained
 
-    def test_fetch_coarse_subgraph(self):
-        raise AssertionError()
+        # Some nodes which fall in the dead centre of the target area
+        test_id_maps = {inx: inx * 10 for inx in range(295, 306)}
+        # The edges using these nodes should be discarded due to their highway/surface
+        test_id_maps.update({inx: inx * 10 for inx in range(9000, 9004)})
 
-    def test_find_nearest_node(self):
-        raise AssertionError()
+        test_graph_fetcher = GraphFetcher(test_config, DATA_DIR)
 
-    def test_inverse_inx_to_node_inx(self):
-        raise AssertionError()
+        # Act
 
-    def test_tag_distances_to_start(self):
-        raise AssertionError()
+        result = test_graph_fetcher.retrieve_edges_for_bounding_box(
+            test_id_maps
+        )
 
-    def test_generate_fine_subgraph(self):
-        raise AssertionError()
-
-    def test_create_graph(self):
-        raise AssertionError()
+        # Assert
+        for src, dst, edge in result:
+            # Only edges inside the bounding box were retrieved
+            # Recall that dst = src + 1 in gen_graph_fetcher_data.py
+            assert src in range(2950, 3051)
+            assert dst in range(2960, 3051)
+            # Additional proof that only valid highway/surface types
+            # were retrieved
+            assert edge.highway == "valid"
+            assert edge.surface == "valid"

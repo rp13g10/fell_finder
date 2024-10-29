@@ -129,6 +129,10 @@ class GraphFetcher:
         enriched parquet dataset. Each entry in the list represents one edge
         in the graph.
 
+        Args:
+            id_maps: A dictionary mapping each node ID in the bounding box to
+                its corresponding index
+
         Returns:
             A list of edges & the corresponding metadata
         """
