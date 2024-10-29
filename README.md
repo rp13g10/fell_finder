@@ -11,7 +11,7 @@ The secondary objective is to provide myself with a challenge, and an opportunit
 
 ## Current State
 
-This project is still in early development, with significant work still required before it's ready for general use. That said, with a little leg-work a viable PoC is now up and running. At present, the ingestion pipeline is largely up and running (although it's executed on-demand at the moment). A basic webapp is provided, which is able to plot routes on demand and display them to the user. The route finding page of the webapp is not feature complete; there are no GPX exports, and only one route is displayed to the user. Routes are generally created in less than a minute for shorter distances (up to 10k), although the algorithm has been tested up to marathon distance. The route-finding algorithm needs further improvement to reduce execution time and increase completion rates.
+This project is still in early development, with significant work still required before it's ready for general use. That said, with a little leg-work a viable PoC is now up and running. At present, the ingestion pipeline is largely up and running (although it's executed on-demand at the moment). A basic webapp is provided, which is able to plot routes on demand and display them to the user. The route finding page of the webapp is not feature complete; there are no GPX exports, and the UI is in need of refinement. Routes are generally created in less than a minute for shorter distances (up to 10k), although the algorithm has been tested up to marathon distance. The route-finding algorithm needs further improvement to reduce execution time and increase completion rates.
 
 
 
@@ -54,9 +54,9 @@ These new features are listed in approximate order of priority
 ### Backend
 
 * Build out support for GPX exports
-* Update routing to include threshold for tarmac/trail composition
-  * e.g. only return routes which are on tarmac for 25% or less of the total distance
-  * This will also need to ensure full testing of all routing code, as dramatic performance gains seem unlikely without implementing the algorithm in a lower level language.
+* Maximise performance of the route-finding algorithm
+  * It is expected that this will involve a rewrite using Rust
+  * Rustworkx is already in use, so an implementation of a graph library will not be required
 * Ensure full test coverage on any code which is not app-specific
 * Containerise everything
 * Set up an airflow pipeline for ingestion

@@ -2,10 +2,8 @@
 
 import os
 from typing import Dict, Any
-from unittest.mock import patch, MagicMock
 from pytest import approx
 from fell_finder.containers.config import RouteConfig
-from fell_finder.containers.geometry import BBox
 from fell_finder.retrieval.graph_fetcher import GraphFetcher
 
 # Common config for all test cases
