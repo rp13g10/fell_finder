@@ -172,7 +172,8 @@ class LidarLoader:
                 "easting": eastings,
                 "northing": northings,
                 "elevation": elevations,
-            }
+            },
+            orient='row'
         )
 
         return df

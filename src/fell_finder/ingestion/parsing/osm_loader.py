@@ -86,8 +86,8 @@ class OsmLoader:
         nodes = self._subset_nodes(nodes)  # type: ignore
         edges = self._subset_edges(edges)  # type: ignore
 
-        nodes = pl.DataFrame(nodes)
-        edges = pl.DataFrame(edges)
+        nodes = pl.DataFrame(nodes, orient="row")
+        edges = pl.DataFrame(edges, orient="row")
 
         return nodes, edges
 
@@ -285,7 +285,7 @@ class OsmLoader:
 
     @staticmethod
     def set_edge_output_schema(edges: pl.DataFrame) -> pl.DataFrame:
-        """Ensure the node output dataset contains only the required columns
+        """Ensure the edge output dataset contains only the required columns
 
         Args:
             edges: A polars dataframe containing details of all edges in the

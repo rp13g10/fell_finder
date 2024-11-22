@@ -3,3 +3,4 @@ data/*
 **.egg-info*
 spark-warehouse/*
 old_tests/*
+*.parquet

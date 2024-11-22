@@ -1,7 +1,7 @@
 """Containers which represent user/app configuration variables"""
 
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Literal
 
 from fell_finder import app_config
 
@@ -34,7 +34,7 @@ class RouteConfig:
 
     target_distance: float
 
-    route_mode: str
+    route_mode: Literal["hilly", "flat"]
     max_candidates: int
 
     restricted_surfaces_perc: float
@@ -47,10 +47,22 @@ class RouteConfig:
         """Calculate min_distance and max_distance based on user provided
         target_distance and tolerance"""
 
+        # Ensure inputs are stored using the expected datatype
+        for attr in [
+            "start_lat",
+            "start_lon",
+            "target_distance",
+            "restricted_surfaces_perc",
+        ]:
+            setattr(self, attr, float(getattr(self, attr)))
+
+        for attr in ["max_candidates"]:
+            setattr(self, attr, int(getattr(self, attr)))
+
+        # Derive additional properties
         self.min_distance = self.target_distance / (
             1 + app_config["routing"]["distance_tolerance"]
         )
         self.max_distance = self.target_distance * (
             1 + app_config["routing"]["distance_tolerance"]
         )
-        self.restricted_surfaces_perc = float(self.restricted_surfaces_perc)

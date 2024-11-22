@@ -160,12 +160,14 @@ def test_generate_df_from_lidar_array():
         'easting': np.array([100000, 100001, 100002, 100003, 100004]).astype('int32'),
         'northing': np.array([204999, 204999, 204999, 204999, 204999]).astype('int32'),
         'elevation': np.array([0, 1, 2, 3, 4])
-    })
+    },
+            orient='row')
     target_tail = pl.DataFrame({
         'easting': np.array([104995, 104996, 104997, 104998, 104999]).astype('int32'),
         'northing': np.array([200000, 200000, 200000, 200000, 200000]).astype('int32'),
         'elevation': np.array([24999995, 24999996, 24999997, 24999998, 24999999])
-    })
+    },
+            orient='row')
 
     # fmt: on
 
@@ -197,7 +199,7 @@ def test_add_file_ids(mock_get_available_folders: MagicMock):
 
     test_schema = {"inx": pl.Int32()}
 
-    test_df = pl.DataFrame(data=test_data, schema=test_schema)
+    test_df = pl.DataFrame(data=test_data, schema=test_schema, orient="row")
 
     test_lidar_dir = "/some/folder/lidar_composite_dtm-2020-1-SU20ne"
 
@@ -216,7 +218,7 @@ def test_add_file_ids(mock_get_available_folders: MagicMock):
 
     tgt_schema = {"inx": pl.Int32(), "file_id": pl.String()}
 
-    tgt_df = pl.DataFrame(data=tgt_data, schema=tgt_schema)
+    tgt_df = pl.DataFrame(data=tgt_data, schema=tgt_schema, orient="row")
 
     # Act
     res_df = mock_loader.add_file_ids(test_df, test_lidar_dir)
@@ -239,7 +241,7 @@ def test_set_output_schema():
     ]
     # fmt: on
 
-    test_df = pl.DataFrame(data=test_data, schema=test_cols)
+    test_df = pl.DataFrame(data=test_data, schema=test_cols, orient="row")
 
     # ----- Target Data -----=
     # fmt: off
@@ -251,7 +253,7 @@ def test_set_output_schema():
     ]
     # fmt: on
 
-    tgt_df = pl.DataFrame(data=tgt_data, schema=tgt_cols)
+    tgt_df = pl.DataFrame(data=tgt_data, schema=tgt_cols, orient="row")
 
     # Act
     res_df = LidarLoader.set_output_schema(test_df)
@@ -322,7 +324,7 @@ def test_parse_lidar_folder(mock_get_available_folders: MagicMock):
         "elevation": pl.Float64(),
     }
 
-    test_df = pl.DataFrame(data=test_data, schema=test_schema)
+    test_df = pl.DataFrame(data=test_data, schema=test_schema, orient="row")
 
     mock_generate_df_from_lidar_array = MagicMock(return_value=test_df)
     mock_loader.generate_df_from_lidar_array = (
@@ -353,7 +355,7 @@ def test_parse_lidar_folder(mock_get_available_folders: MagicMock):
         "northing_ptn": pl.Int32(),
     }
 
-    tgt_df = pl.DataFrame(data=tgt_data, schema=tgt_schema)
+    tgt_df = pl.DataFrame(data=tgt_data, schema=tgt_schema, orient="row")
 
     # Act #####################################################################
 

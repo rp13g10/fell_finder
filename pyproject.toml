@@ -13,3 +13,44 @@ ignore = ["D107", "D415"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
+
+[tool.poetry]
+name = "fell-finder"
+version = "0.1.0"
+description = "A personal project which aims to help you find the hilliest possible routes in your local area (so long as you're UK based)."
+authors = ["Ross Piper"]
+license = "MIT"
+readme = "README.md"
+packages = [{include="fell_finder", from="src"}]
+
+[tool.poetry.dependencies]
+python = "~3.12"
+polars = "^1.12"
+pyspark = "^3.5"
+pandas = "^2.2"
+pyarrow = "^17.0"
+numpy = "^1.0"
+tqdm = "^4.66"
+rasterio = "^1.4"
+bng-latlon = "^1.1"
+networkx = "^3.4"
+geopy = "^2.4"
+thefuzz = "^0.22"
+plotly = "^5.24"
+dash-leaflet = "^1.0.15"
+pyrosm = "^0.6"
+rustworkx = "^0.15"
+dash = {version = "^2.1", extras = ["celery", "diskcache"]}
+pyyaml = "^6.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3"
+pytest-cov = "^5.0"
+pytest-xdist = "^3.6"
+ruff = "^0.7"
+jupyterlab = "^4.2"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

@@ -14,16 +14,7 @@ from fell_finder import app_config
 @dataclass(slots=True)
 class StepData:
     """Container for metrics calculated when stepping from the end of one
-    route to a neighbouring node.
-
-    Args:
-        distance: The distance change
-        elevation_gain: The elevation increase
-        elevation_loss: The elevation loss
-    """
-
-    # TODO: Use __add__ to make this play nicely with RouteMetrics and
-    #       RouteGeometry classes
+    route to a neighbouring node."""
 
     next_node: int
 
@@ -63,30 +54,6 @@ class RouteGeometry:
         if self.distances:
             return self.distances[-1]
         return 0.0
-
-    @property
-    def current_elevation(self) -> float:
-        """Return the elevation for the current point on the route"""
-        return self.elevations[-1]
-
-    @property
-    def starting_elevation(self) -> float:
-        """Return the elevation for the start point of the route"""
-        return self.elevations[0]
-
-    @property
-    def gain_potential(self) -> float:
-        """Return the minimum elevation gain required to get back to the
-        starting point"""
-
-        return max(0.0, self.starting_elevation - self.current_elevation)
-
-    @property
-    def loss_potential(self) -> float:
-        """Return the minimum elevation loss required to get back to the
-        starting point"""
-
-        return max(0.0, self.current_elevation - self.starting_elevation)
 
     @property
     def max_lat(self) -> float:
@@ -140,6 +107,14 @@ class RouteMetrics:
         default_factory=lambda: defaultdict(lambda: 0.0)
     )
 
+    def __post_init__(self) -> None:
+        """If a standard dict is provided instead of a defaultdict, convert
+        it to ensure that additional steps can still be taken"""
+        if not isinstance(self.surface_distances, defaultdict):
+            self.surface_distances = defaultdict(
+                lambda: 0.0, self.surface_distances
+            )
+
     def to_dict(self) -> Dict:
         """Export the contents of this class to a dict"""
         return {
@@ -176,6 +151,15 @@ class Route:
 
     __slots__ = ["points", "visited", "route_id", "geometry", "metrics"]
 
+    def __init__(self, start_node: int) -> None:
+        self.points = [start_node]
+        self.visited = {start_node}
+
+        self.geometry = RouteGeometry()
+        self.metrics = RouteMetrics()
+
+        self.generate_new_id()
+
     @staticmethod
     def from_dict(route_dict: Dict) -> "Route":
         """Enable the creation of a route from a dictionary"""
@@ -197,15 +181,6 @@ class Route:
         route_dict = json.loads(route_str)
 
         return Route.from_dict(route_dict)
-
-    def __init__(self, start_node: int) -> None:
-        self.points = [start_node]
-        self.visited = {start_node}
-
-        self.geometry = RouteGeometry()
-        self.metrics = RouteMetrics()
-
-        self.generate_new_id()
 
     def to_dict(self) -> Dict:
         """Enable the conversion of a route to a dictionary for portability"""
@@ -296,9 +271,8 @@ class Route:
         new_route.geometry.lons += step.lons
 
         for distance in step.distances:
-            new_route.geometry.distances.append(
-                distance + new_route.geometry.current_distance
-            )
+            current_distance = new_route.geometry.current_distance
+            new_route.geometry.distances.append(distance + current_distance)
         new_route.geometry.elevations += step.elevations
 
         return new_route

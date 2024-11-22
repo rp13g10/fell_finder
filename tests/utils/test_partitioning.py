@@ -166,7 +166,7 @@ def test_add_partitions_to_polars_df():
         "northing": pl.Int32(),
     }
 
-    test_df = pl.DataFrame(data=test_data, schema=test_schema)
+    test_df = pl.DataFrame(data=test_data, schema=test_schema, orient="row")
 
     # ----- Target Data -----=
     # fmt: off
@@ -189,7 +189,7 @@ def test_add_partitions_to_polars_df():
         "northing_ptn": pl.Int32(),
     }
 
-    tgt_df = pl.DataFrame(data=tgt_data, schema=tgt_schema)
+    tgt_df = pl.DataFrame(data=tgt_data, schema=tgt_schema, orient="row")
 
     # Act
     res_df = add_partitions_to_polars_df(test_df)
