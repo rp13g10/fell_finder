@@ -4,3 +4,5 @@ data/*
 spark-warehouse/*
 old_tests/*
 *.parquet
+.coverage.*
+.coverage
