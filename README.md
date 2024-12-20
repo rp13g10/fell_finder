@@ -61,7 +61,6 @@ These new features are listed in approximate order of priority
 
 ### Backend
 
-* Build out support for GPX exports
 * Maximise performance of the route-finding algorithm
   * It is expected that this will involve a rewrite using Rust
   * Rustworkx is already in use, so an implementation of a graph library will not be required
@@ -70,12 +69,15 @@ These new features are listed in approximate order of priority
 * Set up an airflow pipeline for ingestion
 * Deploy to the cloud
 * Identify ways to further improve the accuracy of calculated elevation gain/loss
-  * Values are typically quite close to Strava now, but there are some blips in the source LIDAR data which it may be possible to smooth out with software processing
+  * Other sources of elevation data to be evaluated, candidates are OS Terrain and SRTM
+* Improve the ingestion layer
+  * Exclude ways/nodes which have been blocked, requires investigation into different tags which may be used on OSM
+  * Smooth out elevation profiles for tunnels/bridges
 
 ### Frontend
+
 * Build out the route finding page of the webapp
   * Page layout could stand to be improved, collapsible sidebars may help
-  * Once the exporter is available, a download as GPX button needs adding
 * Formally define the expected end state of the webapp
   * Set out all of the different features to be built out
   * Define a target layout for each feature
@@ -86,3 +88,13 @@ These new features are listed in approximate order of priority
       * This may then enable dashboards looking at past activity data
 * Add user logins, allowing people to save & retrieve routes
 * Create an admin dashboard to aid development & performance diagnostics
+
+
+## Issues / Limitations
+
+* Estimated gain/loss is typically ~30% higher than it should be, this needs to be investigated further
+  * Part of the issue seems to be with the LIDAR data itself being a few metres out at times (vs. Strava)
+  * Other issues include bridges/tunnels where the path stays level but the ground does not. Some mitigations are in place for this, but making better use of the OSM tags may be able to improve the situation further.
+* Additional filters need to be added
+  * access = No flag needs to be respected on load, blocked off paths are not currently respected
+  * Further investigation is needed around surface types, some local footpaths seem to be showing as paved. This may be an issue with the underlying data.

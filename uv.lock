@@ -536,6 +536,7 @@ dependencies = [
     { name = "dash", extra = ["celery", "diskcache"] },
     { name = "dash-leaflet" },
     { name = "geopy" },
+    { name = "gpxpy" },
     { name = "networkx" },
     { name = "numpy" },
     { name = "pandas" },
@@ -566,6 +567,7 @@ requires-dist = [
     { name = "dash", extras = ["celery", "diskcache"], specifier = ">=2.18.2" },
     { name = "dash-leaflet", specifier = ">=1.0.15" },
     { name = "geopy", specifier = ">=2.4.1" },
+    { name = "gpxpy", specifier = ">=1.6.2" },
     { name = "networkx", specifier = ">=3.4.2" },
     { name = "numpy", specifier = "<2.0" },
     { name = "pandas", specifier = ">=2.2.3" },
@@ -651,6 +653,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/0e/fd/ef6d53875ceab72c1fad22dbed5ec1ad04eb378c2251a6a8024bad890c3b/geopy-2.4.1.tar.gz", hash = "sha256:50283d8e7ad07d89be5cb027338c6365a32044df3ae2556ad3f52f4840b3d0d1", size = 117625 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e5/15/cf2a69ade4b194aa524ac75112d5caac37414b20a3a03e6865dfe0bd1539/geopy-2.4.1-py3-none-any.whl", hash = "sha256:ae8b4bc5c1131820f4d75fce9d4aaaca0c85189b3aa5d64c3dcaf5e3b7b882a7", size = 125437 },
+]
+
+[[package]]
+name = "gpxpy"
+version = "1.6.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/20/ad/6f1a34e702c72cb495bb258396f237ded76c00f9fe67054a44d778d24ed9/gpxpy-1.6.2.tar.gz", hash = "sha256:a72c484b97ec42b80834353b029cc8ee1b79f0ffca1179b2210bb3baf26c01ae", size = 111695 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/44/9f/62df6c1e52462bdd04275b36cec49efa9e8af7e7b834499eb288f73dcfbc/gpxpy-1.6.2-py3-none-any.whl", hash = "sha256:289bc2d80f116c988d0a1e763fda22838f83005573ece2bbc6521817b26fb40a", size = 42649 },
 ]
 
 [[package]]

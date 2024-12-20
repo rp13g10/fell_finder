@@ -12,6 +12,7 @@ dependencies = [
     "dash-leaflet>=1.0.15",
     "dash[celery,diskcache]>=2.18.2",
     "geopy>=2.4.1",
+    "gpxpy>=1.6.2",
     "networkx>=3.4.2",
     "numpy<2.0",
     "pandas>=2.2.3",

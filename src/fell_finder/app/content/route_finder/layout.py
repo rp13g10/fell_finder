@@ -16,6 +16,7 @@ plots = html.Div(
     className="col-9",
     children=[
         dcc.Store(id="route-store", storage_type="memory"),
+        dcc.Download(id="route-download"),
         html.Div(
             className="container-fluid py-2",
             style={"overflow": "auto"},

@@ -7,6 +7,8 @@ from collections import defaultdict
 from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import List, Tuple, Set, Self, Dict
+import gpxpy
+import gpxpy.gpx
 
 from fell_finder import app_config
 
@@ -46,6 +48,25 @@ class RouteGeometry:
             "distances": self.distances,
             "elevations": self.elevations,
         }
+
+    def to_gpx(self) -> str:
+        """Export the geometry of the route to a GPX file, presented as a
+        string for easier use with the Dash frontend"""
+
+        gpx = gpxpy.gpx.GPX()
+        route = gpxpy.gpx.GPXRoute()
+        route.type = "run"
+        gpx.routes.append(route)
+
+        for lat, lon, elevation in zip(self.lats, self.lons, self.elevations):
+            point = gpxpy.gpx.GPXRoutePoint(
+                latitude=lat, longitude=lon, elevation=elevation
+            )
+            route.points.append(point)
+
+        gpx_xml = gpx.to_xml()
+
+        return gpx_xml
 
     @property
     def current_distance(self) -> float:
