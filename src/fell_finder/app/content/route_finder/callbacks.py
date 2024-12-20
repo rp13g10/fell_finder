@@ -1,7 +1,7 @@
 """Defines a function which can be used to initialize the callbacks used in
 the route finder page"""
 
-from typing import Dict, List, Callable, Union, Tuple
+from typing import Dict, List, Callable, Union, Tuple, Literal
 from dash import callback, Input, Output, State, no_update, html
 from dash.development.base_component import Component
 from dash._callback import NoUpdate
@@ -100,7 +100,7 @@ def init_callbacks() -> None:
         n_clicks: Union[int, None],
         current_children: List,
         route_dist: str,
-        route_mode: str,
+        route_mode: Literal["hilly", "flat"],
         route_highways: List[str],
         route_allowed_surfaces: List[str],
         route_restricted_surfaces: List[str],
@@ -257,6 +257,58 @@ def init_callbacks() -> None:
         profile_plot = generate_elevation_plot(route)
 
         return new_children, bounds, profile_plot
+
+    @callback(
+        Output("route-download", "data"),
+        Input("route-download-button", "n_clicks"),
+        [
+            State("url", "search"),
+            State("route-store", "data"),
+            State("url", "pathname"),
+        ],
+        prevent_initial_call=True,
+    )
+    def download_gpx(
+        n_clicks: int,
+        search_str: str,
+        cached_routes: str,
+        current_page: str,
+    ) -> dict[str, str] | NoUpdate:
+        """When the download GPX button is clicked, generate a GPX file for
+        the selected route and trigger a download
+
+        Args:
+            n_clicks: The number of button clicks, not accessed
+            search_str: The requested route ID
+            cached_routes: The cached route data
+            current_children: The current contents of the primary plot
+            current_page: The currently selected page
+
+        Returns:
+            The updated contents of the primary plot, with any old polylines
+            removed and a new one added
+        """
+
+        if current_page != "/route_finder":
+            return no_update
+
+        if not cached_routes:
+            return no_update
+
+        if not search_str:
+            return no_update
+
+        routes = load_routes_from_str(cached_routes[0])
+
+        # Fetch the selected route
+        target_id = search_str.split("=")[-1]
+        route = next(x for x in routes if x.route_id == target_id)
+
+        gpx_data = route.geometry.to_gpx()
+
+        dl_data = {"filename": "found_fell.gpx", "content": gpx_data}
+
+        return dl_data
 
     @callback(
         Output("route-cards", "children"),

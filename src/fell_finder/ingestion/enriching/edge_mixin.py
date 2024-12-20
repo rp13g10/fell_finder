@@ -174,7 +174,7 @@ class EdgeMixin(ABC):
             "way_inx",
             "highway",
             "surface",
-            "bridge",
+            "is_flat",
             F.col("coords.inx_arr").alias("inx"),
             F.round(F.col("coords.easting_arr"))
             .astype(IntegerType())
@@ -220,7 +220,7 @@ class EdgeMixin(ABC):
             "way_inx",
             "highway",
             "surface",
-            "bridge",
+            "is_flat",
         )
 
         return tagged
@@ -247,20 +247,22 @@ class EdgeMixin(ABC):
             "delta", F.col("elevation") - F.col("last_elevation")
         )
 
-        bridge_mask = F.col("bridge") != "no"
-
         edges = edges.withColumn(
             "elevation_gain",
-            F.when(bridge_mask, F.lit(0.0)).otherwise(
+            F.when(F.col("is_flat"), F.lit(0.0)).otherwise(
                 F.abs(F.greatest(F.col("delta"), F.lit(0.0)))
             ),
         )
 
         edges = edges.withColumn(
             "elevation_loss",
-            F.when(bridge_mask, F.lit(0.0)).otherwise(
+            F.when(F.col("is_flat"), F.lit(0.0)).otherwise(
                 F.abs(F.least(F.col("delta"), F.lit(0.0)))
             ),
+        )
+
+        edges = edges.withColumn(
+            "elevation", F.when(~F.col("is_flat"), F.col("elevation"))
         )
 
         return edges

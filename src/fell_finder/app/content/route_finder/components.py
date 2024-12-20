@@ -139,9 +139,9 @@ sidebar_contents = [
             html.Div(
                 className="list-group-item",
                 children=html.Div(
-                    "Clear",
-                    id="route-clear",
-                    className="btn m-1 btn-disabled disabled",
+                    "Download",
+                    id="route-download-button",
+                    className="btn m-1 btn-primary",
                     role="button",
                 ),
             ),

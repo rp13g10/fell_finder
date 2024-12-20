@@ -60,7 +60,9 @@ class OsmLoader:
                 "highway",
                 "surface",
                 "bridge",
+                "tunnel",
                 "oneway",
+                "access",
             ],
         ]
         edges.loc[:, "row_no"] = edges.index  # type: ignore
@@ -81,7 +83,9 @@ class OsmLoader:
 
         osm_handle = OSM(file_path)
 
-        nodes, edges = osm_handle.get_network("walking", nodes=True)  # type: ignore
+        nodes, edges = osm_handle.get_network(
+            "walking", nodes=True, extra_attributes=["access"]
+        )  # type: ignore
 
         nodes = self._subset_nodes(nodes)  # type: ignore
         edges = self._subset_edges(edges)  # type: ignore
@@ -165,9 +169,35 @@ class OsmLoader:
             "highway",
             "surface",
             "bridge",
+            "tunnel",
             "row_no",
             "oneway",
+            "access",
         )
+
+        return edges
+
+    @staticmethod
+    def set_flat_flag(edges: pl.DataFrame) -> pl.DataFrame:
+        """For any edges which correspond to a feature which means data from
+        a terrain model for elevation will not apply (i.e. a bridge or a
+        tunnel), set a flag to ensure the elevation data for these edges is
+        masked.
+
+        Args:
+            edges: A polars dataframe containing details of all edges in the
+                graph
+
+            returns:
+                A filtered copy of the input dataset"""
+
+        edges = edges.with_columns(
+            (
+                pl.col("bridge").is_not_null() | pl.col("tunnel").is_not_null()
+            ).alias("is_flat")
+        )
+
+        edges = edges.drop("bridge", "tunnel")
 
         return edges
 
@@ -221,6 +251,27 @@ class OsmLoader:
         edges = edges.with_columns(
             pl.col("row_no").rank("ordinal").over("way_id").alias("way_inx")
         )
+        return edges
+
+    @staticmethod
+    def remove_restricted_routes(edges: pl.DataFrame) -> pl.DataFrame:
+        """Remove any edges which correspond to routes with access controls,
+        which are not usable by the public
+
+        Args:
+            edges: A polars dataframe containing details of all edges in the
+                graph
+
+        Returns:
+            A filtered copy of the input dataset"""
+
+        explicit_access = pl.col("access").is_in(
+            {"yes", "permissive", "designated"}
+        )
+        implicit_access = pl.col("access").is_null()
+
+        edges = edges.filter(explicit_access | implicit_access)
+
         return edges
 
     @staticmethod
@@ -302,7 +353,7 @@ class OsmLoader:
             "way_inx",
             "highway",
             "surface",
-            "bridge",
+            "is_flat",
             "src_lat",
             "src_lon",
             "dst_lat",
@@ -367,8 +418,10 @@ class OsmLoader:
         nodes = self.set_node_output_schema(nodes)
 
         edges = self.tidy_edge_schema(edges)
+        edges = self.set_flat_flag(edges)
         edges = self.add_reverse_edges(edges)
         edges = self.derive_position_in_way(edges)
+        edges = self.remove_restricted_routes(edges)
 
         edges = self.get_edge_start_coords(nodes, edges)
         edges = self.get_edge_end_coords(nodes, edges)
