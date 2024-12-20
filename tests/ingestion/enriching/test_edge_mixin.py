@@ -10,6 +10,7 @@ from pyspark.sql.types import (
     StringType,
     IntegerType,
     DoubleType,
+    BooleanType,
 )
 from pyspark.testing import assertDataFrameEqual
 
@@ -224,10 +225,10 @@ def test_unpack_exploded_edges(test_session: SparkSession):
 
     # fmt: off
     _ = (
-        ['src', 'dst', 'src_lat', 'src_lon', 'dst_lat', 'dst_lon', 'src_easting', 'src_northing', 'way_id', 'way_inx', 'highway', 'surface', 'bridge', 'other', 'coords'])
+        ['src', 'dst', 'src_lat', 'src_lon', 'dst_lat', 'dst_lon', 'src_easting', 'src_northing', 'way_id', 'way_inx', 'highway', 'surface', 'is_flat', 'other', 'coords'])
 
     test_data = [
-        ['src', 'dst', 'src_lat', 'src_lon', 'dst_lat', 'dst_lon', 'src_easting', 'src_northing', 'way_id', 'way_inx', 'highway', 'surface', 'bridge', 'other', {'inx_arr': 'inx_arr', 'easting_arr': 1.0, 'northing_arr': 2.0}]
+        ['src', 'dst', 'src_lat', 'src_lon', 'dst_lat', 'dst_lon', 'src_easting', 'src_northing', 'way_id', 'way_inx', 'highway', 'surface', 'is_flat', 'other', {'inx_arr': 'inx_arr', 'easting_arr': 1.0, 'northing_arr': 2.0}]
     ]
 
     # fmt: on
@@ -246,7 +247,7 @@ def test_unpack_exploded_edges(test_session: SparkSession):
             StructField("way_inx", StringType()),
             StructField("highway", StringType()),
             StructField("surface", StringType()),
-            StructField("bridge", StringType()),
+            StructField("is_flat", StringType()),
             StructField("other", StringType()),
             StructField(
                 "coords",
@@ -269,10 +270,10 @@ def test_unpack_exploded_edges(test_session: SparkSession):
 
     # fmt: off
     _ = (
-        ['src', 'dst', 'src_lat', 'src_lon', 'dst_lat', 'dst_lon', 'src_easting', 'src_northing', 'way_id', 'way_inx', 'highway', 'surface', 'bridge', 'inx'    , 'easting', 'northing'])
+        ['src', 'dst', 'src_lat', 'src_lon', 'dst_lat', 'dst_lon', 'src_easting', 'src_northing', 'way_id', 'way_inx', 'highway', 'surface', 'is_flat', 'inx'    , 'easting', 'northing'])
 
     target_data = [
-        ['src', 'dst', 'src_lat', 'src_lon', 'dst_lat', 'dst_lon', 'src_easting', 'src_northing', 'way_id', 'way_inx', 'highway', 'surface', 'bridge', 'inx_arr', 1        , 2]
+        ['src', 'dst', 'src_lat', 'src_lon', 'dst_lat', 'dst_lon', 'src_easting', 'src_northing', 'way_id', 'way_inx', 'highway', 'surface', 'is_flat', 'inx_arr', 1        , 2]
     ]
 
     # fmt: on
@@ -291,7 +292,7 @@ def test_unpack_exploded_edges(test_session: SparkSession):
             StructField("way_inx", StringType()),
             StructField("highway", StringType()),
             StructField("surface", StringType()),
-            StructField("bridge", StringType()),
+            StructField("is_flat", StringType()),
             StructField("inx", StringType()),
             StructField("easting", IntegerType()),
             StructField("northing", IntegerType()),
@@ -320,11 +321,11 @@ def test_tag_exploded_edges(test_session: SparkSession):
 
     # fmt: off
     _ = (
-        ['easting', 'northing', 'easting_ptn', 'northing_ptn', 'src' , 'dst' , 'src_lat', 'src_lon', 'dst_lat', 'dst_lon', 'src_easting', 'src_northing', 'inx', 'way_id', 'way_inx', 'highway', 'surface', 'bridge'])
+        ['easting', 'northing', 'easting_ptn', 'northing_ptn', 'src' , 'dst' , 'src_lat', 'src_lon', 'dst_lat', 'dst_lon', 'src_easting', 'src_northing', 'inx', 'way_id', 'way_inx', 'highway', 'surface', 'is_flat'])
 
     test_edge_data = [
-        ['left'   , 'left'    , 'left'       , 'left'        , 'left', 'left', 'src_lat', 'src_lon', 'dst_lat', 'dst_lon', 'src_easting', 'src_northing', 'inx', 'way_id', 'way_inx', 'highway', 'surface', 'bridge'],
-        ['both'   , 'both'    , 'both'       , 'both'        , 'both', 'both', 'src_lat', 'src_lon', 'dst_lat', 'dst_lon', 'src_easting', 'src_northing', 'inx', 'way_id', 'way_inx', 'highway', 'surface', 'bridge']
+        ['left'   , 'left'    , 'left'       , 'left'        , 'left', 'left', 'src_lat', 'src_lon', 'dst_lat', 'dst_lon', 'src_easting', 'src_northing', 'inx', 'way_id', 'way_inx', 'highway', 'surface', 'is_flat'],
+        ['both'   , 'both'    , 'both'       , 'both'        , 'both', 'both', 'src_lat', 'src_lon', 'dst_lat', 'dst_lon', 'src_easting', 'src_northing', 'inx', 'way_id', 'way_inx', 'highway', 'surface', 'is_flat']
     ]
     # fmt: on
 
@@ -347,7 +348,7 @@ def test_tag_exploded_edges(test_session: SparkSession):
             StructField("way_inx", StringType()),
             StructField("highway", StringType()),
             StructField("surface", StringType()),
-            StructField("bridge", StringType()),
+            StructField("is_flat", StringType()),
         ]
     )
 
@@ -383,10 +384,10 @@ def test_tag_exploded_edges(test_session: SparkSession):
 
     # fmt: off
     _ = (
-        ['src'  , 'dst' , 'src_lat', 'src_lon', 'dst_lat', 'dst_lon', 'src_easting', 'src_northing', 'inx', 'elevation', 'way_id', 'way_inx', 'highway', 'surface', 'bridge'])
+        ['src'  , 'dst' , 'src_lat', 'src_lon', 'dst_lat', 'dst_lon', 'src_easting', 'src_northing', 'inx', 'elevation', 'way_id', 'way_inx', 'highway', 'surface', 'is_flat'])
 
     target_data = [
-        ['both' , 'both', 'src_lat', 'src_lon', 'dst_lat', 'dst_lon', 'src_easting', 'src_northing', 'inx', 'both'     , 'way_id', 'way_inx', 'highway', 'surface', 'bridge']
+        ['both' , 'both', 'src_lat', 'src_lon', 'dst_lat', 'dst_lon', 'src_easting', 'src_northing', 'inx', 'both'     , 'way_id', 'way_inx', 'highway', 'surface', 'is_flat']
     ]
     # fmt: on
 
@@ -406,7 +407,7 @@ def test_tag_exploded_edges(test_session: SparkSession):
             StructField("way_inx", StringType()),
             StructField("highway", StringType()),
             StructField("surface", StringType()),
-            StructField("bridge", StringType()),
+            StructField("is_flat", StringType()),
         ]
     )
 
@@ -430,33 +431,30 @@ def test_calculate_elevation_changes(test_session: SparkSession):
 
     # fmt: off
     _ = (
-        ['src', 'dst', 'inx', 'elevation', 'bridge'])
+        ['src', 'dst', 'inx', 'elevation', 'is_flat'])
 
     test_data = [
-        # No bridge (implicit)
-        [0    , 1    , 0    , 5.0        , None],
-        [0    , 1    , 1    , 10.0       , None],
-        # Bridge (explicit)
-        [1    , 2    , 0    , 5.0        , 'yes'],
-        [1    , 2    , 1    , 10.0       , 'yes'],
-        # No bridge (explicit)
-        [2    , 3    , 0    , 5.0        , 'no'],
-        [2    , 3    , 1    , 10.0       , 'no'],
+        # No bridge
+        [0    , 1    , 0    , 5.0        , False],
+        [0    , 1    , 1    , 10.0       , False],
+        # Bridge
+        [1    , 2    , 0    , 5.0        , True],
+        [1    , 2    , 1    , 10.0       , True],
         # Up at each point
-        [3    , 4    , 0    , 5.0        , None],
-        [3    , 4    , 1    , 10.0       , None],
-        [3    , 4    , 2    , 15.0       , None],
+        [3    , 4    , 0    , 5.0        , False],
+        [3    , 4    , 1    , 10.0       , False],
+        [3    , 4    , 2    , 15.0       , False],
         # Down at each point
-        [4    , 5    , 0    , 15.0       , None],
-        [4    , 5    , 1    , 10.0       , None],
-        [4    , 5    , 2    , 5.0        , None],
+        [4    , 5    , 0    , 15.0       , False],
+        [4    , 5    , 1    , 10.0       , False],
+        [4    , 5    , 2    , 5.0        , False],
         # Up then down
-        [5    , 6    , 0    , 10.0       , None],
-        [5    , 6    , 1    , 15.0       , None],
-        [5    , 6    , 2    , 5.0        , None],
+        [5    , 6    , 0    , 10.0       , False],
+        [5    , 6    , 1    , 15.0       , False],
+        [5    , 6    , 2    , 5.0        , False],
         # No change
-        [6    , 7    , 0    , 5.0        , None],
-        [6    , 7    , 0    , 5.0        , None]
+        [6    , 7    , 0    , 5.0        , False],
+        [6    , 7    , 0    , 5.0        , False]
     ]
 
     # fmt: on
@@ -467,7 +465,7 @@ def test_calculate_elevation_changes(test_session: SparkSession):
             StructField("dst", IntegerType()),
             StructField("inx", IntegerType()),
             StructField("elevation", DoubleType()),
-            StructField("bridge", StringType()),
+            StructField("is_flat", BooleanType()),
         ]
     )
 
@@ -479,33 +477,30 @@ def test_calculate_elevation_changes(test_session: SparkSession):
 
     # fmt: off
     _ = (
-        ['src', 'dst', 'inx', 'elevation', 'bridge', 'last_elevation', 'delta', 'elevation_gain', 'elevation_loss'])
+        ['src', 'dst', 'inx', 'elevation', 'is_flat', 'last_elevation', 'delta', 'elevation_gain', 'elevation_loss'])
 
     target_data = [
-        # No bridge (implicit)
-        [0    , 1    , 0    , 5.0        , None    , None            , None   , 0.0             , 0.0],
-        [0    , 1    , 1    , 10.0       , None    , 5.0             , 5.0    , 5.0             , 0.0],
-        # Bridge (explicit)
-        [1    , 2    , 0    , 5.0        , 'yes'   , None            , None   , 0.0             , 0.0],
-        [1    , 2    , 1    , 10.0       , 'yes'   , 5.0             , 5.0    , 0.0             , 0.0],
-        # No bridge (explicit)
-        [2    , 3    , 0    , 5.0        , 'no'    , None            , None   , 0.0             , 0.0],
-        [2    , 3    , 1    , 10.0       , 'no'    , 5.0             , 5.0    , 5.0             , 0.0],
+        # No bridge
+        [0    , 1    , 0    , 5.0        , False   , None            , None   , 0.0             , 0.0],
+        [0    , 1    , 1    , 10.0       , False   , 5.0             , 5.0    , 5.0             , 0.0],
+        # Bridge
+        [1    , 2    , 0    , None       , True    , None            , None   , 0.0             , 0.0],
+        [1    , 2    , 1    , None       , True    , 5.0             , 5.0    , 0.0             , 0.0],
         # Up at each point
-        [3    , 4    , 0    , 5.0        , None    , None            , None   , 0.0             , 0.0],
-        [3    , 4    , 1    , 10.0       , None    , 5.0             , 5.0    , 5.0             , 0.0],
-        [3    , 4    , 2    , 15.0       , None    , 10.0            , 5.0    , 5.0             , 0.0],
+        [3    , 4    , 0    , 5.0        , False   , None            , None   , 0.0             , 0.0],
+        [3    , 4    , 1    , 10.0       , False   , 5.0             , 5.0    , 5.0             , 0.0],
+        [3    , 4    , 2    , 15.0       , False   , 10.0            , 5.0    , 5.0             , 0.0],
         # Down at each point
-        [4    , 5    , 0    , 15.0       , None    , None            , None   , 0.0             , 0.0],
-        [4    , 5    , 1    , 10.0       , None    , 15.0            , -5.0   , 0.0            , 5.0],
-        [4    , 5    , 2    , 5.0        , None    , 10.0            , -5.0   , 0.0            , 5.0],
+        [4    , 5    , 0    , 15.0       , False   , None            , None   , 0.0             , 0.0],
+        [4    , 5    , 1    , 10.0       , False   , 15.0            , -5.0   , 0.0            , 5.0],
+        [4    , 5    , 2    , 5.0        , False   , 10.0            , -5.0   , 0.0            , 5.0],
         # Up then down
-        [5    , 6    , 0    , 10.0       , None    , None            , None   , 0.0             , 0.0],
-        [5    , 6    , 1    , 15.0       , None    , 10.0            , 5.0    , 5.0             , 0.0],
-        [5    , 6    , 2    , 5.0        , None    , 15.0            , -10.0  , 0.0            , 10.0],
+        [5    , 6    , 0    , 10.0       , False   , None            , None   , 0.0             , 0.0],
+        [5    , 6    , 1    , 15.0       , False   , 10.0            , 5.0    , 5.0             , 0.0],
+        [5    , 6    , 2    , 5.0        , False   , 15.0            , -10.0  , 0.0            , 10.0],
         # No change
-        [6    , 7    , 0    , 5.0        , None    , None            , None   , 0.0             , 0.0],
-        [6    , 7    , 0    , 5.0        , None    , 5.0             , 0.0    , 0.0             , 0.0]
+        [6    , 7    , 0    , 5.0        , False   , None            , None   , 0.0             , 0.0],
+        [6    , 7    , 0    , 5.0        , False   , 5.0             , 0.0    , 0.0             , 0.0]
     ]
 
     # fmt: on
@@ -516,7 +511,7 @@ def test_calculate_elevation_changes(test_session: SparkSession):
             StructField("dst", IntegerType()),
             StructField("inx", IntegerType()),
             StructField("elevation", DoubleType()),
-            StructField("bridge", StringType()),
+            StructField("is_flat", BooleanType()),
             StructField("last_elevation", DoubleType()),
             StructField("delta", DoubleType()),
             StructField("elevation_gain", DoubleType()),

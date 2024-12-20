@@ -14,22 +14,22 @@ from fell_finder import app_config
 
 DATA_DIR = app_config["data_dir"]
 
-lidar_loader = LidarLoader(DATA_DIR)
-lidar_loader.load()
-del lidar_loader
+# lidar_loader = LidarLoader(DATA_DIR)
+# lidar_loader.load()
+# del lidar_loader
 
-osm_loader = OsmLoader(DATA_DIR)
-osm_loader.load()
-del osm_loader
+# osm_loader = OsmLoader(DATA_DIR)
+# osm_loader.load()
+# del osm_loader
 
 # Config set for testing on personal laptop, will need tuning for cloud envs
 spark = (
     SparkSession.builder.appName("fell_finder")  # type: ignore
     .config("spark.master", "local[*]")
-    .config("spark.driver.memory", "4g")
+    .config("spark.driver.memory", "8g")
     .config("spark.driver.memoryOverhead", "2g")
-    .config("spark.executor.memory", "8g")
-    .config("spark.executor.memoryOverhead", "2g")
+    .config("spark.executor.memory", "40g")
+    .config("spark.executor.memoryOverhead", "10g")
     .config("spark.sql.adaptive.coalescePartitions.enabled", "false")
     .config("spark.sql.files.maxPartitionBytes", "1048576")
     .config("spark.sql.hive.filesourcePartitionFileCacheSize", "1048576000")

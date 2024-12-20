@@ -52,12 +52,12 @@ def test_subset_edges():
     # ----- Test Data -----
     # fmt: off
     test_cols = (
-        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'oneway', 'other'])
+        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'tunnel', 'oneway', 'access', 'other'])
 
     test_data = [
-        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'oneway', 'other'],
-        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'oneway', 'other'],
-        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'oneway', 'other']
+        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'tunnel', 'oneway', 'access', 'other'],
+        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'tunnel', 'oneway', 'access', 'other'],
+        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'tunnel', 'oneway', 'access', 'other']
     ]
     # fmt: on
 
@@ -66,12 +66,12 @@ def test_subset_edges():
     # ----- Target Data -----=
     # fmt: off
     tgt_cols = (
-        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'oneway', 'row_no'])
+        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'tunnel', 'oneway', 'access', 'row_no'])
 
     tgt_data = [
-        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'oneway', 0],
-        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'oneway', 1],
-        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'oneway', 2]
+        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'tunnel', 'oneway', 'access', 0],
+        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'tunnel', 'oneway', 'access', 1],
+        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'tunnel', 'oneway', 'access', 2]
     ]
     # fmt: on
 
@@ -108,12 +108,12 @@ def test_read_osm_data(mock_osm: MagicMock):
 
     # fmt: off
     test_edge_cols = (
-        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'oneway', 'other'])
+        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'tunnel', 'oneway', 'access', 'other'])
 
     test_edge_data = [
-        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'oneway', 'other'],
-        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'oneway', 'other'],
-        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'oneway', 'other']
+        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'tunnel', 'oneway', 'access', 'other'],
+        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'tunnel', 'oneway', 'access', 'other'],
+        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'tunnel', 'oneway', 'access', 'other']
     ]
     # fmt: on
 
@@ -146,12 +146,12 @@ def test_read_osm_data(mock_osm: MagicMock):
     # ----- Edges -----
     # fmt: off
     tgt_edge_cols = (
-        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'oneway', 'row_no'])
+        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'tunnel', 'oneway', 'access', 'row_no'])
 
     tgt_edge_data = [
-        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'oneway', 0],
-        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'oneway', 1],
-        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'oneway', 2]
+        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'tunnel', 'oneway', 'access', 0],
+        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'tunnel', 'oneway', 'access', 1],
+        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'tunnel', 'oneway', 'access', 2]
     ]
     # fmt: on
 
@@ -269,10 +269,10 @@ def test_tidy_edge_schema():
     # ----- Test Data -----
     # fmt: off
     test_cols = (
-        ['u', 'v', 'id', 'highway', 'surface', 'bridge', 'row_no', 'oneway', 'other'])
+        ['u', 'v', 'id', 'highway', 'surface', 'bridge', 'tunnel', 'row_no', 'oneway', 'access', 'other'])
 
     test_data = [
-        ['u', 'v', 'id', 'highway', 'surface', 'bridge', 'row_no', 'oneway', 'other']
+        ['u', 'v', 'id', 'highway', 'surface', 'bridge', 'tunnel', 'row_no', 'oneway', 'access', 'other']
     ]
     # fmt: on
 
@@ -281,10 +281,10 @@ def test_tidy_edge_schema():
     # ----- Target Data -----=
     # fmt: off
     tgt_cols = (
-        ['src', 'dst', 'way_id', 'highway', 'surface', 'bridge', 'row_no', 'oneway'])
+        ['src', 'dst', 'way_id', 'highway', 'surface', 'bridge', 'tunnel', 'row_no', 'oneway', 'access'])
 
     tgt_data = [
-        ['u'  , 'v'  , 'id'    , 'highway', 'surface', 'bridge', 'row_no', 'oneway']
+        ['u'  , 'v'  , 'id'    , 'highway', 'surface', 'bridge', 'tunnel', 'row_no', 'oneway', 'access']
     ]
     # fmt: on
 
@@ -292,6 +292,58 @@ def test_tidy_edge_schema():
 
     # Act #####################################################################
     res_df = OsmLoader.tidy_edge_schema(test_df)
+
+    # Assert ##################################################################
+    pl_assert_frame_equal(tgt_df, res_df)
+
+
+def test_set_flat_flag():
+    """Check that flat edges are being correctly flagged"""
+    # Arrange #################################################################
+
+    # ----- Test Data -----
+    # fmt: off
+    _ = (
+        ['inx', 'bridge', 'tunnel'])
+
+    test_data = [
+        [0    , None    , None],
+        [1    , 'some'  , 'some'],
+        [2    , 'some'  , None],
+        [3    , None    , 'some']
+    ]
+    # fmt: on
+
+    test_schema = {
+        "inx": pl.Int32(),
+        "bridge": pl.String(),
+        "tunnel": pl.String(),
+    }
+
+    test_df = pl.DataFrame(data=test_data, schema=test_schema, orient="row")
+
+    # ----- Target Data -----=
+    # fmt: off
+    _ = (
+        ['inx', 'is_flat'])
+
+    tgt_data = [
+        [0    , False],
+        [1    , True],
+        [2    , True],
+        [3    , True]
+    ]
+    # fmt: on
+
+    tgt_schema = {
+        "inx": pl.Int32(),
+        "is_flat": pl.Boolean(),
+    }
+
+    tgt_df = pl.DataFrame(data=tgt_data, schema=tgt_schema, orient="row")
+
+    # Act #####################################################################
+    res_df = OsmLoader.set_flat_flag(test_df)
 
     # Assert ##################################################################
     pl_assert_frame_equal(tgt_df, res_df)
@@ -439,6 +491,59 @@ def test_derive_position_in_way():
 
     res_df = res_df.sort(["way_id", "row_no"])
     tgt_df = tgt_df.sort(["way_id", "row_no"])
+
+    # Assert ##################################################################
+    pl_assert_frame_equal(tgt_df, res_df)
+
+
+def test_remove_restricted_routes():
+    """Check that restricted edges are being removed properly"""
+    # Arrange #################################################################
+
+    # ----- Test Data -----
+    # fmt: off
+    _ = (
+        ['inx', 'access'])
+
+    test_data = [
+        [0    , 'yes'],
+        [1    , 'no'],
+        [2    , 'permissive'],
+        [3    , 'designated'],
+        [4    , None],
+        [5    , 'other']
+    ]
+    # fmt: on
+
+    test_schema = {
+        "inx": pl.Int32(),
+        "access": pl.String(),
+    }
+
+    test_df = pl.DataFrame(data=test_data, schema=test_schema, orient="row")
+
+    # ----- Target Data -----=
+    # fmt: off
+    _ = (
+        ['inx', 'access'])
+
+    tgt_data = [
+        [0    , 'yes'],
+        [2    , 'permissive'],
+        [3    , 'designated'],
+        [4    , None],
+    ]
+    # fmt: on
+
+    tgt_schema = {
+        "inx": pl.Int32(),
+        "access": pl.String(),
+    }
+
+    tgt_df = pl.DataFrame(data=tgt_data, schema=tgt_schema, orient="row")
+
+    # Act #####################################################################
+    res_df = OsmLoader.remove_restricted_routes(test_df)
 
     # Assert ##################################################################
     pl_assert_frame_equal(tgt_df, res_df)
@@ -653,7 +758,7 @@ def test_set_edge_output_schema():
         "way_inx",
         "highway",
         "surface",
-        "bridge",
+        "is_flat",
         "src_lat",
         "src_lon",
         "dst_lat",
@@ -680,7 +785,7 @@ def test_set_edge_output_schema():
         "way_inx",
         "highway",
         "surface",
-        "bridge",
+        "is_flat",
         "src_lat",
         "src_lon",
         "dst_lat",
@@ -776,8 +881,10 @@ def test_load(mock_add_partitions_to_polars_df: MagicMock):
     test_loader.set_node_output_schema = MagicMock(side_effect=lambda x: x)
 
     test_loader.tidy_edge_schema = MagicMock(side_effect=lambda x: x)
+    test_loader.set_flat_flag = MagicMock(side_effect=lambda x: x)
     test_loader.add_reverse_edges = MagicMock(side_effect=lambda x: x)
     test_loader.derive_position_in_way = MagicMock(side_effect=lambda x: x)
+    test_loader.remove_restricted_routes = MagicMock(side_effect=lambda x: x)
 
     test_loader.get_edge_start_coords = MagicMock(side_effect=lambda _, y: y)
     test_loader.get_edge_end_coords = MagicMock(side_effect=lambda _, y: y)
@@ -797,8 +904,10 @@ def test_load(mock_add_partitions_to_polars_df: MagicMock):
     test_loader.set_node_output_schema.assert_called_once_with(mock_nodes)
 
     test_loader.tidy_edge_schema.assert_called_once_with(mock_edges)
+    test_loader.set_flat_flag.assert_called_once_with(mock_edges)
     test_loader.add_reverse_edges.assert_called_once_with(mock_edges)
     test_loader.derive_position_in_way.assert_called_once_with(mock_edges)
+    test_loader.remove_restricted_routes.assert_called_once_with(mock_edges)
 
     test_loader.get_edge_start_coords.assert_called_once_with(
         mock_nodes, mock_edges

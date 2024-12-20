@@ -55,7 +55,7 @@ class LidarLoader:
               that this will contain an 'extracts/lidar' subdirectory, into
               which all LIDAR data will have been extracted.
         """
-        # self.sql = sql
+
         self.data_dir = data_dir
 
         self.to_load = get_available_folders(data_dir)
@@ -173,7 +173,7 @@ class LidarLoader:
                 "northing": northings,
                 "elevation": elevations,
             },
-            orient='row'
+            orient="row",
         )
 
         return df
