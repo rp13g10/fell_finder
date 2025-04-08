@@ -11,52 +11,49 @@ The secondary objective is to provide myself with a challenge, and an opportunit
 
 ## Current State
 
-This project is still in early development, with significant work still required before it's ready for general use. That said, with a little leg-work a viable PoC is now up and running. At present, the ingestion pipeline is largely up and running (although it's executed on-demand at the moment). A basic webapp is provided, which is able to plot routes on demand and display them to the user. Routes are generally created in less than a minute for shorter distances (up to 10k), although the algorithm has been tested up to marathon distance.
+This project is still in early development, with significant work still required before it's ready for general use. That said, with a little leg-work a viable PoC is now up and running. At present, the ingestion pipeline is largely up and running (although it's executed on-demand at the moment). A basic webapp is provided, which is able to plot routes on demand and display them to the user. Route creation has been sped up significantly following a rewrite in rust, although longer distances can still take a few seconds to generate.
 
-There are currently gaps in unit test coverage. However, as significant portions of the route finding algorithm are going to be rewritten in Rust, these are not being prioritised. My current focus is on learning Rust, and translating the existing algorithm across (with full test coverage for the rewritten code).
-
+The rust portion of the code is currently in MVP state, and has a number of improvements which need to be made. This will be done at the same time as writing test cases to try and mop up any remaining logic issues. The overall structure of code in the repo is not yet final.
 
 
 ## Instructions for use
 
+Eventually, everything will be set up to run in containers. Until then, it takes a bit of manual effort to set everything up
+
 * Clone this repo to your local device
-* Use UV to install the fell_finder package
-  * Set up [uv](https://docs.astral.sh/uv/) if you haven't already
-  * Use `uv pip install .` to install fell_finder and its dependencies
-    * You'll need to have `python3-devel` installed on your device (`python3.12-devel` if your default version isn't 3.12)
-    * If you run into build errors with numpy, you might need to install the C build tools. Use `dnf group install c-development development-tools` to install them on Fedora
-    * If you run into build errors with pyarrow, you can find the dependencies to install [here](https://arrow.apache.org/docs/developers/cpp/building.html)
-* Install additional dependencies
-  * Install redis `sudo dnf install redis` on Fedora and set it to run
+* Install prerequisites
+  * [postgres](https://www.postgresql.org/download/)
+  * [redis](https://redis.io/docs/latest/operate/oss_and_stack/install/install-redis/)
+    * This is optional, not required to run in debug mode
     * `sudo systemctl start redis` to run it once, or `sudo systemctl enable redis` to run it every time your computer boots
-    * This is not required if you'll only be running the app in debug mode
-* Configure the app for your system
-  * As a short-term implementation, the config file is stored in `src/fell_finder/config.yml`
-  * Set the data_dir to the (absolute) location of the 'data' subfolder on your device
-  * Your data folder will need the following subdirectories:
-    * extracts
-      * osm
-      * lidar
-    * parsed
-    * enriched
-    * optimised
-    * temp
-* In extracts/osm, you'll need to place a .osm.pbf file covering the area you want
-* In extracts/lidar, you'll need to place the corresponding (extracted) LIDAR data
-  * This can be downloaded [here](https://environment.data.gov.uk/survey)
-  * After selecting the area to download, select 'LIDAR Composite DTM / 2022 / 1m'
-* Run `ingestion.py` to process your extracts.
-  * In my own testing, it takes ~1 hour to completely process the data for all of Hampshire
-  * The command to use is `uv run python ingestion.py`
-* Once ingestion has completed, you can start the webapp in two modes
-  * For a 'standard' launch
-    * Make sure 'debug' is set to False in `src/fell_finder/config.yml`
-    * First, start Celery with: `uv run celery -A webapp.celery_app worker --loglevel=INFO`
-    * Then, without closing the celery process, start the webapp with `python webapp.py`
-    * You can then access the webapp by opening 'http://localhost:8050/' in your browser
-  * For a 'debug' launch
-    * Make sure 'debug' is set to True in `src/fell_finder/config.yml`
-    * Start the webapp with `uv run python webapp.py`
+  * [uv](https://docs.astral.sh/uv/getting-started/installation/)
+  * [rust](https://www.rust-lang.org/tools/install)
+  * python3-devel
+    * python3.12-devel if your devault version isn't 3.12
+  * [python build tools](https://devguide.python.org/getting-started/setup-building/#install-dependencies)
+    * If you run into build errors with pyarrow, you can find the dependencies to install [here](https://arrow.apache.org/docs/developers/cpp/building.html)
+    * If you run into build errors with numpy, you might need to install the C build tools. Use `dnf group install c-development development-tools` to install them on Fedora
+  * [hatch](https://hatch.pypa.io/latest/install/)
+* Build the [fell_finder](packages/fell_finder/README.md) package
+* Run the [fell_loader](packages/fell_loader/README.md) package to get all of the required data into postgres
+* Run the [fell_viewer](packages/fell_viewer/README.md) to start the webapp
+    
+## Environment Variables
+
+Proper documentation for these is pending (as the list of variables is not yet complete). You will need the following environment variables set in order to run the code. The recommendation is that this be done with a `.env` file.
+
+```
+FF_DATA_DIR = /hpath/to/your/data/dir
+FF_DEBUG_MODE = true
+FF_MAX_CANDS = 2048
+FF_MAX_SIMILARITY = 0.99
+FF_DIST_TOLERANCE = 0.1
+FF_DB_USER = your_db_user
+FF_DB_PASS = your_db_pass
+FF_ING_PTN_SIZE = 5000
+FF_APP_NO_ROUTES = 10
+```
+
 
 ## Roadmap
 
@@ -64,18 +61,14 @@ These new features are listed in approximate order of priority
 
 ### Backend
 
-* Maximise performance of the route-finding algorithm
-  * It is expected that this will involve a rewrite using Rust
-  * Rustworkx is already in use, so an implementation of a graph library will not be required
 * Ensure full test coverage on any code which is not app-specific
 * Containerise everything
 * Set up an airflow pipeline for ingestion
 * Deploy to the cloud
 * Identify ways to further improve the accuracy of calculated elevation gain/loss
   * Other sources of elevation data to be evaluated, candidates are OS Terrain and SRTM
-* Improve the ingestion layer
-  * Exclude ways/nodes which have been blocked, requires investigation into different tags which may be used on OSM
-  * Smooth out elevation profiles for tunnels/bridges
+  * Post-processing may be a valid tactic, smoothing out the profile for each edge in the graph
+  * Further checks on the tags present in the OSM data may also help (tunnels, bridges, etc)
 
 ### Frontend
 
@@ -98,8 +91,6 @@ These new features are listed in approximate order of priority
 * Estimated gain/loss is typically ~30% higher than it should be, this needs to be investigated further
   * Part of the issue seems to be with the LIDAR data itself being a few metres out at times (vs. Strava)
   * Other issues include bridges/tunnels where the path stays level but the ground does not. Some mitigations are in place for this, but making better use of the OSM tags may be able to improve the situation further.
-* Additional filters need to be added
-  * access = No flag needs to be respected on load, blocked off paths are not currently respected
-  * Further investigation is needed around surface types, some local footpaths seem to be showing as paved. This may be an issue with the underlying data.
+* Further investigation is needed around surface types, some local footpaths seem to be showing as paved. This may be an issue with the underlying data.
 * Data is being combined into a limited number of partitions during the ingestion phase, causing higher memory usage than I would like
   * More in-depth analysis of the execution plan is required to debug this behaviour

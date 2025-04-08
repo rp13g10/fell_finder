@@ -1,0 +1,47 @@
+{
+    "Paved": [
+        "paved",
+        "asphalt",
+        "chipseal",
+        "concrete",
+        "concrete:lanes",
+        "concrete:plates",
+        "paving_stones",
+        "sett",
+        "unhewn_cobblestone",
+        "cobblestone"
+    ],
+    "Other Surfaces": [
+        "bricks",
+        "metal",
+        "rubber",
+        "metal_grid",
+        "clay",
+        "tartan",
+        "artificial_turf",
+        "acrylic",
+        "carpet"
+    ],
+    "Maintained Trails": [
+        "unpaved",
+        "compacted",
+        "fine_gravel",
+        "shells",
+        "rock",
+        "pebblestone",
+        "grass_paver",
+        "woodchips"
+    ],
+    "Unmaintained Trails": [
+        "ground",
+        "dirt",
+        "earth",
+        "grass",
+        "mud",
+        "snow",
+        "ice"
+    ],
+    "Unclassified": [
+        "unclassified"
+    ]
+}

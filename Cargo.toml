@@ -1,0 +1,3 @@
+[workspace]
+members = ["packages/fell_finder"]
+resolver = "3"
