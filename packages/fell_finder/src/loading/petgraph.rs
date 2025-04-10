@@ -1,16 +1,13 @@
-use crate::config::route::RouteConfig;
-use crate::loading::structs::{EdgeData, EdgeRow, NodeData, NodeRow};
+use crate::common::config::RouteConfig;
+use crate::common::graph_data::{EdgeData, NodeData};
+use crate::loading::postgres::{EdgeRow, NodeRow};
 use core::f64;
 use geo::{Distance, Haversine, Point};
 use petgraph::algo::dijkstra;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::IntoNodeReferences;
 use petgraph::{Directed, Graph};
-// use std::collections::{HashMap, HashSet};
 use rustc_hash::{FxHashMap, FxHashSet};
-
-// TODO: Profile this code and see whether there are any areas which are worth
-//       setting up to run asynchronously
 
 /// Nodes in the graph need to have associated lat/lon data. To achieve this,
 /// we create a mapping for source IDs as they appear in the OSM data to

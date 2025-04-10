@@ -3,7 +3,7 @@ use axum::response::IntoResponse;
 use axum::routing::get;
 use axum::serve;
 use axum::{Json, Router};
-use fell_finder::config::route::{RouteConfig, UserRouteConfig};
+use fell_finder::common::config::{RouteConfig, UserRouteConfig};
 use fell_finder::loading::petgraph::{
     create_graph, drop_unreachable_nodes, tag_dists_to_start, tag_start_node,
 };

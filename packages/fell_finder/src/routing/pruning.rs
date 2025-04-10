@@ -1,5 +1,5 @@
 use rustc_hash::FxHashMap;
-use std::cmp::{min, Ordering};
+use std::cmp::{Ordering, min};
 use std::collections::hash_map::Entry::{Occupied, Vacant};
 use std::io::{Error, ErrorKind};
 use std::iter::zip;
@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use rayon::prelude::*;
 
-use crate::config::route::RouteConfig;
+use crate::common::config::RouteConfig;
 use crate::routing::structs::Candidate;
 
 fn get_min_max_vals(vals: &Vec<f64>) -> Result<(f64, f64), Error> {

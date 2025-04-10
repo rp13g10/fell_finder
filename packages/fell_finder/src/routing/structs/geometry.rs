@@ -3,8 +3,8 @@
 use serde::Serialize;
 use std::iter::zip;
 
-use crate::config::route::Bounds;
-use crate::loading::structs::EdgeData;
+use crate::common::bbox::BBox;
+use crate::common::graph_data::EdgeData;
 
 // TODO: Tidy up ambiguity around bbox/bounds (should be bbox)
 
@@ -59,7 +59,7 @@ impl CandidateGeometry {
         (lat, lon)
     }
 
-    fn get_bbox(&self) -> Bounds {
+    fn get_bbox(&self) -> BBox {
         let min_lat = self
             .lats
             .iter()
@@ -81,7 +81,7 @@ impl CandidateGeometry {
             .max_by(|a, b| a.partial_cmp(b).expect("NaN in lons!"))
             .unwrap();
 
-        Bounds {
+        BBox {
             min_lat: min_lat.clone(),
             min_lon: min_lon.clone(),
             max_lat: max_lat.clone(),
@@ -111,5 +111,5 @@ pub struct RouteGeometry {
     pub coords: Vec<(f64, f64)>,
     pub dists: Vec<f64>,
     pub eles: Vec<f64>,
-    pub bbox: Bounds,
+    pub bbox: BBox,
 }

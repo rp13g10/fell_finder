@@ -13,8 +13,8 @@ use serde::Serialize;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::Arc;
 
-use crate::config::route::RouteConfig;
-use crate::loading::structs::{EdgeData, NodeData};
+use crate::common::config::RouteConfig;
+use crate::common::graph_data::{EdgeData, NodeData};
 
 /// Container for a single candidate route
 #[derive(Clone)]
@@ -135,11 +135,7 @@ impl Candidate {
                     .sum_surfaces_distance(&restriction.restricted_surfaces);
                 let max_s_dist = restriction.restricted_surfaces_perc
                     * self.config.max_distance;
-                if s_dist > max_s_dist {
-                    true
-                } else {
-                    false
-                }
+                if s_dist > max_s_dist { true } else { false }
             }
             None => true,
         };

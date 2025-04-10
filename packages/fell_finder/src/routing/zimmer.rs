@@ -3,8 +3,8 @@ use std::sync::Arc;
 use indicatif::ProgressBar;
 use rayon::prelude::*;
 
-use crate::config::route::RouteConfig;
-use crate::loading::structs::{EdgeData, NodeData};
+use crate::common::config::RouteConfig;
+use crate::common::graph_data::{EdgeData, NodeData};
 use crate::routing::structs::{Candidate, Route, StepResult};
 use petgraph::graph::{EdgeReference, NodeIndex};
 use petgraph::{Directed, Graph};

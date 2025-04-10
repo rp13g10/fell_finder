@@ -1,7 +1,7 @@
 //! Defines the structs which contain high level information about a route
 //! (i.e. total distance, total gain, etc)
 
-use crate::loading::structs::EdgeData;
+use crate::common::graph_data::EdgeData;
 use rustc_hash::FxHashMap;
 use serde::Serialize;
 

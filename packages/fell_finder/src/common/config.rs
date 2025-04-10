@@ -1,65 +1,7 @@
+use crate::common::bbox::BBox;
 use geo::Point;
 use geo::{Destination, Haversine};
-use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Serialize)]
-pub struct Bounds {
-    pub min_lat: f64,
-    pub min_lon: f64,
-    pub max_lat: f64,
-    pub max_lon: f64,
-}
-
-impl Bounds {
-    pub fn get_centre(&self) -> (f64, f64) {
-        let lat_delta = self.max_lat - self.min_lat;
-        let lon_delta = self.max_lon - self.min_lon;
-        (
-            self.min_lat + (lat_delta / 2.0),
-            self.min_lon + (lon_delta / 2.0),
-        )
-    }
-}
-
-#[derive(Debug)]
-pub struct BBox {
-    pub ne: Point,
-    pub nw: Point,
-    pub se: Point,
-    pub sw: Point,
-}
-
-impl BBox {
-    // Assumption: No route will cover more than 4 partitions at once, distance
-    // to cover one degree lat/lon is ~69 miles
-
-    fn get_ptn_from_point(point: &Point) -> String {
-        let x_i = point.x() as i32;
-        let y_i = point.y() as i32;
-        let ptn = format!("'{:.0}_{:.0}'", y_i, x_i);
-        ptn.replace("-", "n")
-    }
-
-    pub fn get_partition_list(&self) -> Vec<String> {
-        let ne_ptn = BBox::get_ptn_from_point(&self.ne);
-        let nw_ptn = BBox::get_ptn_from_point(&self.nw);
-        let se_ptn = BBox::get_ptn_from_point(&self.se);
-        let sw_ptn = BBox::get_ptn_from_point(&self.sw);
-
-        let mut ptn_list = vec![ne_ptn, nw_ptn, se_ptn, sw_ptn];
-        ptn_list.dedup();
-        ptn_list
-    }
-
-    pub fn get_min_max_coords(&self) -> Bounds {
-        Bounds {
-            min_lat: self.sw.y(),
-            min_lon: self.sw.x(),
-            max_lat: self.ne.y(),
-            max_lon: self.ne.x(),
-        }
-    }
-}
+use serde::Deserialize;
 
 #[derive(Debug, Clone)]
 pub enum RouteType {
@@ -207,24 +149,14 @@ impl RouteConfig {
     }
 
     pub fn get_bounding_box(&self) -> BBox {
-        // let two: f64 = 2.0; // there must be a better way?
         let dist_to_corner: f64 = (self.max_distance / 2.0) * (2.0_f64.sqrt());
 
         let ne =
             Haversine::destination(self.centre, 45.0, dist_to_corner.clone());
-        let se =
-            Haversine::destination(self.centre, 135.0, dist_to_corner.clone());
         let sw =
             Haversine::destination(self.centre, 225.0, dist_to_corner.clone());
-        let nw =
-            Haversine::destination(self.centre, 315.0, dist_to_corner.clone());
 
-        BBox {
-            ne: ne,
-            se: se,
-            sw: sw,
-            nw: nw,
-        }
+        BBox::from_points(&ne, &sw)
     }
 
     pub fn get_highway_str(&self) -> String {
