@@ -6,10 +6,8 @@ use std::iter::zip;
 use crate::common::bbox::BBox;
 use crate::common::graph_data::EdgeData;
 
-// TODO: Tidy up ambiguity around bbox/bounds (should be bbox)
-
 /// Stores the geometry of each candidate in an unprocessed form
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct CandidateGeometry {
     // TODO: Consider using the Default trait
     lats: Vec<f64>,
@@ -60,6 +58,9 @@ impl CandidateGeometry {
     }
 
     fn get_bbox(&self) -> BBox {
+        // TODO: Find a faster way of doing this, sorting each list twice must
+        //       be avoidable
+
         let min_lat = self
             .lats
             .iter()
@@ -106,10 +107,158 @@ impl CandidateGeometry {
 
 /// Stores the geometry of each route in a format which can easily be rendered
 /// in the frontend
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, PartialEq)]
 pub struct RouteGeometry {
     pub coords: Vec<(f64, f64)>,
     pub dists: Vec<f64>,
     pub eles: Vec<f64>,
     pub bbox: BBox,
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn test_take_step() {
+        let edge_1 = EdgeData {
+            src: 0,
+            dst: 1,
+            highway: "highway".to_string(),
+            surface: "surface".to_string(),
+            elevation_gain: 2.0,
+            elevation_loss: 3.0,
+            distance: 4.0,
+            lats: vec![5.0, 6.0],
+            lons: vec![7.0, 8.0],
+            dists: vec![9.0, 10.0],
+            eles: vec![11.0, 12.0],
+        };
+        let edge_2 = EdgeData {
+            src: 0,
+            dst: 1,
+            highway: "highway".to_string(),
+            surface: "surface".to_string(),
+            elevation_gain: 13.0,
+            elevation_loss: 14.0,
+            distance: 15.0,
+            lats: vec![16.0, 17.0],
+            lons: vec![18.0, 19.0],
+            dists: vec![20.0, 21.0],
+            eles: vec![22.0, 23.0],
+        };
+
+        let target = CandidateGeometry {
+            lats: vec![5.0, 6.0, 16.0, 17.0],
+            lons: vec![7.0, 8.0, 18.0, 19.0],
+            dists: vec![9.0, 10.0, 20.0, 21.0],
+            eles: vec![11.0, 12.0, 22.0, 23.0],
+        };
+
+        let mut result = CandidateGeometry::new();
+        result.take_step(&edge_1);
+        result.take_step(&edge_2);
+
+        assert_eq!(result, target);
+    }
+
+    #[test]
+    fn test_get_centre() {
+        let test_candidate = CandidateGeometry {
+            lats: vec![5.0, 6.0, 16.0, 17.0],
+            lons: vec![7.0, 8.0, 18.0, 19.0],
+            dists: vec![9.0, 10.0, 20.0, 21.0],
+            eles: vec![11.0, 12.0, 22.0, 23.0],
+        };
+
+        let target = (11.0, 13.0);
+
+        let result = test_candidate.get_centre();
+
+        assert_eq!(result, target);
+    }
+
+    #[test]
+    fn test_get_pos() {
+        let test_candidate = CandidateGeometry {
+            lats: vec![5.0, 6.0, 16.0, 17.0],
+            lons: vec![7.0, 8.0, 18.0, 19.0],
+            dists: vec![9.0, 10.0, 20.0, 21.0],
+            eles: vec![11.0, 12.0, 22.0, 23.0],
+        };
+
+        let target = (17.0, 19.0);
+
+        let result = test_candidate.get_pos();
+
+        assert_eq!(result, target);
+    }
+
+    #[test]
+    fn test_get_bbox() {
+        let test_candidate = CandidateGeometry {
+            lats: vec![5.0, 6.0, 16.0, 17.0],
+            lons: vec![7.0, 8.0, 18.0, 19.0],
+            dists: vec![9.0, 10.0, 20.0, 21.0],
+            eles: vec![11.0, 12.0, 22.0, 23.0],
+        };
+
+        let target = BBox {
+            min_lat: 5.0,
+            min_lon: 7.0,
+            max_lat: 17.0,
+            max_lon: 19.0,
+        };
+
+        let result = test_candidate.get_bbox();
+
+        assert_eq!(result, target);
+    }
+
+    #[test]
+    fn test_zip_coords() {
+        let test_candidate = CandidateGeometry {
+            lats: vec![5.0, 6.0, 16.0, 17.0],
+            lons: vec![7.0, 8.0, 18.0, 19.0],
+            dists: vec![9.0, 10.0, 20.0, 21.0],
+            eles: vec![11.0, 12.0, 22.0, 23.0],
+        };
+
+        let target = vec![(5.0, 7.0), (6.0, 8.0), (16.0, 18.0), (17.0, 19.0)];
+
+        let result = test_candidate.zip_coords();
+
+        assert_eq!(result, target);
+    }
+
+    #[test]
+    fn test_finalize() {
+        let test_candidate = CandidateGeometry {
+            lats: vec![5.0, 6.0, 16.0, 17.0],
+            lons: vec![7.0, 8.0, 18.0, 19.0],
+            dists: vec![9.0, 10.0, 20.0, 21.0],
+            eles: vec![11.0, 12.0, 22.0, 23.0],
+        };
+
+        let target_coords =
+            vec![(5.0, 7.0), (6.0, 8.0), (16.0, 18.0), (17.0, 19.0)];
+        let target_bbox = BBox {
+            min_lat: 5.0,
+            min_lon: 7.0,
+            max_lat: 17.0,
+            max_lon: 19.0,
+        };
+
+        let target = RouteGeometry {
+            coords: target_coords,
+            dists: vec![9.0, 10.0, 20.0, 21.0],
+            eles: vec![11.0, 12.0, 22.0, 23.0],
+            bbox: target_bbox,
+        };
+
+        let result = test_candidate.finalize();
+
+        assert_eq!(result, target);
+    }
 }
