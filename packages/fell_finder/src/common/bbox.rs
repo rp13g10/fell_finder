@@ -82,6 +82,8 @@ mod tests {
 
     use super::*;
 
+    /// Ensures that coordinates are being set correctly based on the provided
+    /// points
     #[test]
     fn test_from_points() {
         let ne: Point = (-1.3387398, 51.0012009).into();
@@ -99,6 +101,8 @@ mod tests {
         assert_eq!(result, target)
     }
 
+    /// Ensures that the centre point of the bounding box is being calculated
+    /// properly
     #[test]
     fn test_get_centre() {
         let bbox = BBox {
@@ -116,6 +120,8 @@ mod tests {
         assert_relative_eq!(res_lon, tgt_lon);
     }
 
+    /// Ensures that the partition list for the bounding box is being
+    /// generated correctly, with no duplicates
     #[test]
     fn test_get_partition_list() {
         let bbox = BBox {
