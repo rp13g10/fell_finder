@@ -1,6 +1,6 @@
 /// Sets the data which will be stored as weights in the petgraph graph, all
 /// attributes will be populated after the graph is created
-#[derive(Default, Debug, Clone, Copy)]
+#[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub struct NodeData {
     pub id: i64,
     pub lat: f64,
@@ -12,7 +12,7 @@ pub struct NodeData {
 
 /// Container for edge metadata which will be stored in the graph, all
 /// attributes are populated based on the output of a SQL query
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, PartialEq)]
 pub struct EdgeData {
     pub src: i64,
     pub dst: i64,

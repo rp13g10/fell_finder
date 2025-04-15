@@ -28,7 +28,7 @@ pub fn generate_node_map(
 
     for node in nodes {
         if used_nodes.contains(&node.id) {
-            node_map.insert(node.id, node.prepare());
+            node_map.insert(node.id, node.into());
         }
     }
 
@@ -57,24 +57,22 @@ pub fn create_graph(
 
     for edge in edges {
         // Prepare for loading, src and dst are as provided in the OSM data
-        let (src, dst, data) = edge.prepare();
+        let edge_data: EdgeData = edge.into();
 
-        // TODO: Confirm if clone is required here, seems counterintuitive that
-        //       adding an edge should consume the node?
         // Fetch indexes for src and dst as they appear in the graph
-        let maybe_src_inx = node_id_inx_map.get(&src);
+        let maybe_src_inx = node_id_inx_map.get(&edge_data.src);
         let src_inx = match maybe_src_inx {
-            Some(src_inx) => src_inx.clone(),
+            Some(src_inx) => src_inx,
             None => continue,
         };
 
-        let maybe_dst_inx = node_id_inx_map.get(&dst);
+        let maybe_dst_inx = node_id_inx_map.get(&edge_data.dst);
         let dst_inx = match maybe_dst_inx {
-            Some(dst_inx) => dst_inx.clone(),
+            Some(dst_inx) => dst_inx,
             None => continue,
         };
 
-        graph.update_edge(src_inx, dst_inx, data);
+        graph.update_edge(*src_inx, *dst_inx, edge_data);
     }
 
     graph
