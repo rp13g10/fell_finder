@@ -29,6 +29,8 @@ impl CandidateGeometry {
 }
 
 impl CandidateGeometry {
+    /// Extend the current candidate geometry with the details of the
+    /// provided edge
     pub fn take_step(&mut self, edata: &EdgeData) {
         self.lats.extend(edata.lats.clone());
         self.lons.extend(edata.lons.clone());
@@ -120,6 +122,8 @@ mod tests {
 
     use super::*;
 
+    /// Ensure the correct data is being copied across, and ordering is being
+    /// preserved
     #[test]
     fn test_take_step() {
         let edge_1 = EdgeData {
@@ -163,6 +167,7 @@ mod tests {
         assert_eq!(result, target);
     }
 
+    /// Ensure the route centroid is being calculated properly
     #[test]
     fn test_get_centre() {
         let test_candidate = CandidateGeometry {
@@ -179,6 +184,7 @@ mod tests {
         assert_eq!(result, target);
     }
 
+    /// Ensure the current position of the route is being retrieved properly
     #[test]
     fn test_get_pos() {
         let test_candidate = CandidateGeometry {
@@ -195,6 +201,7 @@ mod tests {
         assert_eq!(result, target);
     }
 
+    /// Ensure the bounding box for the route is being calculated properly
     #[test]
     fn test_get_bbox() {
         let test_candidate = CandidateGeometry {
@@ -216,6 +223,7 @@ mod tests {
         assert_eq!(result, target);
     }
 
+    /// Ensure that route coordinates are zipped correctly
     #[test]
     fn test_zip_coords() {
         let test_candidate = CandidateGeometry {
@@ -232,6 +240,7 @@ mod tests {
         assert_eq!(result, target);
     }
 
+    /// Ensure route finalization is working properly
     #[test]
     fn test_finalize() {
         let test_candidate = CandidateGeometry {
