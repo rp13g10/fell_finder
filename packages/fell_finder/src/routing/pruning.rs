@@ -8,7 +8,7 @@ use std::sync::Arc;
 use rayon::prelude::*;
 
 use crate::common::config::RouteConfig;
-use crate::routing::structs::Candidate;
+use crate::routing::common::Candidate;
 
 fn get_min_max_vals(vals: &Vec<f64>) -> Result<(f64, f64), Error> {
     let min_val: f64;

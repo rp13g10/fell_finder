@@ -5,8 +5,9 @@ use rayon::prelude::*;
 
 use crate::common::config::RouteConfig;
 use crate::common::graph_data::{EdgeData, NodeData};
-use crate::routing::structs::{Candidate, Route, StepResult};
+use crate::routing::common::{Candidate, Route, StepResult};
 use petgraph::graph::{EdgeReference, NodeIndex};
+use petgraph::visit::EdgeRef;
 use petgraph::{Directed, Graph};
 
 use crate::routing::pruning::{get_dissimilar_routes, prune_candidates};
@@ -21,7 +22,11 @@ fn process_candidate(
         graph.edges(candidate.cur_inx).collect();
     let mut cand_results = Vec::<StepResult>::new();
     for eref in edges {
-        cand_results.push(candidate.clone().take_step(&eref));
+        let dst = eref.target();
+        let ddata = graph
+            .node_weight(dst)
+            .expect("Destination doesn't exist in the graph!");
+        cand_results.push(candidate.clone().take_step(&eref, &ddata));
     }
     cand_results
 }
