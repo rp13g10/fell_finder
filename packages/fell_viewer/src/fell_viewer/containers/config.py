@@ -43,6 +43,11 @@ class RouteConfig:
     highway_types: List[str] = field(default_factory=list)
     surface_types: List[str] = field(default_factory=list)
 
+    # TODO: Hook this up to a user input (or part of an admin panel?)
+    distance_tolerance: float = float(
+        os.environ.get("FF_DIST_TOLERANCE", "0.1")
+    )
+
     def __post_init__(self) -> None:
         """Calculate min_distance and max_distance based on user provided
         target_distance and tolerance"""
@@ -58,11 +63,3 @@ class RouteConfig:
 
         for attr in ["max_candidates"]:
             setattr(self, attr, int(getattr(self, attr)))
-
-        # Derive additional properties
-        self.min_distance = self.target_distance / (
-            1 + float(os.environ["FF_DIST_TOLERANCE"])
-        )
-        self.max_distance = self.target_distance * (
-            1 + float(os.environ["FF_DIST_TOLERANCE"])
-        )
