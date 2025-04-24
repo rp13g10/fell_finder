@@ -10,7 +10,9 @@ use petgraph::graph::{EdgeReference, NodeIndex};
 use petgraph::visit::EdgeRef;
 use petgraph::{Directed, Graph};
 
-use crate::routing::pruning::{get_dissimilar_routes, prune_candidates};
+use crate::routing::pruning::{
+    get_dissimilar_routes, prune_candidates, sort_candidates,
+};
 
 /// For a single candidate, determine all edges which can be reached and
 /// check whether it is valid to do so
@@ -47,32 +49,6 @@ fn process_candidates_threads(
 
     for result_vec in results {
         for result in result_vec {
-            match result {
-                StepResult::Complete(route) => completed.push(route),
-                StepResult::Valid(cand) => {
-                    new_candidates.push(cand);
-                }
-                StepResult::Invalid => {}
-            }
-        }
-    }
-
-    (new_candidates, completed)
-}
-
-/// Process a vector of candidates using a single-threaded application, useful
-/// for profiling but will need to be removed from the final build
-fn process_candidates(
-    graph: &Graph<NodeData, EdgeData, Directed, u32>,
-    candidates: Vec<Candidate>,
-) -> (Vec<Candidate>, Vec<Candidate>) {
-    let mut new_candidates: Vec<Candidate> = Vec::new();
-    let mut completed: Vec<Candidate> = Vec::new();
-
-    for candidate in candidates.into_iter() {
-        let results = process_candidate(graph, &candidate);
-
-        for result in results.into_iter() {
             match result {
                 StepResult::Complete(route) => completed.push(route),
                 StepResult::Valid(cand) => {
@@ -129,7 +105,9 @@ pub fn generate_routes(
 
     bar.finish();
 
-    completed = get_dissimilar_routes(&mut completed, 25);
+    completed =
+        get_dissimilar_routes(&mut completed, 25, Arc::clone(&shared_config));
+    sort_candidates(&mut completed, Arc::clone(&shared_config));
 
     let routes: Vec<Route> =
         completed.into_iter().map(|cand| cand.finalize()).collect();

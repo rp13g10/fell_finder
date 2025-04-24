@@ -25,7 +25,7 @@ pub struct Candidate {
     pub visited: FxHashSet<i64>,
     pub geometry: CandidateGeometry,
     pub metrics: CandidateMetrics,
-    config: Arc<RouteConfig>,
+    pub config: Arc<RouteConfig>,
     pub cur_inx: NodeIndex,
 }
 

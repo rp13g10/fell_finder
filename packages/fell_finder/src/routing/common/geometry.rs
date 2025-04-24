@@ -10,8 +10,8 @@ use crate::common::graph_data::EdgeData;
 #[derive(Clone, Debug, PartialEq)]
 pub struct CandidateGeometry {
     // TODO: Consider using the Default trait
-    lats: Vec<f64>,
-    lons: Vec<f64>,
+    pub lats: Vec<f64>,
+    pub lons: Vec<f64>,
     dists: Vec<f64>,
     eles: Vec<f64>,
 }
