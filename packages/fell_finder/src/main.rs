@@ -22,8 +22,6 @@ async fn get_routes(
     State(state): State<AppState>,
     Query(query): Query<UserRouteConfig>,
 ) -> impl IntoResponse {
-    let now = Instant::now();
-
     let route_config: RouteConfig = query.into();
 
     let nodes = load_nodes(&state.db, &route_config).await;
@@ -38,8 +36,6 @@ async fn get_routes(
     (start_inx, graph) = drop_unreachable_nodes(graph, &route_config);
 
     let routes = generate_routes(graph, route_config, start_inx);
-
-    let elapsed = now.elapsed();
 
     (axum::http::StatusCode::OK, Json(routes)).into_response()
 }
