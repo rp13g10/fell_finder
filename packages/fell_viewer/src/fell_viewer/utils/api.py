@@ -35,13 +35,7 @@ def get_user_requested_route(config: RouteConfig) -> list[Route]:
 
     url = f"{base_url}?{query}"
 
-    print("Generated URL")
-    print(url)
-
     response = requests.get(url, headers={"Content-Type": "application/json"})
-
-    print(response.status_code)
-    print(response.content[:512])
 
     raw_routes = json.loads(response.content)
 

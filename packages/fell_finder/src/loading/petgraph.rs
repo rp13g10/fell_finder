@@ -135,7 +135,7 @@ pub fn tag_dists_to_start(
         if let Some(weight) = graph.node_weight_mut(*node_inx) {
             weight.dist_to_start = Some(*dist);
         } else {
-            println!("Node {:?} has no weight!", node_inx)
+            ()
         }
     }
 

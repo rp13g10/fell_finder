@@ -38,14 +38,8 @@ async fn get_routes(
     (start_inx, graph) = drop_unreachable_nodes(graph, &route_config);
 
     let routes = generate_routes(graph, route_config, start_inx);
-    println!("{:?} routes generated", routes.len());
-
-    for route in routes.iter() {
-        println!("{:?}: {:?}", &route.id, &route.metrics)
-    }
 
     let elapsed = now.elapsed();
-    println!("Elapsed: {:.2?}", elapsed);
 
     (axum::http::StatusCode::OK, Json(routes)).into_response()
 }

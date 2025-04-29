@@ -109,8 +109,6 @@ fn bin_candidates(
         };
     }
 
-    // println!("Candidates binned into: {:?}", binned.keys());
-
     Ok(binned)
 }
 
@@ -121,6 +119,43 @@ fn get_similarity(c1: &Candidate, c2: &Candidate) -> f64 {
     let intersection =
         c1.visited.intersection(&c2.visited).into_iter().count() as f64;
     intersection / union
+}
+
+/// Return the Ordering of candidate a relative to candidate b. Candidates are
+/// sorted by distance in KMs, then by elevation gain
+fn get_cand_ordering(
+    a: &Candidate,
+    b: &Candidate,
+    mode: &RouteMode,
+) -> Ordering {
+    let a_t1 = (a.metrics.common.dist / 1000.0) as isize;
+    let b_t1 = (b.metrics.common.dist / 1000.0) as isize;
+
+    let a_t2 = match mode {
+        RouteMode::Hilly => a.metrics.common.gain,
+        RouteMode::Flat => -a.metrics.common.gain,
+    } as isize;
+
+    let b_t2 = match mode {
+        RouteMode::Hilly => b.metrics.common.gain,
+        RouteMode::Flat => -b.metrics.common.gain,
+    } as isize;
+
+    let a_data = (a_t1, a_t2);
+
+    let b_data = (b_t1, b_t2);
+
+    a_data.cmp(&b_data)
+}
+
+// Sort a vector of candidates according to the user preference, the
+// hilliest/flattest route will become the first item in the vector
+pub fn sort_candidates(
+    candidates: &mut Vec<Candidate>,
+    config: Arc<RouteConfig>,
+) {
+    // Note inverse comparison to sort in descending order
+    candidates.sort_by(|a, b| get_cand_ordering(b, a, &config.route_mode));
 }
 
 /// For the selected threshold, check whether the provided candidate is below
@@ -138,34 +173,6 @@ fn check_if_candidate_is_dissimilar(
         }
     }
     true
-}
-
-// Sort candidates by distance (to the nearest km), then gain (to the nearest
-// 10m)
-fn get_cand_ordering(a: &Candidate, b: &Candidate) -> Ordering {
-    let a_data = (
-        a.metrics.common.dist as usize,
-        (a.metrics.common.gain / 10.0) as usize,
-    );
-
-    let b_data = (
-        b.metrics.common.dist as usize,
-        (b.metrics.common.gain / 10.0) as usize,
-    );
-
-    a_data.cmp(&b_data)
-}
-
-// Sort a vector of candidates according to the user preference, the
-// hilliest/flattest route will become the first item in the vector
-pub fn sort_candidates(
-    candidates: &mut Vec<Candidate>,
-    config: Arc<RouteConfig>,
-) {
-    match config.route_mode {
-        RouteMode::Hilly => candidates.sort_by(|a, b| get_cand_ordering(b, a)),
-        RouteMode::Flat => candidates.sort_by(|a, b| get_cand_ordering(a, b)),
-    }
 }
 
 /// Retain only sufficiently different routes, the similarity threshold will be
@@ -243,6 +250,8 @@ pub fn prune_candidates(
     if candidates.len() <= config.max_candidates {
         return candidates;
     }
+
+    // TODO: Improve error handling here
 
     let binned = match bin_candidates(candidates) {
         Ok(cands) => cands,
@@ -564,28 +573,247 @@ mod tests {
 
     #[cfg(test)]
     mod test_get_cand_ordering {
-        #[test]
-        fn test_lt() {}
+        use super::*;
 
         #[test]
-        fn test_eq() {}
+        fn test_gt_same_kms_hilly() {
+            let test_mode = RouteMode::Hilly;
+            let mut c1 = get_test_candidate();
+            let mut c2 = get_test_candidate();
+
+            // Distances should be same after cast to int --> order by gain
+            c1.metrics.common.dist = 10543.2;
+            c2.metrics.common.dist = 10987.6;
+
+            c1.metrics.common.gain = 1000.0;
+            c2.metrics.common.gain = 900.0;
+
+            let target = Ordering::Greater;
+
+            let result = get_cand_ordering(&c1, &c2, &test_mode);
+
+            assert_eq!(result, target);
+        }
 
         #[test]
-        fn test_gt() {}
-    }
+        fn test_lt_same_kms_hilly() {
+            let test_mode = RouteMode::Hilly;
+            let mut c1 = get_test_candidate();
+            let mut c2 = get_test_candidate();
 
-    #[cfg(test)]
-    mod test_sort_candidates {
-        #[test]
-        fn test_hilly() {}
+            // Distances should be same after cast to int --> order by gain
+            c1.metrics.common.dist = 10543.2;
+            c2.metrics.common.dist = 10987.6;
+
+            c1.metrics.common.gain = 900.0;
+            c2.metrics.common.gain = 1000.0;
+
+            let target = Ordering::Less;
+
+            let result = get_cand_ordering(&c1, &c2, &test_mode);
+
+            assert_eq!(result, target);
+        }
 
         #[test]
-        fn test_flat() {}
+        fn test_gt_same_kms_flat() {
+            let test_mode = RouteMode::Flat;
+            let mut c1 = get_test_candidate();
+            let mut c2 = get_test_candidate();
+
+            // Distances should be same after cast to int --> order by gain
+            c1.metrics.common.dist = 10543.2;
+            c2.metrics.common.dist = 10987.6;
+
+            c1.metrics.common.gain = 900.0;
+            c2.metrics.common.gain = 1000.0;
+
+            let target = Ordering::Greater;
+
+            let result = get_cand_ordering(&c1, &c2, &test_mode);
+
+            assert_eq!(result, target);
+        }
+
+        #[test]
+        fn test_lt_same_kms_flat() {
+            let test_mode = RouteMode::Flat;
+            let mut c1 = get_test_candidate();
+            let mut c2 = get_test_candidate();
+
+            // Distances should be same after cast to int --> order by gain
+            c1.metrics.common.dist = 10543.2;
+            c2.metrics.common.dist = 10987.6;
+
+            c1.metrics.common.gain = 1000.0;
+            c2.metrics.common.gain = 900.0;
+
+            let target = Ordering::Less;
+
+            let result = get_cand_ordering(&c1, &c2, &test_mode);
+
+            assert_eq!(result, target);
+        }
+
+        #[test]
+        fn test_gt_diff_kms() {
+            let test_mode = RouteMode::Hilly;
+            let mut c1 = get_test_candidate();
+            let mut c2 = get_test_candidate();
+
+            // Different distances after rounding, sort should prefer the
+            // longer route
+            c1.metrics.common.dist = 11543.2;
+            c2.metrics.common.dist = 10987.6;
+
+            c1.metrics.common.gain = 1000.0;
+            c2.metrics.common.gain = 900.0;
+
+            let target = Ordering::Greater;
+
+            let result = get_cand_ordering(&c1, &c2, &test_mode);
+
+            assert_eq!(result, target);
+        }
+
+        #[test]
+        fn test_lt_diff_kms() {
+            let test_mode = RouteMode::Flat;
+            let mut c1 = get_test_candidate();
+            let mut c2 = get_test_candidate();
+
+            // Different distances after rounding, sort should prefer the
+            // longer route
+            c1.metrics.common.dist = 10543.2;
+            c2.metrics.common.dist = 11987.6;
+
+            c1.metrics.common.gain = 1000.0;
+            c2.metrics.common.gain = 900.0;
+
+            let target = Ordering::Less;
+
+            let result = get_cand_ordering(&c1, &c2, &test_mode);
+
+            assert_eq!(result, target);
+        }
+
+        #[test]
+        fn test_eq() {
+            let test_mode = RouteMode::Hilly;
+            let mut c1 = get_test_candidate();
+            let mut c2 = get_test_candidate();
+
+            // Distances should be same after cast to int --> order by gain
+            c1.metrics.common.dist = 10543.2;
+            c2.metrics.common.dist = 10987.6;
+
+            c1.metrics.common.gain = 1000.0;
+            c2.metrics.common.gain = 1000.0;
+
+            let target = Ordering::Equal;
+
+            let result = get_cand_ordering(&c1, &c2, &test_mode);
+
+            assert_eq!(result, target);
+        }
     }
 
     #[test]
-    fn test_get_dissimilar_routes() {}
+    fn test_sort_candidates() {
+        let mut c1 = get_test_candidate();
+        let mut c2 = get_test_candidate();
+        let mut c3 = get_test_candidate();
+
+        // Test config has RouteType::Hilly
+        let test_config = Arc::new(get_test_config());
+
+        // 1 == 2 < 3
+        c1.metrics.common.dist = 10543.2;
+        c2.metrics.common.dist = 10987.6;
+        c3.metrics.common.dist = 11456.7;
+
+        // 1 > 2 > 3
+        c1.metrics.common.gain = 1300.0;
+        c2.metrics.common.gain = 1200.0;
+        c3.metrics.common.gain = 1100.0;
+
+        // Longest first, then sorted by gain. Hillest route first in output.
+        let target = vec![c3.clone(), c1.clone(), c2.clone()];
+
+        let mut result = vec![c3.clone(), c2.clone(), c1.clone()];
+        sort_candidates(&mut result, test_config);
+
+        assert_eq!(result, target);
+    }
 
     #[test]
-    fn test_prune_candidates() {}
+    fn test_get_dissimilar_routes() {
+        let mut test_candidate_1 = get_test_candidate();
+        let mut test_candidate_2 = get_test_candidate();
+        let mut test_candidate_3 = get_test_candidate();
+        let mut test_candidate_4 = get_test_candidate();
+        let mut test_candidate_5 = get_test_candidate();
+
+        // Candidate 5 is the longest, and will be selected first
+        for point in [0, 1, 2, 3].into_iter() {
+            test_candidate_5.visited.insert(point);
+        }
+        test_candidate_5.metrics.common.dist = 11000.0;
+        test_candidate_5.metrics.common.gain = 500.0;
+
+        // Candidates 2 and 3 are very similar, 2 selected first due to gain
+        for point in [4, 5, 6, 7, 8].into_iter() {
+            test_candidate_2.visited.insert(point.clone());
+            test_candidate_3.visited.insert(point);
+        }
+        test_candidate_2.visited.insert(9);
+
+        test_candidate_2.metrics.common.dist = 10000.0;
+        test_candidate_3.metrics.common.dist = 10000.0;
+        test_candidate_2.metrics.common.gain = 500.0;
+        test_candidate_3.metrics.common.gain = 400.0;
+
+        // Candidates 1 and 4 are different, 1 selected first due to gain
+        // Over 50% similarity, but picked up on later iterations
+        for point in [6, 7, 8].into_iter() {
+            test_candidate_1.visited.insert(point.clone());
+            test_candidate_4.visited.insert(point);
+        }
+        test_candidate_1.visited.insert(10);
+        test_candidate_4.visited.insert(11);
+
+        test_candidate_1.metrics.common.dist = 10000.0;
+        test_candidate_4.metrics.common.dist = 10000.0;
+        test_candidate_1.metrics.common.gain = 300.0;
+        test_candidate_4.metrics.common.gain = 200.0;
+
+        let test_config = Arc::new(get_test_config());
+        let test_target_count: usize = 3;
+
+        let mut test_candidates = vec![
+            test_candidate_1.clone(),
+            test_candidate_2.clone(),
+            test_candidate_3.clone(),
+            test_candidate_4.clone(),
+            test_candidate_5.clone(),
+        ];
+
+        let target =
+            vec![test_candidate_5, test_candidate_2, test_candidate_1];
+
+        let result = get_dissimilar_routes(
+            &mut test_candidates,
+            test_target_count,
+            test_config,
+        );
+
+        assert_eq!(result, target);
+        // panic!("Panic!")
+    }
+
+    #[test]
+    fn test_prune_candidates() {
+        // Skipping this for now, setup will need some thought and complex
+        // logic is tested separately
+    }
 }
