@@ -11,7 +11,6 @@ use fell_finder::loading::postgres::{load_edges, load_nodes};
 use fell_finder::routing::zimmer::generate_routes;
 use serde_json::json;
 use sqlx::postgres::{PgPool, PgPoolOptions};
-use std::time::Instant;
 
 #[derive(Clone)]
 struct AppState {
