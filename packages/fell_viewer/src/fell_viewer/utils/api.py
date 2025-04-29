@@ -10,17 +10,7 @@ from fell_viewer.containers.config import RouteConfig
 from fell_viewer.containers.routes import Route
 
 
-def get_user_requested_route(config: RouteConfig) -> list[Route]:
-    """Based on the user-provided configuration, generate routes which match
-    their requirements and return them for use in the webapp.
-
-    Args:
-        config: The user-provided configuration for route creation
-
-    Returns:
-        A list of generated routes
-
-    """
+def _gen_query_url(config: RouteConfig) -> str:
     base_url = "http://localhost:8000/loop"
 
     query = []
@@ -35,12 +25,37 @@ def get_user_requested_route(config: RouteConfig) -> list[Route]:
 
     url = f"{base_url}?{query}"
 
-    response = requests.get(url, headers={"Content-Type": "application/json"})
+    return url
 
-    raw_routes = json.loads(response.content)
+
+def get_user_requested_route(config: RouteConfig) -> list[Route]:
+    """Based on the user-provided configuration, generate routes which match
+    their requirements and return them for use in the webapp.
+
+    Args:
+        config: The user-provided configuration for route creation
+
+    Returns:
+        A list of generated routes
+
+    """
 
     generated = []
-    for route in raw_routes:
-        generated.append(Route.from_api_response(route))
+    for mult in [1, 2, 2, 2]:
+        config.max_candidates *= mult
+
+        url = _gen_query_url(config)
+
+        response = requests.get(
+            url, headers={"Content-Type": "application/json"}
+        )
+
+        raw_routes = json.loads(response.content)
+
+        for route in raw_routes:
+            generated.append(Route.from_api_response(route))
+
+        if generated:
+            break
 
     return generated

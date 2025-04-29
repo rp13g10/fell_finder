@@ -79,6 +79,7 @@ These new features are listed in approximate order of priority
 ### API
 
 * Containerise everything
+* Add max similarity parameter when getting dissimilar routes, apply it when getting final routes to show to user
 * Improve route validation when surface restrictions are in place
   * Check on each step that configured max has not been exceeded
 * Run profiling through again, check for any issues introduced by recent changes
@@ -90,6 +91,10 @@ These new features are listed in approximate order of priority
 
 ### Frontend
 
+* Set route creation callback to dynamically adjust max num. of candidates
+  * Current approach proves the concept, but isn't optimal
+* Bring back the progress bar!
+  * Will require the ability to poll the API for progress, good development opportunity
 * Build out the route finding page of the webapp
   * Page layout could stand to be improved, collapsible sidebars may help
 * Formally define the expected end state of the webapp
