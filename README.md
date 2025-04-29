@@ -59,16 +59,34 @@ FF_APP_NO_ROUTES = 10
 
 These new features are listed in approximate order of priority
 
-### Backend
+### Execution
 
-* Ensure full test coverage on any code which is not app-specific
 * Containerise everything
-* Set up an airflow pipeline for ingestion
+* Set up k8s/swarm to handle scaling, load balancing
 * Deploy to the cloud
+
+### Ingestion
+
 * Identify ways to further improve the accuracy of calculated elevation gain/loss
   * Other sources of elevation data to be evaluated, candidates are OS Terrain and SRTM
   * Post-processing may be a valid tactic, smoothing out the profile for each edge in the graph
   * Further checks on the tags present in the OSM data may also help (tunnels, bridges, etc)
+* Set up an airflow pipeline for ingestion, bring in data for all of the UK
+  * Elevation unlikely to change much, but map data will
+  * Spark profile may need tuning to handle increased volume
+  * Check for OSM parsers which can evaluate lazily
+
+### API
+
+* Containerise everything
+* Improve route validation when surface restrictions are in place
+  * Check on each step that configured max has not been exceeded
+* Run profiling through again, check for any issues introduced by recent changes
+* Improve error handling in Rust API, should be able to return other status codes
+* Hyperparameter optimisation for created routes
+  * Set up the API with a debug mode, return additional info about data used to create routes
+  * Use regression model to set params?
+
 
 ### Frontend
 
