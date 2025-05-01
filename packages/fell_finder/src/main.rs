@@ -3,7 +3,7 @@ use axum::response::IntoResponse;
 use axum::routing::get;
 use axum::serve;
 use axum::{Json, Router};
-use fell_finder::config::route::{RouteConfig, UserRouteConfig};
+use fell_finder::common::config::{RouteConfig, UserRouteConfig};
 use fell_finder::loading::petgraph::{
     create_graph, drop_unreachable_nodes, tag_dists_to_start, tag_start_node,
 };
@@ -11,7 +11,6 @@ use fell_finder::loading::postgres::{load_edges, load_nodes};
 use fell_finder::routing::zimmer::generate_routes;
 use serde_json::json;
 use sqlx::postgres::{PgPool, PgPoolOptions};
-use std::time::Instant;
 
 #[derive(Clone)]
 struct AppState {
@@ -22,8 +21,6 @@ async fn get_routes(
     State(state): State<AppState>,
     Query(query): Query<UserRouteConfig>,
 ) -> impl IntoResponse {
-    let now = Instant::now();
-
     let route_config: RouteConfig = query.into();
 
     let nodes = load_nodes(&state.db, &route_config).await;
@@ -38,14 +35,6 @@ async fn get_routes(
     (start_inx, graph) = drop_unreachable_nodes(graph, &route_config);
 
     let routes = generate_routes(graph, route_config, start_inx);
-    println!("{:?} routes generated", routes.len());
-
-    for route in routes.iter() {
-        println!("{:?}: {:?}", &route.id, &route.metrics)
-    }
-
-    let elapsed = now.elapsed();
-    println!("Elapsed: {:.2?}", elapsed);
 
     (axum::http::StatusCode::OK, Json(routes)).into_response()
 }

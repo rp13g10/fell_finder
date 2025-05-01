@@ -1,14 +1,18 @@
+use std::cmp::Ordering;
+use std::env;
 use std::sync::Arc;
 
 use indicatif::ProgressBar;
 use rayon::prelude::*;
 
-use crate::config::route::RouteConfig;
-use crate::loading::structs::{EdgeData, NodeData};
-use crate::routing::structs::{Candidate, Route, StepResult};
+use crate::common::config::RouteConfig;
+use crate::common::graph_data::{EdgeData, NodeData};
+use crate::routing::common::{Candidate, Route, StepResult};
 use petgraph::graph::{EdgeReference, NodeIndex};
+use petgraph::visit::EdgeRef;
 use petgraph::{Directed, Graph};
 
+use crate::common::config::RouteMode;
 use crate::routing::pruning::{get_dissimilar_routes, prune_candidates};
 
 /// For a single candidate, determine all edges which can be reached and
@@ -21,7 +25,11 @@ fn process_candidate(
         graph.edges(candidate.cur_inx).collect();
     let mut cand_results = Vec::<StepResult>::new();
     for eref in edges {
-        cand_results.push(candidate.clone().take_step(&eref));
+        let dst = eref.target();
+        let ddata = graph
+            .node_weight(dst)
+            .expect("Destination doesn't exist in the graph!");
+        cand_results.push(candidate.clone().take_step(&eref, &ddata));
     }
     cand_results
 }
@@ -55,30 +63,47 @@ fn process_candidates_threads(
     (new_candidates, completed)
 }
 
-/// Process a vector of candidates using a single-threaded application, useful
-/// for profiling but will need to be removed from the final build
-fn process_candidates(
-    graph: &Graph<NodeData, EdgeData, Directed, u32>,
-    candidates: Vec<Candidate>,
-) -> (Vec<Candidate>, Vec<Candidate>) {
-    let mut new_candidates: Vec<Candidate> = Vec::new();
-    let mut completed: Vec<Candidate> = Vec::new();
-
-    for candidate in candidates.into_iter() {
-        let results = process_candidate(graph, &candidate);
-
-        for result in results.into_iter() {
-            match result {
-                StepResult::Complete(route) => completed.push(route),
-                StepResult::Valid(cand) => {
-                    new_candidates.push(cand);
-                }
-                StepResult::Invalid => {}
-            }
+/// Return the Ordering of candidate a relative to candidate b. Candidates are
+/// sorted by distance in KMs, then by elevation gain
+fn get_route_ordering(a: &Route, b: &Route, mode: &RouteMode) -> Ordering {
+    let a_ratio = match mode {
+        RouteMode::Hilly => a.metrics.common.gain / a.metrics.common.dist,
+        RouteMode::Flat => {
+            -1.0 * (a.metrics.common.gain / a.metrics.common.dist)
         }
-    }
+    };
+    let b_ratio = match mode {
+        RouteMode::Hilly => b.metrics.common.gain / b.metrics.common.dist,
+        RouteMode::Flat => {
+            -1.0 * (b.metrics.common.gain / b.metrics.common.dist)
+        }
+    };
 
-    (new_candidates, completed)
+    match a_ratio.partial_cmp(&b_ratio) {
+        Some(ordering) => ordering,
+        None => Ordering::Equal,
+    }
+}
+
+/// Sort a vector of routes according to the user preference, the
+/// hilliest/flattest route will become the first item in the vector
+pub fn sort_routes(routes: &mut Vec<Route>, config: Arc<RouteConfig>) {
+    // Note inverse comparison to sort in descending order
+    routes.sort_by(|a, b| get_route_ordering(b, a, &config.route_mode));
+}
+
+/// Fetch the user preference for number of routes to display. Defaults to 10
+/// if the FF_MAX_CANDS environment variable has not been set
+fn get_num_routes_to_display() -> usize {
+    let maybe_usr_pref = env::var("FF_MAX_CANDS");
+
+    match maybe_usr_pref {
+        Ok(str) => match str.parse() {
+            Ok(int) => int,
+            Err(_) => 10,
+        },
+        Err(_) => 10,
+    }
 }
 
 /// Recursive algorithm which crawls the provided graph for routes, starting at
@@ -97,8 +122,6 @@ pub fn generate_routes(
     let seed = Candidate::new(&graph, Arc::clone(&shared_config), &start_inx);
     candidates.push(seed);
 
-    // let mut counter: usize = 0;
-
     let bar = ProgressBar::new(shared_config.max_distance as u64);
 
     let mut completed: Vec<Candidate> = Vec::new();
@@ -114,20 +137,21 @@ pub fn generate_routes(
             .fold(0.0, |a, b| a + b.metrics.common.dist);
         let avg_dist = (tot_dist / candidates.len() as f64) as u64;
         bar.set_position(avg_dist);
-
-        // Early stopping for profiling
-        // counter += 1;
-        // if counter == 32 {
-        //     return completed;
-        // }
     }
 
     bar.finish();
 
-    completed = get_dissimilar_routes(&mut completed, 25);
+    let to_display = get_num_routes_to_display();
+    completed = get_dissimilar_routes(
+        &mut completed,
+        to_display,
+        Arc::clone(&shared_config),
+    );
 
-    let routes: Vec<Route> =
+    let mut routes: Vec<Route> =
         completed.into_iter().map(|cand| cand.finalize()).collect();
+
+    sort_routes(&mut routes, Arc::clone(&shared_config));
 
     routes
 }

@@ -1,11 +1,8 @@
 To Do
 
 Current status:
-Files are now being written to CSV in the optimised folder
-CSV files are copied into postgres
-Tests need updating, general code tidy-up
-
-Once data loaded & code tested, head back to rust and use sqlx to pull the data
+Building out tests for rust code
+Refining structure as required
 
 Commands for use
 

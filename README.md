@@ -13,7 +13,7 @@ The secondary objective is to provide myself with a challenge, and an opportunit
 
 This project is still in early development, with significant work still required before it's ready for general use. That said, with a little leg-work a viable PoC is now up and running. At present, the ingestion pipeline is largely up and running (although it's executed on-demand at the moment). A basic webapp is provided, which is able to plot routes on demand and display them to the user. Route creation has been sped up significantly following a rewrite in rust, although longer distances can still take a few seconds to generate.
 
-The rust portion of the code is currently in MVP state, and has a number of improvements which need to be made. This will be done at the same time as writing test cases to try and mop up any remaining logic issues. The overall structure of code in the repo is not yet final.
+The rust portion of the code is currently in MVP state, and has a number of improvements which need to be made. My immediate next priority is configuring the project to work in Docker containers with either k8s or swarm. Once this has been achieved, I will continue working through remaining items in the backlog below.
 
 
 ## Instructions for use
@@ -43,7 +43,7 @@ Eventually, everything will be set up to run in containers. Until then, it takes
 Proper documentation for these is pending (as the list of variables is not yet complete). You will need the following environment variables set in order to run the code. The recommendation is that this be done with a `.env` file.
 
 ```
-FF_DATA_DIR = /hpath/to/your/data/dir
+FF_DATA_DIR = /path/to/your/data/dir
 FF_DEBUG_MODE = true
 FF_MAX_CANDS = 2048
 FF_MAX_SIMILARITY = 0.99
@@ -59,19 +59,45 @@ FF_APP_NO_ROUTES = 10
 
 These new features are listed in approximate order of priority
 
-### Backend
+### Execution
 
-* Ensure full test coverage on any code which is not app-specific
 * Containerise everything
-* Set up an airflow pipeline for ingestion
+* Set up k8s/swarm to handle scaling, load balancing
 * Deploy to the cloud
+
+### Ingestion
+
+* Bring in data for all of the UK
+  * osm-parquetizer can remove pandas as a bottleneck
+  * Potential for switching over to daft instead of pyspark, should give better performance
 * Identify ways to further improve the accuracy of calculated elevation gain/loss
+  * Alter join between OSM and elevation, bring in a larger area for each point and average it out?
   * Other sources of elevation data to be evaluated, candidates are OS Terrain and SRTM
   * Post-processing may be a valid tactic, smoothing out the profile for each edge in the graph
   * Further checks on the tags present in the OSM data may also help (tunnels, bridges, etc)
+* Set up an airflow pipeline for ingestion, bring in data for all of the UK
+  * Elevation unlikely to change much, but map data will
+  * Spark profile may need tuning to handle increased volume
+  * Check for OSM parsers which can evaluate lazily
+
+### API
+
+* Add max similarity parameter when getting dissimilar routes, apply it when getting final routes to show to user
+* Improve route validation when surface restrictions are in place
+  * Check on each step that configured max has not been exceeded
+* Run profiling through again, check for any issues introduced by recent changes
+* Improve error handling in Rust API, should be able to return other status codes
+* Hyperparameter optimisation for created routes
+  * Set up the API with a debug mode, return additional info about data used to create routes
+  * Use regression model to set params?
+
 
 ### Frontend
 
+* Set route creation callback to dynamically adjust max num. of candidates
+  * Current approach proves the concept, but isn't optimal
+* Bring back the progress bar!
+  * Will require the ability to poll the API for progress, good development opportunity
 * Build out the route finding page of the webapp
   * Page layout could stand to be improved, collapsible sidebars may help
 * Formally define the expected end state of the webapp

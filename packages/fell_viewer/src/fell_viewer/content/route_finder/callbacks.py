@@ -7,7 +7,7 @@ from typing import Callable, Dict, List, Literal, Tuple, Union
 
 import dash_leaflet as dl
 from dash import Input, Output, State, callback, html, no_update
-from dash._callback import NoUpdate
+from dash._callback import NoUpdate  # type: ignore
 from dash.development.base_component import Component
 from plotly.graph_objects import Figure
 
