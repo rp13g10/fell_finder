@@ -192,4 +192,53 @@ class TestRoute:
     def test_from_api_response(self):
         """Check that creation from API response is working"""
 
-        # TODO: Build this out using real response
+        # Arrange
+        test_response = {
+            "id": "route_id",
+            "geometry": {
+                "coords": [(-5.0, 45.0), (0.0, 50.0), (5.0, 55.0)],
+                "dists": [0.0, 5.0, 10.0],
+                "eles": [100.0, 150.0, 200.0],
+                "bbox": dict(
+                    min_lat=-5.0, max_lat=5.0, min_lon=50.0, max_lon=60.0
+                ),
+            },
+            "metrics": {
+                "common": {
+                    "dist": 1.0,
+                    "loss": 2.0,
+                    "gain": 3.0,
+                    "s_dists": {"surface_1": 1.0},
+                }
+            },
+        }
+        target_dict = {
+            "route_id": "route_id",
+            "geometry": {
+                "lats": [-5.0, 0.0, 5.0],
+                "lons": [45.0, 50.0, 55.0],
+                "dists": [0.0, 5.0, 10.0],
+                "eles": [100.0, 150.0, 200.0],
+                "bbox": dict(
+                    min_lat=-5.0, max_lat=5.0, min_lon=50.0, max_lon=60.0
+                ),
+            },
+            "metrics": {
+                "dist": 1.0,
+                "loss": 2.0,
+                "gain": 3.0,
+                "s_dists": {"surface_1": 1.0},
+            },
+        }
+
+        # Act
+        result_route = Route.from_api_response(test_response)
+        result_dict = result_route.to_dict()
+
+        # Assert
+        assert isinstance(result_route, Route)
+        assert isinstance(result_route.geometry, RouteGeometry)
+        assert isinstance(result_route.metrics, RouteMetrics)
+        assert isinstance(result_route.geometry.bbox, BBox)
+        assert result_route.route_id == "route_id"
+        assert result_dict == target_dict
