@@ -1,11 +1,9 @@
 """Tests for the containers which store route information"""
 
-import pytest
 from typing import Any
+
+import pytest
 from pytest import approx
-import json
-from collections import defaultdict
-from textwrap import dedent
 
 from fell_viewer.containers.routes import (
     BBox,
