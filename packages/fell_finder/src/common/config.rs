@@ -41,15 +41,23 @@ impl SurfaceRestriction {
     /// Create a new surface restriction based on user provided input. If
     /// either argument is None, this will also return None
     pub fn new(
-        restricted_surfaces: Option<Vec<String>>,
+        restricted_surfaces: Option<String>,
         restricted_surfaces_perc: Option<f64>,
     ) -> Option<SurfaceRestriction> {
         match restricted_surfaces {
             Some(surfaces) => match restricted_surfaces_perc {
-                Some(perc) => Some(SurfaceRestriction {
-                    restricted_surfaces: surfaces,
-                    restricted_surfaces_perc: perc,
-                }),
+                Some(perc) => {
+                    let surfaces_vec: Vec<String> = surfaces
+                        .split(',')
+                        .into_iter()
+                        .map(|item| String::from(item))
+                        .collect();
+
+                    Some(SurfaceRestriction {
+                        restricted_surfaces: surfaces_vec,
+                        restricted_surfaces_perc: perc,
+                    })
+                }
                 None => None,
             },
             None => None,
@@ -68,7 +76,7 @@ pub struct UserRouteConfig {
     pub target_distance: f64,
     pub highway_types: String,
     pub surface_types: String,
-    pub restricted_surfaces: Option<Vec<String>>,
+    pub restricted_surfaces: Option<String>,
     pub restricted_surfaces_perc: Option<f64>,
     pub distance_tolerance: f64,
 }
@@ -210,10 +218,8 @@ mod tests {
     /// Creation of surface restriction, all args provided
     #[test]
     fn test_new_restriction_some() {
-        let maybe_result = SurfaceRestriction::new(
-            Some(vec!["surface".to_string()]),
-            Some(0.5),
-        );
+        let maybe_result =
+            SurfaceRestriction::new(Some("surface".to_string()), Some(0.5));
 
         let target = SurfaceRestriction {
             restricted_surfaces: vec!["surface".to_string()],
@@ -241,7 +247,7 @@ mod tests {
     #[test]
     fn test_new_restriction_no_perc() -> Result<(), String> {
         let maybe_result =
-            SurfaceRestriction::new(Some(vec!["surface".to_string()]), None);
+            SurfaceRestriction::new(Some("surface".to_string()), None);
 
         match maybe_result {
             Some(_) => Err("Should not have received a value".to_string()),
@@ -261,7 +267,7 @@ mod tests {
             target_distance: 0.5,
             highway_types: "highway_1,highway_2".to_string(),
             surface_types: "surface_1,surface_2".to_string(),
-            restricted_surfaces: Some(vec!["restriction".to_string()]),
+            restricted_surfaces: Some("restriction".to_string()),
             restricted_surfaces_perc: Some(0.6),
             distance_tolerance: 0.05,
         };

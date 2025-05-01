@@ -145,13 +145,8 @@ impl Candidate {
         dist
     }
 
-    /// Once a circular route has been formed, check it against all of the
-    /// user-provided restrictions (target distance, surface restrictions)
-    /// and determine whether all requirements have been met
-    fn validate_route_completion(&self) -> bool {
-        let rest_pass = match &self.config.surface_restriction {
-            // TODO: Move this into validation during route creation, route may
-            //       go over the limit before completion
+    fn validate_against_surface_reqs(&self) -> bool {
+        match &self.config.surface_restriction {
             Some(restriction) => {
                 let s_dist = self
                     .sum_surfaces_distance(&restriction.restricted_surfaces);
@@ -160,7 +155,14 @@ impl Candidate {
                 if s_dist > max_s_dist { false } else { true }
             }
             None => true,
-        };
+        }
+    }
+
+    /// Once a circular route has been formed, check it against all of the
+    /// user-provided restrictions (target distance, surface restrictions)
+    /// and determine whether all requirements have been met
+    fn validate_route_completion(&self) -> bool {
+        let rest_pass = self.validate_against_surface_reqs();
 
         match rest_pass {
             true => {
@@ -180,9 +182,6 @@ impl Candidate {
         ddata: &NodeData,
     ) -> StepResult {
         let edata = eref.weight();
-
-        // TODO: UPDATE THIS TO TAKE DESTINATION NODE, CHECK DISTANCE TO START
-        //       AGAINST CURRENT DISTANCE
 
         // Pre-validation -----------------------------------------------------
         // Check if node has already been visited
@@ -231,7 +230,10 @@ impl Candidate {
                 false => StepResult::Invalid,
             }
         } else {
-            StepResult::Valid(self)
+            match self.validate_against_surface_reqs() {
+                true => StepResult::Valid(self),
+                false => StepResult::Invalid,
+            }
         }
     }
 }
@@ -578,7 +580,7 @@ mod tests {
             // Create candidate with route restriction, set target dist
             let mut test_config = get_test_config();
             test_config.surface_restriction = SurfaceRestriction::new(
-                Some(vec!["surface_1".to_string()]),
+                Some("surface_1".to_string()),
                 Some(0.5),
             );
             test_config.min_distance = 900.0;
@@ -604,7 +606,7 @@ mod tests {
             // Create candidate with route restriction, set target dist
             let mut test_config = get_test_config();
             test_config.surface_restriction = SurfaceRestriction::new(
-                Some(vec!["surface_1".to_string()]),
+                Some("surface_1".to_string()),
                 Some(0.5),
             );
             test_config.min_distance = 900.0;
