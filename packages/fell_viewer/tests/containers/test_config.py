@@ -35,8 +35,6 @@ def test_route_config():
         restricted_surfaces=["restricted_surface"],
         highway_types=["highway"],
         surface_types=["surface", "restricted_surface"],
-        min_distance=10.0 / 1.1,
-        max_distance=10.0 * 1.1,
     )
 
     # Act
