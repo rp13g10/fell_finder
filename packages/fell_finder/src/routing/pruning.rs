@@ -184,6 +184,7 @@ pub fn get_dissimilar_routes(
     config: Arc<RouteConfig>,
 ) -> Vec<Candidate> {
     // TODO: Run profiler and check if there are any bottlenecks here
+    // TODO: Add support for max_similarity here using FF_MAX_SIMILARITY evar
 
     // Nothing to do if count is already below target
     if candidates.len() <= target_count {
