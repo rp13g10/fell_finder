@@ -1,19 +1,13 @@
-Next Steps:
+To Do
 
-Move all dataclasses into single folder
-Tidy up structure for routing code
-Implement filtering by surface ratio
-Build out tests for all routing code
+Current status:
+Building out tests for rust code
+Refining structure as required
 
-Proposed changes
+Commands for use
 
-- Route class needs to keep track of its geometry
-  - Reimplement as a standard class, use slots to optimise footprint
-  - Zimmer can handle this as it already keeps graph as attribute
-- Add gain/loss potential as properties based on internal geometry
-- Update ratio property to factor in gain/loss potential
-- Update function to generate new route IDs to include timestamp
-- Remove extra timestamp from app element IDs as it's no longer required
-- Add step_to_next_node as method
-- Add surface ratios as property
-- Update routeselector to accept routeconfig, set params accordingly
+Tab 1
+> packages/fell_finder/target/release/fell-finder
+
+Tab 2
+> uv run --env-file .env webapp.py

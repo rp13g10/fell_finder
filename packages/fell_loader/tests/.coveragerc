@@ -1,0 +1,7 @@
+[run]
+source_pkgs = fell_loader
+disable_warnings = module-not-measured
+
+[html]
+directory = htmlcov
+skip_empty = True

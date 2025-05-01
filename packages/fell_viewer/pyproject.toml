@@ -1,0 +1,35 @@
+[project]
+name = "fell-viewer"
+version = "0.1.0"
+description = "Frontend code for the fell-finder webapp"
+authors = [{ name = "Ross Piper", email = "rp-webservices@outlook.com" }]
+license = { text = "MIT License" }
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "dash-leaflet>=1.0.15",
+    "dash[celery,diskcache]>=2.18.2",
+    "gpxpy>=1.6.2",
+    "hatchling>=1.27.0",
+    "numpy<2.0",
+    "pandas>=2.2.3",
+    "plotly>=5.24.1",
+    "polars>=1.17.1",
+    "pyyaml>=6.0.2",
+    "tqdm>=4.67.1",
+]
+
+[tool.ruff]
+line-length = 79
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "D1", "D41", "ANN001", "ANN2", "ERA"]
+ignore = ["D107", "D415"]
+
+[tool.ruff.lint.per-file-ignores]
+"./tests/*" = ["E501", "ANN201"]
+"__init__.py" = ["D104"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

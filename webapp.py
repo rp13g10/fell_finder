@@ -1,9 +1,12 @@
 """Simple script which runs the webapp for this project in development mode"""
 
-from fell_finder.app.index import app, celery_app
-from fell_finder import app_config
+import os
+
+from fell_viewer.index import app, celery_app
+
+DEBUG = os.environ["FF_DEBUG_MODE"] == "true"
 
 __all__ = ["app", "celery_app"]
 
 if __name__ == "__main__":
-    app.run(debug=app_config["debug"])
+    app.run(debug=DEBUG)

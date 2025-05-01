@@ -6,3 +6,6 @@ old_tests/*
 *.parquet
 .coverage.*
 .coverage
+packages/fell_finder/target
+target
+.vscode/*
