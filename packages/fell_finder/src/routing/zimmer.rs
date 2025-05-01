@@ -1,4 +1,5 @@
 use std::cmp::Ordering;
+use std::env;
 use std::sync::Arc;
 
 use indicatif::ProgressBar;
@@ -84,11 +85,25 @@ fn get_route_ordering(a: &Route, b: &Route, mode: &RouteMode) -> Ordering {
     }
 }
 
-// Sort a vector of routes according to the user preference, the
-// hilliest/flattest route will become the first item in the vector
+/// Sort a vector of routes according to the user preference, the
+/// hilliest/flattest route will become the first item in the vector
 pub fn sort_routes(routes: &mut Vec<Route>, config: Arc<RouteConfig>) {
     // Note inverse comparison to sort in descending order
     routes.sort_by(|a, b| get_route_ordering(b, a, &config.route_mode));
+}
+
+/// Fetch the user preference for number of routes to display. Defaults to 10
+/// if the FF_MAX_CANDS environment variable has not been set
+fn get_num_routes_to_display() -> usize {
+    let maybe_usr_pref = env::var("FF_MAX_CANDS");
+
+    match maybe_usr_pref {
+        Ok(str) => match str.parse() {
+            Ok(int) => int,
+            Err(_) => 10,
+        },
+        Err(_) => 10,
+    }
 }
 
 /// Recursive algorithm which crawls the provided graph for routes, starting at
@@ -126,8 +141,12 @@ pub fn generate_routes(
 
     bar.finish();
 
-    completed =
-        get_dissimilar_routes(&mut completed, 25, Arc::clone(&shared_config));
+    let to_display = get_num_routes_to_display();
+    completed = get_dissimilar_routes(
+        &mut completed,
+        to_display,
+        Arc::clone(&shared_config),
+    );
 
     let mut routes: Vec<Route> =
         completed.into_iter().map(|cand| cand.finalize()).collect();
