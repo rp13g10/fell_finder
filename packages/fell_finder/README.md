@@ -12,6 +12,5 @@ This package needs to be built before it can be executed. It is recommended that
 
 ## Usage
 
-* The compiled binary can be executed using bash
-
-// TODO
+* Run the executable with `cargo run --release`
+* Use `fell_viewer` to generate API calls and view generated routes.

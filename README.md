@@ -13,7 +13,7 @@ The secondary objective is to provide myself with a challenge, and an opportunit
 
 This project is still in early development, with significant work still required before it's ready for general use. That said, with a little leg-work a viable PoC is now up and running. At present, the ingestion pipeline is largely up and running (although it's executed on-demand at the moment). A basic webapp is provided, which is able to plot routes on demand and display them to the user. Route creation has been sped up significantly following a rewrite in rust, although longer distances can still take a few seconds to generate.
 
-The rust portion of the code is currently in MVP state, and has a number of improvements which need to be made. This will be done at the same time as writing test cases to try and mop up any remaining logic issues. The overall structure of code in the repo is not yet final.
+The rust portion of the code is currently in MVP state, and has a number of improvements which need to be made. My immediate next priority is configuring the project to work in Docker containers with either k8s or swarm. Once this has been achieved, I will continue working through remaining items in the backlog below.
 
 
 ## Instructions for use
@@ -43,7 +43,7 @@ Eventually, everything will be set up to run in containers. Until then, it takes
 Proper documentation for these is pending (as the list of variables is not yet complete). You will need the following environment variables set in order to run the code. The recommendation is that this be done with a `.env` file.
 
 ```
-FF_DATA_DIR = /hpath/to/your/data/dir
+FF_DATA_DIR = /path/to/your/data/dir
 FF_DEBUG_MODE = true
 FF_MAX_CANDS = 2048
 FF_MAX_SIMILARITY = 0.99
@@ -82,7 +82,6 @@ These new features are listed in approximate order of priority
 
 ### API
 
-* Containerise everything
 * Add max similarity parameter when getting dissimilar routes, apply it when getting final routes to show to user
 * Improve route validation when surface restrictions are in place
   * Check on each step that configured max has not been exceeded
