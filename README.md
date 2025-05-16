@@ -83,8 +83,6 @@ These new features are listed in approximate order of priority
 ### API
 
 * Add max similarity parameter when getting dissimilar routes, apply it when getting final routes to show to user
-* Improve route validation when surface restrictions are in place
-  * Check on each step that configured max has not been exceeded
 * Run profiling through again, check for any issues introduced by recent changes
 * Improve error handling in Rust API, should be able to return other status codes
 * Hyperparameter optimisation for created routes

@@ -1,175 +1,40 @@
 """Unit tests for the OSM loader"""
 
 from unittest.mock import MagicMock, patch
+from typing import Any
+import pyarrow as pa
+import json
 
 import pandas as pd
 import polars as pl
+import daft
 from pandas.testing import assert_frame_equal as pd_assert_frame_equal
 from polars.testing import assert_frame_equal as pl_assert_frame_equal
 
+
 from fell_loader.parsing.osm_loader import OsmLoader
+from fell_loader.utils.testing import assert_frame_equal
 
 
-def test_subset_nodes():
-    """Check that the correct fields are being brought through"""
-    # Arrange #################################################################
-
-    # ----- Test Data -----
-    # fmt: off
-    test_cols = (
-        ['id', 'lat', 'lon', 'other'])
-
-    test_data = [
-        [0] * len(test_cols)
-    ]
-    # fmt: on
-
-    test_df = pd.DataFrame(data=test_data, columns=test_cols)
-
-    # ----- Target Data -----=
-    # fmt: off
-    tgt_cols = (
-        ['id', 'lat', 'lon'])
-
-    tgt_data = [
-        [0] * len(tgt_cols)
-    ]
-    # fmt: on
-
-    tgt_df = pd.DataFrame(data=tgt_data, columns=tgt_cols)
-
-    # Act #####################################################################
-    res_df = OsmLoader._subset_nodes(test_df)
-
-    # Assert ##################################################################
-    pd_assert_frame_equal(tgt_df, res_df)
+class MockOsmLoader(OsmLoader):
+    def __init__(self):
+        self.data_dir = "data_dir"
+        self.binary_loc = "binary_loc"
+        self.nodes_loc = ""
+        self.ways_loc = ""
+        self.relations_loc = ""
 
 
-def test_subset_edges():
-    """Check that the correct fields are being brought through"""
-    # Arrange #################################################################
-
-    # ----- Test Data -----
-    # fmt: off
-    test_cols = (
-        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'tunnel', 'oneway', 'access', 'other'])
-
-    test_data = [
-        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'tunnel', 'oneway', 'access', 'other'],
-        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'tunnel', 'oneway', 'access', 'other'],
-        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'tunnel', 'oneway', 'access', 'other']
-    ]
-    # fmt: on
-
-    test_df = pd.DataFrame(data=test_data, columns=test_cols)
-
-    # ----- Target Data -----=
-    # fmt: off
-    tgt_cols = (
-        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'tunnel', 'oneway', 'access', 'row_no'])
-
-    tgt_data = [
-        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'tunnel', 'oneway', 'access', 0],
-        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'tunnel', 'oneway', 'access', 1],
-        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'tunnel', 'oneway', 'access', 2]
-    ]
-    # fmt: on
-
-    tgt_df = pd.DataFrame(data=tgt_data, columns=tgt_cols)
-
-    # Act #####################################################################
-    res_df = OsmLoader._subset_edges(test_df)
-
-    # Assert ##################################################################
-    pd_assert_frame_equal(tgt_df, res_df)
+def test_set_parquet_locs():
+    raise AssertionError()
 
 
-@patch("fell_loader.parsing.osm_loader.OSM")
-def test_read_osm_data(mock_osm: MagicMock):
-    """Check that data is being read in, processed and converted into polars
-    dataframes"""
-    # Arrange #################################################################
+def test_unpack_osm_pbf():
+    raise AssertionError()
 
-    # Test Data ---------------------------------------------------------------
-    # ----- Nodes -----
 
-    # fmt: off
-    test_node_cols = (
-        ['id', 'lat', 'lon', 'other'])
-
-    test_node_data = [
-        ['id', 'lat', 'lon', 'other']
-    ]
-    # fmt: on
-
-    test_node_df = pd.DataFrame(data=test_node_data, columns=test_node_cols)
-
-    # ----- Edges -----
-
-    # fmt: off
-    test_edge_cols = (
-        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'tunnel', 'oneway', 'access', 'other'])
-
-    test_edge_data = [
-        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'tunnel', 'oneway', 'access', 'other'],
-        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'tunnel', 'oneway', 'access', 'other'],
-        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'tunnel', 'oneway', 'access', 'other']
-    ]
-    # fmt: on
-
-    test_edge_df = pd.DataFrame(data=test_edge_data, columns=test_edge_cols)
-
-    # ----- Initialize Class -----
-
-    mock_osm_handle = MagicMock()
-    mock_osm.return_value = mock_osm_handle
-    mock_osm_handle.get_network.return_value = test_node_df, test_edge_df
-
-    test_osm_loader = OsmLoader("data_dir")
-
-    # Target Data -------------------------------------------------------------
-
-    # ----- Nodes -----
-    # fmt: off
-    tgt_node_cols = (
-        ['id', 'lat', 'lon'])
-
-    tgt_node_data = [
-        ['id', 'lat', 'lon']
-    ]
-    # fmt: on
-
-    tgt_node_df = pl.DataFrame(
-        data=tgt_node_data, schema=tgt_node_cols, orient="row"
-    )
-
-    # ----- Edges -----
-    # fmt: off
-    tgt_edge_cols = (
-        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'tunnel', 'oneway', 'access', 'row_no'])
-
-    tgt_edge_data = [
-        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'tunnel', 'oneway', 'access', 0],
-        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'tunnel', 'oneway', 'access', 1],
-        ['id', 'u', 'v', 'highway', 'surface', 'bridge', 'tunnel', 'oneway', 'access', 2]
-    ]
-    # fmt: on
-
-    tgt_edge_df = pl.DataFrame(
-        data=tgt_edge_data, schema=tgt_edge_cols, orient="row"
-    )
-
-    # Expected Calls ----------------------------------------------------------
-
-    tgt_osm_call = "data_dir/extracts/osm/hampshire-latest.osm.pbf"
-
-    # Act #####################################################################
-    res_node_df, res_edge_df = test_osm_loader.read_osm_data()
-
-    # Assert ##################################################################
-    mock_osm.assert_called_once_with(tgt_osm_call)
-    pl_assert_frame_equal(res_node_df, tgt_node_df)
-    pl_assert_frame_equal(res_edge_df, tgt_edge_df)
+def test_read_unpacked_data():
+    raise AssertionError()
 
 
 @patch("fell_loader.parsing.osm_loader.WGS84toOSGB36")
@@ -180,51 +45,56 @@ def test_assign_bng_coords(mock_wgs84_to_osgb36: MagicMock):
 
     # ----- Test Data -----
     # fmt: off
-    _ = (
-        ['inx', 'lat', 'lon'])
-
     test_data = [
-        [0    , 50.0 , 10.0],
-        [1    , 100.0, 20.0],
-        [2    , 66.6 , 33.3]
+        {'inx': 0, 'latitude': 50.0 , 'longitude': 10.0},
+        {'inx': 1, 'latitude': 100.0, 'longitude': 20.0},
+        {'inx': 2, 'latitude': 66.6 , 'longitude': 33.3}
     ]
     # fmt: on
 
-    test_schema = {"inx": pl.Int32(), "lat": pl.Float64(), "lon": pl.Float64()}
+    test_schema = pa.schema(
+        [
+            pa.field("inx", pa.int32()),
+            pa.field("latitude", pa.float64()),
+            pa.field("longitude", pa.float64()),
+        ]
+    )
 
-    test_df = pl.DataFrame(data=test_data, schema=test_schema, orient="row")
+    test_df = daft.from_arrow(
+        pa.Table.from_pylist(test_data, schema=test_schema)
+    )
 
     # ----- Mocks -----
 
     mock_wgs84_to_osgb36.side_effect = lambda x, y: (x / 2, y / 2)
 
-    # ----- Target Data -----=
-    # fmt: off
-    _ = (
-        ['inx', 'lat', 'lon', 'easting', 'northing'])
+    # ----- Target Data ------
 
+    # fmt: off
     tgt_data = [
-        [0    , 50.0 , 10.0 , 25       , 5],
-        [1    , 100.0, 20.0 , 50       , 10],
-        [2    , 66.6 , 33.3 , 33       , 16]
+        {'inx': 0, 'latitude': 50.0 , 'longitude': 10.0, 'easting': 25, 'northing': 5},
+        {'inx': 1, 'latitude': 100.0, 'longitude': 20.0, 'easting': 50, 'northing': 10},
+        {'inx': 2, 'latitude': 66.6 , 'longitude': 33.3, 'easting': 33, 'northing': 16}
     ]
     # fmt: on
 
-    tgt_schema = {
-        "inx": pl.Int32(),
-        "lat": pl.Float64(),
-        "lon": pl.Float64(),
-        "easting": pl.Int32(),
-        "northing": pl.Int32(),
-    }
+    tgt_schema = pa.schema(
+        [
+            pa.field("inx", pa.int32()),
+            pa.field("latitude", pa.float64()),
+            pa.field("longitude", pa.float64()),
+            pa.field("easting", pa.int32()),
+            pa.field("northing", pa.int32()),
+        ]
+    )
 
-    tgt_df = pl.DataFrame(data=tgt_data, schema=tgt_schema, orient="row")
+    tgt_df = daft.from_arrow(pa.Table.from_pylist(tgt_data, schema=tgt_schema))
 
     # Act #####################################################################
-    res_df = OsmLoader.assign_bng_coords(test_df)
+    res_df = MockOsmLoader.assign_bng_coords(test_df)
 
     # Assert ##################################################################
-    pl_assert_frame_equal(tgt_df, res_df)
+    assert_frame_equal(res_df, tgt_df)
 
 
 def test_set_node_output_schema():
@@ -232,69 +102,160 @@ def test_set_node_output_schema():
     # Arrange #################################################################
 
     # ----- Test Data -----
-    # fmt: off
-    test_cols = (
-        ['id', 'lat', 'lon', 'easting', 'northing', 'easting_ptn', 'northing_ptn', 'other'])
 
-    test_data = [
-        [0] * len(test_cols)
-    ]
-    # fmt: on
+    test_data = {
+        col: [0]
+        for col in [
+            "id",
+            "latitude",
+            "longitude",
+            "easting",
+            "northing",
+            "easting_ptn",
+            "northing_ptn",
+            "other",
+        ]
+    }
 
-    test_df = pl.DataFrame(data=test_data, schema=test_cols, orient="row")
+    test_df = daft.from_pydict(test_data)
 
     # ----- Target Data -----=
-    # fmt: off
-    tgt_cols = (
-        ['id', 'lat', 'lon', 'easting', 'northing', 'easting_ptn', 'northing_ptn'])
+    tgt_data = {
+        col: [0]
+        for col in [
+            "id",
+            "lat",
+            "lon",
+            "easting",
+            "northing",
+            "easting_ptn",
+            "northing_ptn",
+        ]
+    }
 
-    tgt_data = [
-        [0] * len(tgt_cols)
-    ]
-    # fmt: on
-
-    tgt_df = pl.DataFrame(data=tgt_data, schema=tgt_cols, orient="row")
+    tgt_df = daft.from_pydict(tgt_data)
 
     # Act #####################################################################
-    res_df = OsmLoader.set_node_output_schema(test_df)
+    res_df = MockOsmLoader.set_node_output_schema(test_df)
 
     # Assert ##################################################################
-    pl_assert_frame_equal(tgt_df, res_df)
+    assert_frame_equal(tgt_df, res_df)
 
 
-def test_tidy_edge_schema():
-    """Check that the correct aliases are being set for the edges dataset"""
+def test_unpack_tags():
+    """Make sure tags are being processed properly"""
     # Arrange #################################################################
 
     # ----- Test Data -----
-    # fmt: off
-    test_cols = (
-        ['u', 'v', 'id', 'highway', 'surface', 'bridge', 'tunnel', 'row_no', 'oneway', 'access', 'other'])
 
     test_data = [
-        ['u', 'v', 'id', 'highway', 'surface', 'bridge', 'tunnel', 'row_no', 'oneway', 'access', 'other']
+        {
+            "inx": 0,
+            "tags": [
+                {"key": b"tag_1", "value": b"value_1"},
+                {"key": b"tag_2", "value": b"value_2"},
+            ],
+        },
+        {"inx": 1, "tags": [{"key": b"tag_3", "value": b"value_3"}]},
+        {"inx": 2, "tags": []},
+    ]
+
+    test_schema = pa.schema(
+        [
+            pa.field("inx", pa.int32()),
+            pa.field(
+                "tags",
+                pa.list_(
+                    pa.struct(
+                        [
+                            pa.field("key", pa.binary()),
+                            pa.field("value", pa.binary()),
+                        ]
+                    )
+                ),
+            ),
+        ]
+    )
+
+    test_df = daft.from_arrow(
+        pa.Table.from_pylist(test_data, schema=test_schema)
+    )
+
+    # ----- Target Data ------
+
+    tgt_data = [
+        {"inx": 0, "tags": '{"tag_1": "value_1", "tag_2": "value_2"}'},
+        {"inx": 1, "tags": '{"tag_3": "value_3"}'},
+        {"inx": 2, "tags": "{}"},
+    ]
+
+    tgt_schema = pa.schema(
+        [pa.field("inx", pa.int32()), pa.field("tags", pa.string())]
+    )
+
+    tgt_df = daft.from_arrow(pa.Table.from_pylist(tgt_data, schema=tgt_schema))
+
+    # Act #####################################################################
+    res_df = OsmLoader.unpack_tags(test_df)
+
+    # Assert ##################################################################
+    assert_frame_equal(res_df, tgt_df)
+
+
+def test_remove_restricted_routes():
+    """Check that restricted edges are being removed properly"""
+    # Arrange #################################################################
+
+    # ----- Test Data -----
+
+    # fmt: off
+    test_data = [
+        {'inx': 0, 'tags': json.dumps({'access': 'yes'})},
+        {'inx': 1, 'tags': json.dumps({'access': 'no'})},
+        {'inx': 2, 'tags': json.dumps({'access': 'permissive'})},
+        {'inx': 3, 'tags': json.dumps({'access': 'designated'})},
+        {'inx': 4, 'tags': json.dumps({'access': 'other'})},
+        {'inx': 5, 'tags': json.dumps({})},
     ]
     # fmt: on
 
-    test_df = pl.DataFrame(data=test_data, schema=test_cols, orient="row")
+    test_schema = pa.schema(
+        [
+            pa.field("inx", pa.int32()),
+            pa.field("tags", pa.string()),
+        ]
+    )
+
+    test_df = daft.from_arrow(
+        pa.Table.from_pylist(test_data, schema=test_schema)
+    )
+
+    test_loader = MockOsmLoader()
 
     # ----- Target Data -----=
     # fmt: off
-    tgt_cols = (
-        ['src', 'dst', 'way_id', 'highway', 'surface', 'bridge', 'tunnel', 'row_no', 'oneway', 'access'])
-
     tgt_data = [
-        ['u'  , 'v'  , 'id'    , 'highway', 'surface', 'bridge', 'tunnel', 'row_no', 'oneway', 'access']
+        {'inx': 0, 'tags': json.dumps({'access': 'yes'})},
+        {'inx': 2, 'tags': json.dumps({'access': 'permissive'})},
+        {'inx': 3, 'tags': json.dumps({'access': 'designated'})},
+        {'inx': 5, 'tags': json.dumps({})},
     ]
     # fmt: on
 
-    tgt_df = pl.DataFrame(data=tgt_data, schema=tgt_cols, orient="row")
+    tgt_schema = pa.schema(
+        [
+            pa.field("inx", pa.int32()),
+            pa.field("tags", pa.string()),
+        ]
+    )
+
+    tgt_df = daft.from_arrow(pa.Table.from_pylist(tgt_data, schema=tgt_schema))
 
     # Act #####################################################################
-    res_df = OsmLoader.tidy_edge_schema(test_df)
+    res_df = test_loader.remove_restricted_routes(test_df)
 
     # Assert ##################################################################
-    pl_assert_frame_equal(tgt_df, res_df)
+    assert_frame_equal(res_df, tgt_df)
 
 
 def test_set_flat_flag():
@@ -302,51 +263,183 @@ def test_set_flat_flag():
     # Arrange #################################################################
 
     # ----- Test Data -----
-    # fmt: off
-    _ = (
-        ['inx', 'bridge', 'tunnel'])
 
+    # fmt: off
     test_data = [
-        [0    , None    , None],
-        [1    , 'some'  , 'some'],
-        [2    , 'some'  , None],
-        [3    , None    , 'some']
+        {'inx': 0, 'tags': json.dumps({})},
+        {'inx': 1, 'tags': json.dumps({'bridge': 'some', 'tunnel': 'some'})},
+        {'inx': 2, 'tags': json.dumps({'bridge': 'some'})},
+        {'inx': 3, 'tags': json.dumps({'tunnel': 'some'})},
     ]
     # fmt: on
 
-    test_schema = {
-        "inx": pl.Int32(),
-        "bridge": pl.String(),
-        "tunnel": pl.String(),
-    }
+    test_schema = pa.schema(
+        [
+            pa.field("inx", pa.int32()),
+            pa.field("tags", pa.string()),
+        ]
+    )
 
-    test_df = pl.DataFrame(data=test_data, schema=test_schema, orient="row")
+    test_df = daft.from_arrow(
+        pa.Table.from_pylist(test_data, schema=test_schema)
+    )
+
+    test_loader = MockOsmLoader()
 
     # ----- Target Data -----=
     # fmt: off
-    _ = (
-        ['inx', 'is_flat'])
-
     tgt_data = [
-        [0    , False],
-        [1    , True],
-        [2    , True],
-        [3    , True]
+        {'inx': 0, 'is_flat': False, 'tags': json.dumps({})},
+        {'inx': 1, 'is_flat': True , 'tags': json.dumps({'bridge': 'some', 'tunnel': 'some'})},
+        {'inx': 2, 'is_flat': True , 'tags': json.dumps({'bridge': 'some'})},
+        {'inx': 3, 'is_flat': True , 'tags': json.dumps({'tunnel': 'some'})},
     ]
     # fmt: on
 
-    tgt_schema = {
-        "inx": pl.Int32(),
-        "is_flat": pl.Boolean(),
-    }
+    tgt_schema = pa.schema(
+        [
+            pa.field("inx", pa.int32()),
+            pa.field("is_flat", pa.bool_()),
+            pa.field("tags", pa.string()),
+        ]
+    )
 
-    tgt_df = pl.DataFrame(data=tgt_data, schema=tgt_schema, orient="row")
+    tgt_df = daft.from_arrow(pa.Table.from_pylist(tgt_data, schema=tgt_schema))
 
     # Act #####################################################################
-    res_df = OsmLoader.set_flat_flag(test_df)
+    res_df = test_loader.set_flat_flag(test_df)
 
     # Assert ##################################################################
-    pl_assert_frame_equal(tgt_df, res_df)
+    assert_frame_equal(res_df, tgt_df)
+
+
+def test_set_oneway_flag():
+    """Make sure the oneway flag is being set properly"""
+    # Arrange #################################################################
+
+    # ----- Test Data -----
+
+    # fmt: off
+    test_data = [
+        {'inx': 0, 'tags': json.dumps({})},
+        {'inx': 1, 'tags': json.dumps({'oneway': 'yes'})},
+        {'inx': 2, 'tags': json.dumps({'oneway': 'no'})},
+        {'inx': 3, 'tags': json.dumps({'oneway': 'other'})},
+    ]
+    # fmt: on
+
+    test_schema = pa.schema(
+        [
+            pa.field("inx", pa.int32()),
+            pa.field("tags", pa.string()),
+        ]
+    )
+
+    test_df = daft.from_arrow(
+        pa.Table.from_pylist(test_data, schema=test_schema)
+    )
+
+    test_loader = MockOsmLoader()
+
+    # ----- Target Data -----=
+    # fmt: off
+    tgt_data = [
+        {'inx': 0, 'oneway': False, 'tags': json.dumps({})},
+        {'inx': 1, 'oneway': True , 'tags': json.dumps({'oneway': 'yes'})},
+        {'inx': 2, 'oneway': False, 'tags': json.dumps({'oneway': 'no'})},
+        {'inx': 3, 'oneway': True , 'tags': json.dumps({'oneway': 'other'})},    ]
+    # fmt: on
+
+    tgt_schema = pa.schema(
+        [
+            pa.field("inx", pa.int32()),
+            pa.field("oneway", pa.bool_()),
+            pa.field("tags", pa.string()),
+        ]
+    )
+
+    tgt_df = daft.from_arrow(pa.Table.from_pylist(tgt_data, schema=tgt_schema))
+
+    # Act #####################################################################
+    res_df = test_loader.set_oneway_flag(test_df)
+
+    # Assert ##################################################################
+    assert_frame_equal(res_df, tgt_df)
+
+
+def test_generate_edges():
+    """Make sure ways are correctly converted into edges"""
+    # Arrange #################################################################
+
+    # ----- Test Data -----
+
+    test_data = [
+        {
+            "id": 0,
+            "nodes": [
+                {"index": 1, "nodeId": 11},
+                {"index": 2, "nodeId": 12},
+                {"index": 3, "nodeId": 13},
+            ],
+            "tags": "way_0_tags",
+        },
+        {
+            "id": 1,
+            "nodes": [
+                {"index": 1, "nodeId": 21},
+                {"index": 2, "nodeId": 22},
+            ],
+            "tags": "way_1_tags",
+        },
+    ]
+
+    test_schema = pa.schema(
+        [
+            pa.field("id", pa.int32()),
+            pa.field(
+                "nodes",
+                pa.list_(
+                    pa.struct(
+                        [
+                            pa.field("index", pa.int32()),
+                            pa.field("nodeId", pa.int64()),
+                        ]
+                    )
+                ),
+            ),
+        ]
+    )
+
+    test_df = daft.from_arrow(
+        pa.Table.from_pylist(test_data, schema=test_schema)
+    )
+
+    # ----- Target Data ------
+
+    # fmt: off
+    tgt_data = [
+        {"way_id": 0, "way_inx": 1, "src": 11, "dst": 12, "tags": "way_0_tags"},
+        {"way_id": 0, "way_inx": 2, "src": 12, "dst": 13, "tags": "way_0_tags"},
+        {"way_id": 1, "way_inx": 1, "src": 21, "dst": 22, "tags": "way_1_tags"},
+    ]
+    # fmt: off
+
+    tgt_schema = pa.schema(
+        [
+            pa.field("way_id", pa.int32()),
+            pa.field("way_inx", pa.int32()),
+            pa.field("src", pa.int64()),
+            pa.field("dst", pa.int64()),
+        ]
+    )
+
+    tgt_df = daft.from_arrow(pa.Table.from_pylist(tgt_data, schema=tgt_schema))
+
+    # Act #####################################################################
+    res_df = OsmLoader.generate_edges(test_df)
+
+    # Assert ##################################################################
+    assert_frame_equal(res_df, tgt_df, order_by=['way_id', 'way_inx'])
 
 
 def test_add_reverse_edges():
@@ -355,198 +448,61 @@ def test_add_reverse_edges():
 
     # ----- Test Data -----
     # fmt: off
-    _ = (
-        ['way_id', 'row_no', 'src', 'dst', 'oneway'])
-
     test_data = [
         # One way, should not be reversed
-        [1       , 1       , 1    , 2    , 'yes'],
-        [1       , 2       , 2    , 3    , 'yes'],
-        # Explicitly not a one-way street
-        [2       , 3       , 3    , 4    , 'no'],
-        [2       , 4       , 4    , 5    , 'no'],
-        # Implicitly not a one-way street
-        [3       , 5       , 5    , 6    , None],
-        [3       , 6       , 6    , 7    , None],
+        {'way_id': 1, 'way_inx': 1, 'src': 1, 'dst': 2, 'oneway': True},
+        {'way_id': 1, 'way_inx': 2, 'src': 2, 'dst': 3, 'oneway': True},
+        # Bi-directional, should be reversed
+        {'way_id': 2, 'way_inx': 3, 'src': 3, 'dst': 4, 'oneway': False},
+        {'way_id': 2, 'way_inx': 4, 'src': 4, 'dst': 5, 'oneway': False},
     ]
     # fmt: on
 
-    test_schema = {
-        "way_id": pl.Int32(),
-        "row_no": pl.Int32(),
-        "src": pl.Int32(),
-        "dst": pl.Int32(),
-        "oneway": pl.String(),
-    }
+    test_schema = pa.schema(
+        [
+            pa.field("way_id", pa.int32()),
+            pa.field("way_inx", pa.int32()),
+            pa.field("src", pa.int32()),
+            pa.field("dst", pa.int32()),
+            pa.field("oneway", pa.bool_()),
+        ]
+    )
 
-    test_df = pl.DataFrame(data=test_data, schema=test_schema, orient="row")
+    test_df = daft.from_arrow(
+        pa.Table.from_pylist(test_data, schema=test_schema)
+    )
 
     # ----- Target Data -----=
     # fmt: off
-    _ = (
-        ['way_id', 'row_no', 'src', 'dst', 'oneway'])
-
     tgt_data = [
         # One way, should not be reversed
-        [1       , 1       , 1    , 2    , 'yes'],
-        [1       , 2       , 2    , 3    , 'yes'],
-        # Explicitly not a one-way street
-        [2       , 3       , 3    , 4    , 'no'],
-        [2       , 4       , 4    , 5    , 'no'],
-        [-2      , -4      , 5    , 4    , 'no'],
-        [-2      , -3      , 4    , 3    , 'no'],
-        # Implicitly not a one-way street
-        [3       , 5       , 5    , 6    , None],
-        [3       , 6       , 6    , 7    , None],
-        [-3      , -6      , 7    , 6    , None],
-        [-3      , -5      , 6    , 5    , None],
+        {'way_id': 1 , 'way_inx': 1 , 'src': 1, 'dst': 2, 'oneway': True},
+        {'way_id': 1 , 'way_inx': 2 , 'src': 2, 'dst': 3, 'oneway': True},
+        # Bi-directional, should be reversed
+        {'way_id': 2 , 'way_inx': 3 , 'src': 3, 'dst': 4, 'oneway': False},
+        {'way_id': 2 , 'way_inx': 4 , 'src': 4, 'dst': 5, 'oneway': False},
+        {'way_id': -2, 'way_inx': -3, 'src': 4, 'dst': 3, 'oneway': False},
+        {'way_id': -2, 'way_inx': -4, 'src': 5, 'dst': 4, 'oneway': False},
     ]
     # fmt: on
 
-    tgt_schema = {
-        "way_id": pl.Int32(),
-        "row_no": pl.Int32(),
-        "src": pl.Int32(),
-        "dst": pl.Int32(),
-        "oneway": pl.String(),
-    }
+    tgt_schema = pa.schema(
+        [
+            pa.field("way_id", pa.int32()),
+            pa.field("way_inx", pa.int32()),
+            pa.field("src", pa.int32()),
+            pa.field("dst", pa.int32()),
+            pa.field("oneway", pa.bool_()),
+        ]
+    )
 
-    tgt_df = pl.DataFrame(data=tgt_data, schema=tgt_schema, orient="row")
+    tgt_df = daft.from_arrow(pa.Table.from_pylist(tgt_data, schema=tgt_schema))
 
     # Act #####################################################################
     res_df = OsmLoader.add_reverse_edges(test_df)
 
-    res_df = res_df.sort(["way_id", "row_no"])
-    tgt_df = tgt_df.sort(["way_id", "row_no"])
-
     # Assert ##################################################################
-    pl_assert_frame_equal(tgt_df, res_df)
-
-
-def test_derive_position_in_way():
-    """Check that relative positions are being set correctly within each way"""
-    # Arrange #################################################################
-
-    # ----- Test Data -----
-    # fmt: off
-    _ = (
-        ['way_id', 'row_no'])
-
-    test_data = [
-        # One node only
-        [0       , 0],
-        # Two nodes
-        [1       , 2],
-        [1       , 1],
-        # More than two nodes
-        [2       , 3],
-        [2       , 5],
-        [2       , 4],
-        # Reversed edge (not one way)
-        [-2      , -3],
-        [-2      , -5],
-        [-2      , -4]
-    ]
-    # fmt: on
-
-    test_schema = {
-        "way_id": pl.Int32(),
-        "row_no": pl.Int32(),
-    }
-
-    test_df = pl.DataFrame(data=test_data, schema=test_schema, orient="row")
-
-    # ----- Target Data -----=
-    # fmt: off
-    _ = (
-        ['way_id', 'row_no', 'way_inx'])
-
-    tgt_data = [
-        # One node only
-        [0       , 0       , 1],
-        # Two nodes
-        [1       , 2       , 2],
-        [1       , 1       , 1],
-        # More than two nodes
-        [2       , 3       , 1],
-        [2       , 5       , 3],
-        [2       , 4       , 2],
-        # Reversed edge (not one way)
-        [-2      , -3      , 3],
-        [-2      , -5      , 1],
-        [-2      , -4      , 2]
-    ]
-    # fmt: on
-
-    tgt_schema = {
-        "way_id": pl.Int32(),
-        "row_no": pl.Int32(),
-        "way_inx": pl.UInt32(),
-    }
-
-    tgt_df = pl.DataFrame(data=tgt_data, schema=tgt_schema, orient="row")
-
-    # Act #####################################################################
-    res_df = OsmLoader.derive_position_in_way(test_df)
-
-    res_df = res_df.sort(["way_id", "row_no"])
-    tgt_df = tgt_df.sort(["way_id", "row_no"])
-
-    # Assert ##################################################################
-    pl_assert_frame_equal(tgt_df, res_df)
-
-
-def test_remove_restricted_routes():
-    """Check that restricted edges are being removed properly"""
-    # Arrange #################################################################
-
-    # ----- Test Data -----
-    # fmt: off
-    _ = (
-        ['inx', 'access'])
-
-    test_data = [
-        [0    , 'yes'],
-        [1    , 'no'],
-        [2    , 'permissive'],
-        [3    , 'designated'],
-        [4    , None],
-        [5    , 'other']
-    ]
-    # fmt: on
-
-    test_schema = {
-        "inx": pl.Int32(),
-        "access": pl.String(),
-    }
-
-    test_df = pl.DataFrame(data=test_data, schema=test_schema, orient="row")
-
-    # ----- Target Data -----=
-    # fmt: off
-    _ = (
-        ['inx', 'access'])
-
-    tgt_data = [
-        [0    , 'yes'],
-        [2    , 'permissive'],
-        [3    , 'designated'],
-        [4    , None],
-    ]
-    # fmt: on
-
-    tgt_schema = {
-        "inx": pl.Int32(),
-        "access": pl.String(),
-    }
-
-    tgt_df = pl.DataFrame(data=tgt_data, schema=tgt_schema, orient="row")
-
-    # Act #####################################################################
-    res_df = OsmLoader.remove_restricted_routes(test_df)
-
-    # Assert ##################################################################
-    pl_assert_frame_equal(tgt_df, res_df)
+    assert_frame_equal(tgt_df, res_df, order_by=["way_id", "way_inx"])
 
 
 def test_get_edge_start_coords():
@@ -557,58 +513,55 @@ def test_get_edge_start_coords():
 
     # ----- Edges -----
     # fmt: off
-    _ = (
-        ['src', 'dst', 'other_edges'])
-
     test_edge_data = [
         # Left only
-        [0    , 1    , 'other_edges'],
+        {'src': 0, 'dst': 1, 'other_edges': 'other_edges'},
         # Right only
         # Both
-        [4    , 5    , 'other_edges']
+        {'src': 4, 'dst': 5, 'other_edges': 'other_edges'}
     ]
     # fmt: on
 
-    test_edge_schema = {
-        "src": pl.Int32(),
-        "dst": pl.Int32(),
-        "other_edges": pl.String(),
-    }
+    test_edge_schema = pa.schema(
+        [
+            pa.field("src", pa.int32()),
+            pa.field("dst", pa.int32()),
+            pa.field("other_edges", pa.string()),
+        ]
+    )
 
-    test_edge_df = pl.DataFrame(
-        data=test_edge_data, schema=test_edge_schema, orient="row"
+    test_edge_df = daft.from_arrow(
+        pa.Table.from_pylist(test_edge_data, schema=test_edge_schema)
     )
 
     # ----- Nodes -----
     # fmt: off
-    _ = (
-        ['id', 'lat', 'lon', 'easting', 'northing', 'easting_ptn', 'northing_ptn', 'other_nodes'])
-
     test_node_data = [
         # Left only
-        [1   , 1    , 1    , 1       , 1          , 1            , 1            , 'other_nodes'],
         # Right only
-        [2   , 2    , 2    , 2       , 2          , 2            , 2            , 'other_nodes'],
-        [3   , 3    , 3    , 3       , 3          , 3            , 3            , 'other_nodes'],
+        {'id': 2, 'lat': 2, 'lon': 2, 'easting': 2, 'northing': 2, 'easting_ptn': 2, 'northing_ptn': 2, 'other_nodes': 'other_nodes'},
+        {'id': 3, 'lat': 3, 'lon': 3, 'easting': 3, 'northing': 3, 'easting_ptn': 3, 'northing_ptn': 3, 'other_nodes': 'other_nodes'},
         # Both
-        [4   , 4    , 4    , 4       , 4          , 4            , 4            , 'other_nodes'],
-        [5   , 5    , 5    , 5       , 5          , 5            , 5            , 'other_nodes'],
+        {'id': 4, 'lat': 4, 'lon': 4, 'easting': 4, 'northing': 4, 'easting_ptn': 4, 'northing_ptn': 4, 'other_nodes': 'other_nodes'},
+        {'id': 5, 'lat': 5, 'lon': 5, 'easting': 5, 'northing': 5, 'easting_ptn': 5, 'northing_ptn': 5, 'other_nodes': 'other_nodes'},
     ]
     # fmt: on
 
-    test_node_schema = {
-        "id": pl.Int32(),
-        "lat": pl.Int32(),
-        "lon": pl.Int32(),
-        "easting": pl.Int32(),
-        "northing": pl.Int32(),
-        "easting_ptn": pl.Int32(),
-        "northing_ptn": pl.Int32(),
-        "other_edges": pl.String(),
-    }
+    test_node_schema = pa.schema(
+        [
+            pa.field("id", pa.int32()),
+            pa.field("lat", pa.int32()),
+            pa.field("lon", pa.int32()),
+            pa.field("easting", pa.int32()),
+            pa.field("northing", pa.int32()),
+            pa.field("easting_ptn", pa.int32()),
+            pa.field("northing_ptn", pa.int32()),
+            pa.field("other_nodes", pa.string()),
+        ]
+    )
 
-    test_node_df = pl.DataFrame(
-        data=test_node_data, schema=test_node_schema, orient="row"
+    test_node_df = daft.from_arrow(
+        pa.Table.from_pylist(test_node_data, schema=test_node_schema)
     )
 
     # Target Data -------------------------------------------------------------
@@ -620,32 +573,30 @@ def test_get_edge_start_coords():
         # Left only
         # Right only
         # Both
-        [4   , 5    , 'other_edges' , 4        , 4        , 4           , 4             , 4             , 4]
+        {'src': 4, 'dst': 5, 'other_edges': 'other_edges' , 'src_lat': 4, 'src_lon': 4, 'src_easting': 4, 'src_northing': 4, 'easting_ptn': 4, 'northing_ptn': 4}
     ]
     # fmt: on
 
-    tgt_schema = {
-        "src": pl.Int32(),
-        "dst": pl.Int32(),
-        "other_edges": pl.String(),
-        "src_lat": pl.Int32(),
-        "src_lon": pl.Int32(),
-        "src_easting": pl.Int32(),
-        "src_northing": pl.Int32(),
-        "easting_ptn": pl.Int32(),
-        "northing_ptn": pl.Int32(),
-    }
+    tgt_schema = pa.schema(
+        [
+            pa.field("src", pa.int32()),
+            pa.field("dst", pa.int32()),
+            pa.field("other_edges", pa.string()),
+            pa.field("src_lat", pa.int32()),
+            pa.field("src_lon", pa.int32()),
+            pa.field("src_easting", pa.int32()),
+            pa.field("src_northing", pa.int32()),
+            pa.field("easting_ptn", pa.int32()),
+            pa.field("northing_ptn", pa.int32()),
+        ]
+    )
 
-    tgt_df = pl.DataFrame(data=tgt_data, schema=tgt_schema, orient="row")
-
+    tgt_df = daft.from_arrow(pa.Table.from_pylist(tgt_data, schema=tgt_schema))
     # Act #####################################################################
     res_df = OsmLoader.get_edge_start_coords(test_node_df, test_edge_df)
 
-    res_df = res_df.sort("src")
-    tgt_df = tgt_df.sort("src")
-
     # Assert ##################################################################
-    pl_assert_frame_equal(tgt_df, res_df)
+    assert_frame_equal(tgt_df, res_df)
 
 
 def test_get_edge_end_coords():

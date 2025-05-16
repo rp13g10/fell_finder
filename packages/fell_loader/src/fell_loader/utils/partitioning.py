@@ -4,6 +4,7 @@ package."""
 import os
 from typing import Tuple
 
+import daft
 import polars as pl
 from bng_latlon import WGS84toOSGB36
 from pyspark.sql import DataFrame
@@ -114,4 +115,18 @@ def add_partitions_to_polars_df(df: pl.DataFrame) -> pl.DataFrame:
         .alias("northing_ptn"),
     )
 
+    return df
+
+
+def add_partitions_to_daft_df(df: daft.DataFrame) -> daft.DataFrame:
+    df = df.with_columns(
+        {
+            "easting_ptn": (daft.col("easting") / PTN_EDGE_SIZE_M)
+            .round()
+            .cast(daft.DataType.int32()),
+            "northing_ptn": (daft.col("northing") / PTN_EDGE_SIZE_M)
+            .round()
+            .cast(daft.DataType.int32()),
+        }
+    )
     return df
