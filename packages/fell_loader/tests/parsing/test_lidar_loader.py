@@ -10,9 +10,17 @@ from polars.testing import assert_frame_equal
 
 from fell_loader.parsing.lidar_loader import (
     LidarLoader,
-    get_available_folders,
 )
 from fell_loader.utils.partitioning import get_partitions
+
+
+class MockLidarLoader(LidarLoader):
+    """Mock implementation of the Lidar Loader which uses static values
+    instead of fetching data from environment variables"""
+
+    def __init__(self) -> None:
+        self.data_dir = "data_dir"
+        self.to_load = ["file_1"]
 
 
 class TestGetAvailableFolders:
@@ -22,13 +30,14 @@ class TestGetAvailableFolders:
     def test_files_found(self, mock_glob: MagicMock):
         """Check expected output format when files are found"""
         # Arrange
-        test_dir = "test/dir"
         mock_glob.return_value = ["item_one"]
         target_out = {"item_one"}
-        target_call = "test/dir/extracts/lidar/lidar_composite_dtm-*"
+        target_call = "data_dir/extracts/lidar/lidar_composite_dtm-*"
+
+        test_loader = MockLidarLoader()
 
         # Act
-        result = get_available_folders(test_dir)
+        result = test_loader.get_available_folders()
 
         # Assert
         assert result == target_out
@@ -38,12 +47,13 @@ class TestGetAvailableFolders:
     def test_files_not_found(self, mock_glob: MagicMock):
         """Check exception is thrown when they aren't"""
         # Arrange
-        test_dir = "dummy"
         mock_glob.return_value = {}
+
+        test_loader = MockLidarLoader()
 
         # Act, Assert
         with pytest.raises(FileNotFoundError):
-            _ = get_available_folders(test_dir)
+            _ = test_loader.get_available_folders()
 
 
 @patch("fell_loader.parsing.lidar_loader.rio.open")

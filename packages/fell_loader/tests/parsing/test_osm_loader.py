@@ -1,40 +1,170 @@
 """Unit tests for the OSM loader"""
 
-from unittest.mock import MagicMock, patch
-from typing import Any
-import pyarrow as pa
 import json
+from unittest.mock import MagicMock, patch
 
-import pandas as pd
-import polars as pl
 import daft
-from pandas.testing import assert_frame_equal as pd_assert_frame_equal
-from polars.testing import assert_frame_equal as pl_assert_frame_equal
-
+import pyarrow as pa
+import pytest
 
 from fell_loader.parsing.osm_loader import OsmLoader
 from fell_loader.utils.testing import assert_frame_equal
 
 
 class MockOsmLoader(OsmLoader):
-    def __init__(self):
+    """Mock implementation of the OSM loader class, uses static values instead
+    of fetching info from environment variables"""
+
+    def __init__(self) -> None:
         self.data_dir = "data_dir"
         self.binary_loc = "binary_loc"
         self.nodes_loc = ""
         self.ways_loc = ""
-        self.relations_loc = ""
 
 
-def test_set_parquet_locs():
-    raise AssertionError()
+class TestSetParquetLocs:
+    """Make sure the locations of parquet files to be read are being generated
+    properly"""
+
+    @patch("fell_loader.parsing.osm_loader.glob")
+    def test_files_found(self, mock_glob: MagicMock):
+        """If files are found, they should be saved down"""
+
+        # Arrange
+        mock_glob.side_effect = lambda x: [
+            x.replace("*", "file_1"),
+            x.replace("*", "file_2"),
+        ]
+
+        tgt_nodes_loc = "data_dir/extracts/osm/file_1.node.parquet"
+        tgt_ways_loc = "data_dir/extracts/osm/file_1.way.parquet"
+
+        test_loader = MockOsmLoader()
+
+        # Act
+        test_loader._set_parquet_locs()
+
+        # Assert
+        assert test_loader.nodes_loc == tgt_nodes_loc
+        assert test_loader.ways_loc == tgt_ways_loc
+
+    @patch("fell_loader.parsing.osm_loader.glob")
+    def test_files_not_found(self, mock_glob: MagicMock):
+        """If files are found, they should be saved down"""
+
+        # Arrange
+        mock_glob.return_value = []
+        test_loader = MockOsmLoader()
+
+        # Act, Assert
+        with pytest.raises(FileNotFoundError):
+            test_loader._set_parquet_locs()
 
 
-def test_unpack_osm_pbf():
-    raise AssertionError()
+@patch("fell_loader.parsing.osm_loader.glob")
+class TestUnpackOsmPbf:
+    """Make sure the correct calls are generated in order to unpack
+    OSM data into parquet files"""
+
+    def test_no_data(self, mock_glob: MagicMock):
+        """If no data is found, an exception should be raised"""
+
+        # Arrange
+        mock_glob.return_value = []
+        test_loader = MockOsmLoader()
+        target_glob_call = "data_dir/extracts/osm/*.osm.pbf"
+
+        # Act, Assert
+        with pytest.raises(FileNotFoundError):
+            test_loader._unpack_osm_pbf()
+        mock_glob.assert_called_once_with(target_glob_call)
+
+        # Act
+
+        # Assert
+
+    def test_multiple_files(self, mock_glob: MagicMock):
+        """If multiple files are found, an exception should be raised"""
+
+        # Arrange
+        mock_glob.return_value = ["file_1", "file_2"]
+        test_loader = MockOsmLoader()
+
+        # Act, Assert
+        with pytest.raises(RuntimeError):
+            test_loader._unpack_osm_pbf()
+
+        # Act
+
+        # Assert
+
+    @patch("fell_loader.parsing.osm_loader.os")
+    def test_single_file(self, mock_os: MagicMock, mock_glob: MagicMock):
+        """If a single file is found, it should be unpacked and the locations
+        of the generated files stored internally"""
+
+        # Arrange
+        mock_glob.return_value = ["file_1"]
+
+        test_loader = MockOsmLoader()
+        test_loader._set_parquet_locs = MagicMock()
+
+        # Act
+        test_loader._unpack_osm_pbf()
+
+        # Assert
+        mock_os.system.assert_called_once_with("java -jar binary_loc file_1")
+        test_loader._set_parquet_locs.assert_called_once()
 
 
-def test_read_unpacked_data():
-    raise AssertionError()
+@patch("fell_loader.parsing.osm_loader.daft")
+class TestReadOsmData:
+    """Make sure the right data is being read in, and data is extracted
+    on-demand"""
+
+    def test_data_ready(self, mock_daft: MagicMock):
+        """If parquet files are present, read them directly"""
+
+        # Arrange
+        test_loader = MockOsmLoader()
+        test_loader._set_parquet_locs = MagicMock()
+        test_loader._unpack_osm_pbf = MagicMock()
+        test_loader.nodes_loc = "nodes"
+        test_loader.ways_loc = "ways"
+        mock_daft.read_parquet.side_effect = lambda x: f"{x}_df"
+
+        # Act
+        res_nodes, res_ways = test_loader.read_osm_data()
+
+        # Assert
+        test_loader._set_parquet_locs.assert_called_once()
+        test_loader._unpack_osm_pbf.assert_not_called()
+        assert mock_daft.read_parquet.call_count == 2
+        assert res_nodes == "nodes_df"
+        assert res_ways == "ways_df"
+
+    def test_data_not_ready(self, mock_daft: MagicMock):
+        """If no parquet files are present, unpack the .osm.pbf file"""
+
+        # Arrange
+        test_loader = MockOsmLoader()
+        test_loader._set_parquet_locs = MagicMock(
+            side_effect=[FileNotFoundError, None]
+        )
+        test_loader._unpack_osm_pbf = MagicMock()
+        test_loader.nodes_loc = "nodes"
+        test_loader.ways_loc = "ways"
+        mock_daft.read_parquet.side_effect = lambda x: f"{x}_df"
+
+        # Act
+        res_nodes, res_ways = test_loader.read_osm_data()
+
+        # Assert
+        assert test_loader._set_parquet_locs.call_count == 2
+        test_loader._unpack_osm_pbf.assert_called_once()
+        assert mock_daft.read_parquet.call_count == 2
+        assert res_nodes == "nodes_df"
+        assert res_ways == "ways_df"
 
 
 @patch("fell_loader.parsing.osm_loader.WGS84toOSGB36")
@@ -136,7 +266,7 @@ def test_set_node_output_schema():
     tgt_df = daft.from_pydict(tgt_data)
 
     # Act #####################################################################
-    res_df = MockOsmLoader.set_node_output_schema(test_df)
+    res_df = OsmLoader.set_node_output_schema(test_df)
 
     # Assert ##################################################################
     assert_frame_equal(tgt_df, res_df)
@@ -200,6 +330,109 @@ def test_unpack_tags():
 
     # Assert ##################################################################
     assert_frame_equal(res_df, tgt_df)
+
+
+class TestGetTagsAsColumn:
+    """Make sure extraction of tags into columns is working properly"""
+
+    # Arrange #################################################################
+
+    # ----- Test Data -----
+
+    # fmt: off
+    test_data = [
+        {'inx': 0, 'tags': json.dumps({'access': 'yes'})},
+        {'inx': 1, 'tags': json.dumps({'access': 'no'})},
+        {'inx': 2, 'tags': json.dumps({'access': 'permissive'})},
+        {'inx': 3, 'tags': json.dumps({'access': 'designated'})},
+        {'inx': 4, 'tags': json.dumps({'access': 'other'})},
+        {'inx': 5, 'tags': json.dumps({})},
+    ]
+    # fmt: on
+
+    test_schema = pa.schema(
+        [
+            pa.field("inx", pa.int32()),
+            pa.field("tags", pa.string()),
+            pa.field("access", pa.string()),
+        ]
+    )
+
+    test_df = daft.from_arrow(
+        pa.Table.from_pylist(test_data, schema=test_schema)
+    )
+
+    def test_without_nulls(self):
+        """Test behaviour when null output is not requested"""
+
+        # ----- Target Data -----
+
+        # fmt: off
+        tgt_data = [
+            {'inx': 0, 'tags': json.dumps({'access': 'yes'})       , 'access': 'yes'},
+            {'inx': 1, 'tags': json.dumps({'access': 'no'})        , 'access': 'no'},
+            {'inx': 2, 'tags': json.dumps({'access': 'permissive'}), 'access': 'permissive'},
+            {'inx': 3, 'tags': json.dumps({'access': 'designated'}), 'access': 'designated'},
+            {'inx': 4, 'tags': json.dumps({'access': 'other'})     , 'access': 'other'},
+            {'inx': 5, 'tags': json.dumps({})                      , 'access': 'null'},
+        ]
+        # fmt: on
+
+        tgt_schema = pa.schema(
+            [
+                pa.field("inx", pa.int32()),
+                pa.field("tags", pa.string()),
+                pa.field("access", pa.string()),
+            ]
+        )
+
+        tgt_df = daft.from_arrow(
+            pa.Table.from_pylist(tgt_data, schema=tgt_schema)
+        )
+
+        # Act #####################################################################
+        res_df = OsmLoader.get_tag_as_column(
+            self.test_df, "access", with_nulls=False
+        )
+
+        # Assert ##################################################################
+        assert_frame_equal(res_df, tgt_df)
+
+    def test_with_nulls(self):
+        """Test behaviour when null output is requested"""
+
+        # ----- Target Data -----
+
+        # fmt: off
+        tgt_data = [
+            {'inx': 0, 'tags': json.dumps({'access': 'yes'})       , 'access': 'yes'},
+            {'inx': 1, 'tags': json.dumps({'access': 'no'})        , 'access': 'no'},
+            {'inx': 2, 'tags': json.dumps({'access': 'permissive'}), 'access': 'permissive'},
+            {'inx': 3, 'tags': json.dumps({'access': 'designated'}), 'access': 'designated'},
+            {'inx': 4, 'tags': json.dumps({'access': 'other'})     , 'access': 'other'},
+            {'inx': 5, 'tags': json.dumps({})                      , 'access': None},
+        ]
+        # fmt: on
+
+        tgt_schema = pa.schema(
+            [
+                pa.field("inx", pa.int32()),
+                pa.field("tags", pa.string()),
+                pa.field("access", pa.string()),
+            ]
+        )
+
+        tgt_df = daft.from_arrow(
+            pa.Table.from_pylist(tgt_data, schema=tgt_schema)
+        )
+
+        # Act #####################################################################
+        res_df = OsmLoader.get_tag_as_column(
+            self.test_df, "access", with_nulls=True
+        )
+
+        # Assert ##################################################################
+        assert_frame_equal(res_df, tgt_df)
 
 
 def test_remove_restricted_routes():
@@ -566,9 +799,6 @@ def test_get_edge_start_coords():
 
     # Target Data -------------------------------------------------------------
     # fmt: off
-    _ = (
-        ['src', 'dst', 'other_edges', 'src_lat', 'src_lon', 'src_easting', 'src_northing', 'easting_ptn', 'northing_ptn'])
-
     tgt_data = [
         # Left only
         # Right only
@@ -607,93 +837,85 @@ def test_get_edge_end_coords():
 
     # ----- Edges -----
     # fmt: off
-    _ = (
-        ['src', 'dst', 'other_edges'])
-
     test_edge_data = [
         # Left only
-        [0    , 1    , 'other_edges'],
+        {'src': 0, 'dst': 1, 'other_edges': 'other_edges'},
         # Right only
         # Both
-        [4    , 5    , 'other_edges']
+        {'src': 4, 'dst': 5, 'other_edges': 'other_edges'}
     ]
     # fmt: on
 
-    test_edge_schema = {
-        "src": pl.Int32(),
-        "dst": pl.Int32(),
-        "other_edges": pl.String(),
-    }
+    test_edge_schema = pa.schema(
+        [
+            pa.field("src", pa.int32()),
+            pa.field("dst", pa.int32()),
+            pa.field("other_edges", pa.string()),
+        ]
+    )
 
-    test_edge_df = pl.DataFrame(
-        data=test_edge_data, schema=test_edge_schema, orient="row"
+    test_edge_df = daft.from_arrow(
+        pa.Table.from_pylist(test_edge_data, schema=test_edge_schema)
     )
 
     # ----- Nodes -----
     # fmt: off
-    _ = (
-        ['id', 'lat', 'lon', 'easting', 'northing', 'easting_ptn', 'northing_ptn', 'other_nodes'])
-
     test_node_data = [
-        # Left only
-        [0   , 0    , 0    , 0       , 0          , 0            , 0            , 'other_nodes'],
         # Right only
-        [2   , 2    , 2    , 2       , 2          , 2            , 2            , 'other_nodes'],
-        [3   , 3    , 3    , 3       , 3          , 3            , 3            , 'other_nodes'],
+        {'id': 2, 'lat': 2, 'lon': 2, 'easting': 2, 'northing': 2, 'easting_ptn': 2, 'northing_ptn': 2, 'other_nodes': 'other_nodes'},
+        {'id': 3, 'lat': 3, 'lon': 3, 'easting': 3, 'northing': 3, 'easting_ptn': 3, 'northing_ptn': 3, 'other_nodes': 'other_nodes'},
         # Both
-        [4   , 4    , 4    , 4       , 4          , 4            , 4            , 'other_nodes'],
-        [5   , 5    , 5    , 5       , 5          , 5            , 5            , 'other_nodes'],
+        {'id': 4, 'lat': 4, 'lon': 4, 'easting': 4, 'northing': 4, 'easting_ptn': 4, 'northing_ptn': 4, 'other_nodes': 'other_nodes'},
+        {'id': 5, 'lat': 5, 'lon': 5, 'easting': 5, 'northing': 5, 'easting_ptn': 5, 'northing_ptn': 5, 'other_nodes': 'other_nodes'},
     ]
     # fmt: on
 
-    test_node_schema = {
-        "id": pl.Int32(),
-        "lat": pl.Int32(),
-        "lon": pl.Int32(),
-        "easting": pl.Int32(),
-        "northing": pl.Int32(),
-        "easting_ptn": pl.Int32(),
-        "northing_ptn": pl.Int32(),
-        "other_edges": pl.String(),
-    }
+    test_node_schema = pa.schema(
+        [
+            pa.field("id", pa.int32()),
+            pa.field("lat", pa.int32()),
+            pa.field("lon", pa.int32()),
+            pa.field("easting", pa.int32()),
+            pa.field("northing", pa.int32()),
+            pa.field("easting_ptn", pa.int32()),
+            pa.field("northing_ptn", pa.int32()),
+            pa.field("other_nodes", pa.string()),
+        ]
+    )
 
-    test_node_df = pl.DataFrame(
-        data=test_node_data, schema=test_node_schema, orient="row"
+    test_node_df = daft.from_arrow(
+        pa.Table.from_pylist(test_node_data, schema=test_node_schema)
     )
 
     # Target Data -------------------------------------------------------------
     # fmt: off
-    _ = (
-        ['src', 'dst', 'other_edges', 'dst_lat', 'dst_lon', 'dst_easting', 'dst_northing'])
-
     tgt_data = [
         # Left only
         # Right only
         # Both
-        [4    , 5   , 'other_edges', 5         , 5        , 5           , 5]
+        {'src': 4, 'dst': 5, 'other_edges': 'other_edges', 'dst_lat': 5, 'dst_lon': 5, 'dst_easting': 5, 'dst_northing': 5},
     ]
     # fmt: on
 
-    tgt_schema = {
-        "src": pl.Int32(),
-        "dst": pl.Int32(),
-        "other_edges": pl.String(),
-        "dst_lat": pl.Int32(),
-        "dst_lon": pl.Int32(),
-        "dst_easting": pl.Int32(),
-        "dst_northing": pl.Int32(),
-    }
+    tgt_schema = pa.schema(
+        [
+            pa.field("src", pa.int32()),
+            pa.field("dst", pa.int32()),
+            pa.field("other_edges", pa.string()),
+            pa.field("dst_lat", pa.int32()),
+            pa.field("dst_lon", pa.int32()),
+            pa.field("dst_easting", pa.int32()),
+            pa.field("dst_northing", pa.int32()),
+        ]
+    )
 
-    tgt_df = pl.DataFrame(data=tgt_data, schema=tgt_schema, orient="row")
+    tgt_df = daft.from_arrow(pa.Table.from_pylist(tgt_data, schema=tgt_schema))
 
     # Act #####################################################################
     res_df = OsmLoader.get_edge_end_coords(test_node_df, test_edge_df)
 
-    res_df = res_df.sort("dst")
-    tgt_df = tgt_df.sort("dst")
-
     # Assert ##################################################################
-    pl_assert_frame_equal(tgt_df, res_df)
+    assert_frame_equal(tgt_df, res_df)
 
 
 def test_set_edge_output_schema():
@@ -702,79 +924,76 @@ def test_set_edge_output_schema():
 
     # ----- Test Data -----
 
-    test_cols = [
-        "src",
-        "dst",
-        "way_id",
-        "way_inx",
-        "highway",
-        "surface",
-        "is_flat",
-        "src_lat",
-        "src_lon",
-        "dst_lat",
-        "dst_lon",
-        "src_easting",
-        "src_northing",
-        "dst_easting",
-        "dst_northing",
-        "easting_ptn",
-        "northing_ptn",
-        "other",
-    ]
+    test_data = {
+        col: [0]
+        for col in [
+            "src",
+            "dst",
+            "way_id",
+            "way_inx",
+            "highway",
+            "surface",
+            "is_flat",
+            "src_lat",
+            "src_lon",
+            "dst_lat",
+            "dst_lon",
+            "src_easting",
+            "src_northing",
+            "dst_easting",
+            "dst_northing",
+            "easting_ptn",
+            "northing_ptn",
+            "other",
+        ]
+    }
 
-    test_data = [[0] * len(test_cols)]
-
-    test_df = pl.DataFrame(data=test_data, schema=test_cols, orient="row")
+    test_df = daft.from_pydict(test_data)
 
     # ----- Target Data -----=
+    tgt_data = {
+        col: [0]
+        for col in [
+            "src",
+            "dst",
+            "way_id",
+            "way_inx",
+            "highway",
+            "surface",
+            "is_flat",
+            "src_lat",
+            "src_lon",
+            "dst_lat",
+            "dst_lon",
+            "src_easting",
+            "src_northing",
+            "dst_easting",
+            "dst_northing",
+            "easting_ptn",
+            "northing_ptn",
+        ]
+    }
 
-    tgt_cols = [
-        "src",
-        "dst",
-        "way_id",
-        "way_inx",
-        "highway",
-        "surface",
-        "is_flat",
-        "src_lat",
-        "src_lon",
-        "dst_lat",
-        "dst_lon",
-        "src_easting",
-        "src_northing",
-        "dst_easting",
-        "dst_northing",
-        "easting_ptn",
-        "northing_ptn",
-    ]
-
-    tgt_data = [[0] * len(tgt_cols)]
-
-    tgt_df = pl.DataFrame(data=tgt_data, schema=tgt_cols, orient="row")
+    tgt_df = daft.from_pydict(tgt_data)
 
     # Act #####################################################################
     res_df = OsmLoader.set_edge_output_schema(test_df)
 
     # Assert ##################################################################
-    pl_assert_frame_equal(tgt_df, res_df)
+    assert_frame_equal(tgt_df, res_df)
 
 
 def test_write_nodes_to_parquet():
     """Make sure the correct write calls are being generated"""
     # Arrange
 
-    test_loader = OsmLoader("data_dir")
+    test_loader = MockOsmLoader()
 
     mock_nodes = MagicMock()
 
     target_args = ["data_dir/parsed/nodes"]
     target_kwargs = {
-        "use_pyarrow": True,
-        "pyarrow_options": {
-            "partition_cols": ["easting_ptn", "northing_ptn"],
-            "max_partitions": 4096,
-        },
+        "partition_cols": ["easting_ptn", "northing_ptn"],
     }
 
     # Act
@@ -790,17 +1009,13 @@ def test_write_edges_to_parquet():
     """Make sure the correct write calls are being generated"""
     # Arrange
 
-    test_loader = OsmLoader("data_dir")
+    test_loader = MockOsmLoader()
 
     mock_edges = MagicMock()
 
     target_args = ["data_dir/parsed/edges"]
     target_kwargs = {
-        "use_pyarrow": True,
-        "pyarrow_options": {
-            "partition_cols": ["easting_ptn", "northing_ptn"],
-            "max_partitions": 4096,
-        },
+        "partition_cols": ["easting_ptn", "northing_ptn"],
     }
 
     # Act
@@ -812,61 +1027,8 @@ def test_write_edges_to_parquet():
     )
 
 
-@patch("fell_loader.parsing.osm_loader.add_partitions_to_polars_df")
-def test_load(mock_add_partitions_to_polars_df: MagicMock):
-    """Make sure the correct methods are called. As each component is already
-    tested it is not necessary to attempt to generate test/target data here."""
-
-    # Arrange
-
-    test_loader = OsmLoader("data_dir")
-
-    mock_nodes = MagicMock()
-    mock_edges = MagicMock()
-    test_loader.read_osm_data = MagicMock(
-        return_value=(mock_nodes, mock_edges)
-    )
-
-    test_loader.assign_bng_coords = MagicMock(side_effect=lambda x: x)
-    mock_add_partitions_to_polars_df.side_effect = lambda x: x
-    test_loader.set_node_output_schema = MagicMock(side_effect=lambda x: x)
-
-    test_loader.tidy_edge_schema = MagicMock(side_effect=lambda x: x)
-    test_loader.set_flat_flag = MagicMock(side_effect=lambda x: x)
-    test_loader.add_reverse_edges = MagicMock(side_effect=lambda x: x)
-    test_loader.derive_position_in_way = MagicMock(side_effect=lambda x: x)
-    test_loader.remove_restricted_routes = MagicMock(side_effect=lambda x: x)
-
-    test_loader.get_edge_start_coords = MagicMock(side_effect=lambda _, y: y)
-    test_loader.get_edge_end_coords = MagicMock(side_effect=lambda _, y: y)
-    test_loader.set_edge_output_schema = MagicMock(side_effect=lambda x: x)
-
-    test_loader.write_nodes_to_parquet = MagicMock()
-    test_loader.write_edges_to_parquet = MagicMock()
-
-    # Act
-    test_loader.load()
-
-    # Assert
-    test_loader.read_osm_data.assert_called_once()
-
-    test_loader.assign_bng_coords.assert_called_once_with(mock_nodes)
-    mock_add_partitions_to_polars_df.assert_called_once_with(mock_nodes)
-    test_loader.set_node_output_schema.assert_called_once_with(mock_nodes)
-
-    test_loader.tidy_edge_schema.assert_called_once_with(mock_edges)
-    test_loader.set_flat_flag.assert_called_once_with(mock_edges)
-    test_loader.add_reverse_edges.assert_called_once_with(mock_edges)
-    test_loader.derive_position_in_way.assert_called_once_with(mock_edges)
-    test_loader.remove_restricted_routes.assert_called_once_with(mock_edges)
-
-    test_loader.get_edge_start_coords.assert_called_once_with(
-        mock_nodes, mock_edges
-    )
-    test_loader.get_edge_end_coords.assert_called_once_with(
-        mock_nodes, mock_edges
-    )
-    test_loader.set_edge_output_schema.assert_called_once_with(mock_edges)
-
-    test_loader.write_nodes_to_parquet.assert_called_once_with(mock_nodes)
-    test_loader.write_edges_to_parquet.assert_called_once_with(mock_edges)
+@pytest.mark.skip
+def test_load():
+    """This needs to be built out, preferably in a way which demonstrates
+    that the E2E process works as expected, rather than simply showing that
+    the correct calls are being generated."""

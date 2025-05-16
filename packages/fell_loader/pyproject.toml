@@ -8,6 +8,7 @@ readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "bng-latlon>=1.1",
+    "daft[ray]>=0.4.13",
     "geopy>=2.4.1",
     "hatchling>=1.27.0",
     "numpy<2.0",
