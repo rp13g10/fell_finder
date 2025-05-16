@@ -104,7 +104,7 @@ class LidarLoader:
                 x.filename for x in archive.filelist if ".tfw" in x.filename
             )
 
-            with rio.open(archive.read(tif_loc)) as tif:
+            with rio.open(archive.open(tif_loc)) as tif:
                 lidar = tif.read()
 
             tfw = archive.read(tfw_loc).decode("utf8")
@@ -128,10 +128,10 @@ class LidarLoader:
 
         """
 
-        id_match = re.search(r"[A-Z][A-Z]\d\d[ns][ew]$", lidar_dir)
+        id_match = re.search(r"([A-Z][A-Z]\d\d[ns][ew])\.zip$", lidar_dir)
 
         if id_match:
-            file_id = id_match.group(0)
+            file_id = id_match.group(1)
             return file_id
 
         raise ValueError(
@@ -264,6 +264,7 @@ class LidarLoader:
             use_pyarrow=True,
             pyarrow_options={
                 "partition_cols": ["file_id"],
+                "compression": "snappy",
             },
         )
 

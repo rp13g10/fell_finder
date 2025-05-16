@@ -576,22 +576,22 @@ class OsmLoader:
         written out to disk.
         """
 
-        nodes, ways = self.read_osm_data()
+        # nodes, ways = self.read_osm_data()
 
-        nodes = self.assign_bng_coords(nodes)
-        nodes = self.set_node_output_schema(nodes)
+        # nodes = self.assign_bng_coords(nodes)
+        # nodes = self.set_node_output_schema(nodes)
 
-        self.write_to_parquet(nodes, "nodes")
+        # self.write_to_parquet(nodes, "nodes")
         nodes = self.read_from_parquet("nodes")
 
-        ways = self.unpack_tags(ways)
-        ways = self.remove_restricted_routes(ways)
-        ways = self.set_flat_flag(ways)
-        ways = self.set_oneway_flag(ways)
-        ways = self.get_tag_as_column(ways, "highway")
-        ways = self.get_tag_as_column(ways, "surface")
+        # ways = self.unpack_tags(ways)
+        # ways = self.remove_restricted_routes(ways)
+        # ways = self.set_flat_flag(ways)
+        # ways = self.set_oneway_flag(ways)
+        # ways = self.get_tag_as_column(ways, "highway")
+        # ways = self.get_tag_as_column(ways, "surface")
 
-        self.write_to_parquet(ways, "ways")
+        # self.write_to_parquet(ways, "ways")
         ways = self.read_from_parquet("ways")
 
         edges = self.generate_edges(ways)
