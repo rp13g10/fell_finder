@@ -23,9 +23,9 @@ if __name__ == "__main__":
         .config("spark.executor.memory", "40g")
         .config("spark.executor.memoryOverhead", "10g")
         .config("spark.sql.files.maxPartitionBytes", "67108864")
-        .config("spark.sql.adaptive.enabled", "false")
-        .config("spark.sql.adaptive.coalescePartitions.enabled", "false")
-        .config("spark.sql.shuffle.partitions", "1024")
+        .config("spark.sql.adaptive.enabled", "true")
+        .config("spark.sql.adaptive.coalescePartitions.enabled", "true")
+        .config("spark.sql.shuffle.partitions", "512")
         .config(
             "spark.local.dir", os.path.join(os.environ["FF_DATA_DIR"], "temp")
         )
