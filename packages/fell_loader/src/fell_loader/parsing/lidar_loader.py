@@ -272,6 +272,7 @@ class LidarLoader:
         try:
             lidar_df = self.parse_lidar_folder(lidar_dir)
             self.write_df_to_parquet(lidar_df)
+            del lidar_df
         except pl.exceptions.ShapeError:
             # NOTE: Risk of thread collision deemed too low to worry about
             with open("bad_files.txt", "a") as fobj:
