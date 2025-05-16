@@ -10,7 +10,7 @@ from typing import Set
 import numpy as np
 import polars as pl
 import rasterio as rio
-from tqdm import tqdm
+from tqdm.contrib.concurrent import process_map
 
 from fell_loader.utils.partitioning import add_partitions_to_polars_df
 
@@ -268,6 +268,15 @@ class LidarLoader:
             },
         )
 
+    def process_lidar_file(self, lidar_dir: str) -> None:
+        try:
+            lidar_df = self.parse_lidar_folder(lidar_dir)
+            self.write_df_to_parquet(lidar_df)
+        except pl.exceptions.ShapeError:
+            # NOTE: Risk of thread collision deemed too low to worry about
+            with open("bad_files.txt", "a") as fobj:
+                fobj.write(f"{lidar_dir}\n")
+
     def load(self) -> None:
         """Primary user facing function for this class. Parses every available
         LIDAR extract and stores the output as a partitioned parquet dataset.
@@ -275,6 +284,9 @@ class LidarLoader:
         Data will be written to `data/parsed/lidar` within the configured
         data_dir
         """
-        for lidar_dir in tqdm(self.to_load, desc="Parsing LIDAR data"):
-            lidar_df = self.parse_lidar_folder(lidar_dir)
-            self.write_df_to_parquet(lidar_df)
+        process_map(
+            self.process_lidar_file,
+            self.to_load,
+            desc="Parsing LIDAR data",
+            chunksize=1,
+        )
