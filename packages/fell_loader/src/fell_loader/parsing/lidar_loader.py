@@ -269,6 +269,14 @@ class LidarLoader:
         )
 
     def process_lidar_file(self, lidar_dir: str) -> None:
+        file_id = self.generate_file_id(lidar_dir)
+
+        # TODO: Test this, set up script to read in all parquet files and
+        #       validate that row count is as expected
+        if os.path.exists(
+            os.path.join(self.data_dir, "parsed/lidar", f"file_id={file_id}")
+        ):
+            return
         try:
             lidar_df = self.parse_lidar_folder(lidar_dir)
             self.write_df_to_parquet(lidar_df)
