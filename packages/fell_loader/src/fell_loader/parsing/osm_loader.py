@@ -1,71 +1,18 @@
 """Functions relating to the loading of a .osm.pbf network graph into a tabular
 format"""
 
-import json
 import os
 from glob import glob
+from typing import Literal
 
-# import daft
 from pyspark.sql import DataFrame, functions as F, SparkSession, Window
 from pyspark.sql import types as T
 from bng_latlon import WGS84toOSGB36
 
 
-# TODO: Set this up to work with other filenames once moving to a fully
-#       automated pipeline
-
-# TODO: Plan out logic for using output from osm-parquetizer w. Daft. Need to
-#       unpack the 'ways' output into edges. Expected schemas are:
-
-# Nodes
-# |-- id: long (nullable = true)
-# |-- version: integer (nullable = true)
-# |-- timestamp: long (nullable = true)
-# |-- changeset: long (nullable = true)
-# |-- uid: integer (nullable = true)
-# |-- user_sid: string (nullable = true)
-# |-- tags: array (nullable = true)
-# |    |-- element: struct (containsNull = true)
-# |    |    |-- key: string (nullable = true)
-# |    |    |-- value: string (nullable = true)
-# |-- latitude: double (nullable = true)
-# |-- longitude: double (nullable = true)
-
-# Ways
-# |-- id: long (nullable = true)
-# |-- version: integer (nullable = true)
-# |-- timestamp: long (nullable = true)
-# |-- changeset: long (nullable = true)
-# |-- uid: integer (nullable = true)
-# |-- user_sid: string (nullable = true)
-# |-- tags: array (nullable = true)
-# |    |-- element: struct (containsNull = true)
-# |    |    |-- key: string (nullable = true)
-# |    |    |-- value: string (nullable = true)
-# |-- nodes: array (nullable = true)
-# |    |-- element: struct (containsNull = true)
-# |    |    |-- index: integer (nullable = true)
-# |    |    |-- nodeId: long (nullable = true)
-
-
-# Nodes
-# - Select id, latitude and longitude
-# - Check in tags for anything useful
-
-# Edges
-# - Start with Ways
-# - Explode out to one record per way ID, per node, retaining index in way
-# - Get dst with offset
-# - Extract oneway flag from tags
-# - Generate reverse edges where appropriate
-# - Join on nodes to get lat/lon
-
-
 class OsmLoader:
-    """Reads in the contents of the provided OSM extract. Generates two parquet
-    datasets containing details of the graph nodes and edges. These datasets
-    are partitioned according to the british national grid system to improve
-    access speed in downstream applications."""
+    """Reads in the contents of the provided OSM extract. Generates three
+    parquet datasets containing details of the graph nodes, ways and edges."""
 
     def __init__(self, spark: SparkSession) -> None:
         """Create an instance of the OSM loader, store down the directory which
@@ -160,8 +107,8 @@ class OsmLoader:
     @staticmethod
     def assign_bng_coords(nodes: DataFrame) -> DataFrame:
         """Assign each node an easting and northing, this will be used to
-        split the nodes dataset into partitions according to their geographical
-        location
+        join the nodes/edges of the map onto the elevation data provided by
+        DEFRA.
 
         Args:
             nodes: The nodes dataframe
@@ -202,27 +149,12 @@ class OsmLoader:
 
         return nodes
 
-    # Nodes
-    # |-- id: long (nullable = true)
-    # |-- version: integer (nullable = true)
-    # |-- timestamp: long (nullable = true)
-    # |-- changeset: long (nullable = true)
-    # |-- uid: integer (nullable = true)
-    # |-- user_sid: string (nullable = true)
-    # |-- tags: array (nullable = true)
-    # |    |-- element: struct (containsNull = true)
-    # |    |    |-- key: string (nullable = true)
-    # |    |    |-- value: string (nullable = true)
-    # |-- latitude: double (nullable = true)
-    # |-- longitude: double (nullable = true)
-
     @staticmethod
     def set_node_output_schema(nodes: DataFrame) -> DataFrame:
         """Ensure the node output dataset contains only the required columns
 
         Args:
-            nodes: A polars dataframe containing details of all nodes in the
-              graph
+            nodes: A dataframe containing details of all nodes in the graph
 
         Returns:
             A subset of the provided dataframe
@@ -237,35 +169,16 @@ class OsmLoader:
         )
         return nodes
 
-    # Ways
-    # |-- id: long (nullable = true)
-    # |-- version: integer (nullable = true)
-    # |-- timestamp: long (nullable = true)
-    # |-- changeset: long (nullable = true)
-    # |-- uid: integer (nullable = true)
-    # |-- user_sid: string (nullable = true)
-    # |-- tags: array (nullable = true)
-    # |    |-- element: struct (containsNull = true)
-    # |    |    |-- key: string (nullable = true)
-    # |    |    |-- value: string (nullable = true)
-    # |-- nodes: array (nullable = true)
-    # |    |-- element: struct (containsNull = true)
-    # |    |    |-- index: integer (nullable = true)
-    # |    |    |-- nodeId: long (nullable = true)
-
     @staticmethod
     def unpack_tags(ways: DataFrame) -> DataFrame:
         """Transform the tags for each way from the input format:
 
-            [{tag_1: value_1}, {tag_2: value_2}]
+            [{key=tag_1, value=value_1}, {key=tag_2, value=value_2}]
 
-        into a more usable JSON struct:
+        into a more usable mapping:
 
             {tag_1: value_1, tag_2: value_2}
 
-        Note that JSON must be used, as UDFs cannot currently return mappings.
-        At present, there does not seem to be any built-in function which can
-        achieve the desired effect.
 
         Args:
             ways: A dataframe containing the ways from the OSM extract
@@ -293,6 +206,20 @@ class OsmLoader:
 
     @staticmethod
     def get_tag_as_column(df: DataFrame, tag_name: str) -> DataFrame:
+        """Fetch the value of a specific tag from the mapping held in 'tags'
+        and add it to a new column of the same name. If the requested tag is
+        not present for a record, NULL will be returned instead.
+        All tag values will be stored as utf8 encoded strings.
+
+        Args:
+            df: A dataframe containing a tags column
+            tag_name: The name of the tag to be fetched
+
+        Returns:
+            A copy of the input dataframe with an additional column matching
+            the provided tag_name
+
+        """
         df = df.withColumn(
             tag_name,
             F.regexp_replace(F.col("tags").getItem(tag_name), '"', ""),
@@ -376,27 +303,23 @@ class OsmLoader:
 
         return ways
 
-    # Ways
-    # |-- id: long (nullable = true)
-    # |-- version: integer (nullable = true)
-    # |-- timestamp: long (nullable = true)
-    # |-- changeset: long (nullable = true)
-    # |-- uid: integer (nullable = true)
-    # |-- user_sid: string (nullable = true)
-    # |-- tags: array (nullable = true)
-    # |    |-- element: struct (containsNull = true)
-    # |    |    |-- key: string (nullable = true)
-    # |    |    |-- value: string (nullable = true)
-    # |-- nodes: array (nullable = true)
-    # |    |-- element: struct (containsNull = true)
-    # |    |    |-- index: integer (nullable = true)
-    # |    |    |-- nodeId: long (nullable = true)
-
     @staticmethod
     def generate_edges(ways: DataFrame) -> DataFrame:
-        # Bring through index as way_inx, as well as src node
-        # Window fn to pull through dst
-        # Drop any records with null dst
+        """A single way will be comprised of multiple edges. In order to
+        generate a network graph, we must unpack each way into edges. E.g. a
+        Way might cross nodes 0, 7, 25 and 42. This must be unpacked into the
+        edges: 0-7, 7-25 and 25-42.
+
+        Args:
+            ways: A dataframe containing the ways from the OSM extract
+
+        Returns:
+            An exploded view of the provided dataset, with one row for
+            every edge contained within a way
+
+        """
+
+        # Explode the ways out to a single node per record
         edges = ways.select(
             F.col("id").alias("way_id"),
             F.col("tags"),
@@ -407,17 +330,18 @@ class OsmLoader:
             F.explode(F.col("nodes")).alias("node"),
         )
 
+        # Extract the node ID and index (in the way) from the struct which
+        # represents the node
         edges = edges.withColumn("way_inx", F.col("node").getItem("index"))
-
         edges = edges.withColumn("src", F.col("node").getItem("nodeId"))
 
+        # For each node, generate an edge by determining the next (destination)
+        # node in the way.
         window_spec = Window.partitionBy(F.col("way_id")).orderBy(
             F.col("way_inx")
         )
-
         edges = edges.withColumn("dst", F.lead(F.col("src")).over(window_spec))
-
-        edges = edges.dropna(subset=["src", "dst"], how="any").drop("nodes")
+        edges = edges.dropna(subset=["src", "dst"], how="any").drop("node")
 
         return edges
 
@@ -457,10 +381,8 @@ class OsmLoader:
         joining on details of the source node.
 
         Args:
-            nodes: A polars dataframe containing details of all nodes in the
-              graph
-            edges: A polars dataframe containing details of all edges in the
-              graph
+            nodes: A dataframe containing details of all nodes in the graph
+            edges: A dataframe containing details of all edges in the graph
 
         Returns:
             A copy of the edges dataframe with additional src_lat, src_lon,
@@ -485,10 +407,8 @@ class OsmLoader:
         on details of the destination node.
 
         Args:
-            nodes: A polars dataframe containing details of all nodes in the
-              graph
-            edges: A polars dataframe containing details of all edges in the
-              graph
+            nodes: A dataframe containing details of all nodes in the graph
+            edges: A dataframe containing details of all edges in the graph
 
         Returns:
             A copy of the edges dataframe with additional dst_lat, dst_lon,
@@ -507,29 +427,12 @@ class OsmLoader:
 
         return edges
 
-    # Ways
-    # |-- id: long (nullable = true)
-    # |-- version: integer (nullable = true)
-    # |-- timestamp: long (nullable = true)
-    # |-- changeset: long (nullable = true)
-    # |-- uid: integer (nullable = true)
-    # |-- user_sid: string (nullable = true)
-    # |-- tags: array (nullable = true)
-    # |    |-- element: struct (containsNull = true)
-    # |    |    |-- key: string (nullable = true)
-    # |    |    |-- value: string (nullable = true)
-    # |-- nodes: array (nullable = true)
-    # |    |-- element: struct (containsNull = true)
-    # |    |    |-- index: integer (nullable = true)
-    # |    |    |-- nodeId: long (nullable = true)
-
     @staticmethod
     def set_edge_output_schema(edges: DataFrame) -> DataFrame:
         """Ensure the edge output dataset contains only the required columns
 
         Args:
-            edges: A polars dataframe containing details of all edges in the
-              graph
+            edges: A dataframe containing details of all edges in the graph
 
         Returns:
             A subset of the provided dataframe
@@ -555,12 +458,33 @@ class OsmLoader:
         )
         return edges
 
-    def write_to_parquet(self, df: DataFrame, target: str) -> None:
+    def write_to_parquet(
+        self, df: DataFrame, target: Literal["nodes", "ways", "edges"]
+    ) -> None:
+        """Write the contents of the provided dataframe out to the specified
+        dataset location in the 'parsed' layer of the data directory
+
+        Args:
+            df: The dataframe to be written
+            target: The name of the dataset being written
+
+        """
         tgt_loc = os.path.join(self.data_dir, "parsed", target)
 
         df.write.parquet(tgt_loc, mode="overwrite")
 
-    def read_from_parquet(self, target: str) -> DataFrame:
+    def read_from_parquet(
+        self, target: Literal["nodes", "ways", "edges"]
+    ) -> DataFrame:
+        """Read the contents of the specified dataset into a dataframe
+
+        Args:
+            target: The name of the dataset to be read
+
+        Returns:
+            A dataframe representing the specified dataset
+
+        """
         tgt_loc = os.path.join(self.data_dir, "parsed", target)
 
         df = self.spark.read.parquet(tgt_loc)
@@ -576,22 +500,22 @@ class OsmLoader:
         written out to disk.
         """
 
-        # nodes, ways = self.read_osm_data()
+        nodes, ways = self.read_osm_data()
 
-        # nodes = self.assign_bng_coords(nodes)
-        # nodes = self.set_node_output_schema(nodes)
+        nodes = self.assign_bng_coords(nodes)
+        nodes = self.set_node_output_schema(nodes)
 
-        # self.write_to_parquet(nodes, "nodes")
+        self.write_to_parquet(nodes, "nodes")
         nodes = self.read_from_parquet("nodes")
 
-        # ways = self.unpack_tags(ways)
-        # ways = self.remove_restricted_routes(ways)
-        # ways = self.set_flat_flag(ways)
-        # ways = self.set_oneway_flag(ways)
-        # ways = self.get_tag_as_column(ways, "highway")
-        # ways = self.get_tag_as_column(ways, "surface")
+        ways = self.unpack_tags(ways)
+        ways = self.remove_restricted_routes(ways)
+        ways = self.set_flat_flag(ways)
+        ways = self.set_oneway_flag(ways)
+        ways = self.get_tag_as_column(ways, "highway")
+        ways = self.get_tag_as_column(ways, "surface")
 
-        # self.write_to_parquet(ways, "ways")
+        self.write_to_parquet(ways, "ways")
         ways = self.read_from_parquet("ways")
 
         edges = self.generate_edges(ways)
