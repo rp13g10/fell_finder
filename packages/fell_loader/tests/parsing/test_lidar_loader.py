@@ -2,6 +2,8 @@
 
 import os
 from unittest.mock import MagicMock, call, patch
+from textwrap import dedent
+from dataclasses import dataclass
 
 import numpy as np
 import polars as pl
@@ -20,7 +22,7 @@ class MockLidarLoader(LidarLoader):
 
     def __init__(self) -> None:
         self.data_dir = "data_dir"
-        self.to_load = ["file_1"]
+        self.to_load = {"file_1"}
 
 
 class TestGetAvailableFolders:
@@ -32,7 +34,7 @@ class TestGetAvailableFolders:
         # Arrange
         mock_glob.return_value = ["item_one"]
         target_out = {"item_one"}
-        target_call = "data_dir/extracts/lidar/lidar_composite_dtm-*"
+        target_call = "data_dir/extracts/lidar/*.zip"
 
         test_loader = MockLidarLoader()
 
@@ -56,89 +58,117 @@ class TestGetAvailableFolders:
             _ = test_loader.get_available_folders()
 
 
-@patch("fell_loader.parsing.lidar_loader.rio.open")
-@patch("fell_loader.parsing.lidar_loader.glob")
-def test_load_lidar_from_folder(
-    mock_glob: MagicMock, mock_rio_open: MagicMock
-):
-    """Check that data is passed through the function call as expected"""
+def test_get_filenames_from_archive():
+    """Check that the correct filenames are being retrieved from the archive"""
+
+    @dataclass
+    class MockFile:
+        filename: str
+
     # Arrange
-    mock_glob.return_value = ["file_one"]
-
-    # Sets tif while inside the 'with X as tif' block
-    mock_tif_inside = MagicMock()
-    mock_tif_inside.read = MagicMock(return_value=[np.zeros(1)])
-
-    # Sets tif while the 'with X as tif' statement is evaluated
-    mock_tif_outside = MagicMock()
-    mock_tif_outside.__enter__ = MagicMock(return_value=mock_tif_inside)
-
-    mock_rio_open.return_value = mock_tif_outside
-
-    test_lidar_dir = "/some/path"
-
-    target_glob_call = os.path.join("/some/path", "*.tif")
-    target_rio_call = "file_one"
-    target_output = np.zeros(1)
-
-    # Act
-    result = LidarLoader.load_lidar_from_folder(test_lidar_dir)
-
-    # Assert
-    mock_glob.assert_called_once_with(target_glob_call)
-    mock_rio_open.assert_called_once_with(target_rio_call)
-    assert result == target_output
-
-
-@patch("fell_loader.parsing.lidar_loader.open")
-@patch("fell_loader.parsing.lidar_loader.glob")
-def test_load_bbox_from_folder(mock_glob: MagicMock, mock_open: MagicMock):
-    """Check that data is passed through the function call as expected"""
-    # Arrange
-    mock_glob.return_value = ["file_one"]
-
-    # Mock out behaviour for data read
-    mock_lines = [
-        "1.0000000000\n",
-        "0.0000000000\n",
-        "0.0000000000\n",
-        "-1.0000000000\n",
-        "445000.5000000000\n",
-        "119999.5000000000\n",
+    mock_archive = MagicMock()
+    mock_archive.filelist = [
+        MockFile("file_one.other"),
+        MockFile("file_two.other"),
+        MockFile("file_three.tfw"),
+        MockFile("file_five.other"),
+        MockFile("folder/file_six.other"),
+        MockFile("file_seven.tif"),
     ]
-    mock_readlines = MagicMock(return_value=mock_lines, id="readlines")
 
-    mock_fobj = MagicMock(id="fobj")
-    mock_fobj.readlines = mock_readlines
-
-    mock_handle = MagicMock(id="handle")
-    mock_handle.__enter__ = MagicMock(return_value=mock_fobj, id="enter")
-
-    mock_open.return_value = mock_handle
-
-    # Set dummy file location
-    test_lidar_dir = "/some/path"
-
-    # Set expected outputs
-    target_glob_call = os.path.join("/some/path", "*.tfw")
-    target_open_args = ("file_one", "r")
-    target_open_kwargs = {"encoding": "utf8"}
-
-    target_output = np.array([445000, 115000, 450000, 120000])
+    target = ("file_seven.tif", "file_three.tfw")
 
     # Act
-    result = LidarLoader.load_bbox_from_folder(test_lidar_dir)
+    result = LidarLoader._get_filenames_from_archive(mock_archive)
 
     # Assert
-    mock_glob.assert_called_once_with(target_glob_call)
-    mock_open.assert_called_once_with(*target_open_args, **target_open_kwargs)
-    assert (result == target_output).all()
+    assert result == target
+
+
+def test_get_bbox_from_tfw():
+    """Check that the contents of TFW files is being parsed correctly to
+    generate bounding boxes for each file"""
+
+    # Arrange
+    test_tfw = dedent(
+        """
+        1.0000000000
+        0.0000000000
+        0.0000000000
+        -1.0000000000
+        445000.5000000000
+        119999.5000000000
+        """.strip()
+    )
+    test_loader = MockLidarLoader()
+
+    target = np.array([445000, 115000, 450000, 120000])
+
+    # Act
+    result = test_loader._get_bbox_from_tfw(test_tfw)
+
+    # Assert
+    assert (result == target).all()
+
+
+@patch("fell_loader.parsing.lidar_loader.rio")
+@patch("fell_loader.parsing.lidar_loader.zipfile")
+def test_load_lidar_and_bbox_from_folder(
+    mock_zipfile: MagicMock, mock_rio: MagicMock
+):
+    """Check that the correct calls are being generated"""
+
+    # Arrange #################################################################
+
+    # Arguments to be provided
+    test_lidar_dir = "lidar_dir"
+
+    # Create handles for less verbose assertions
+    mock_archive = MagicMock()
+    mock_zipfile.ZipFile.return_value.__enter__.return_value = mock_archive
+
+    mock_tif = MagicMock()
+    mock_tif.read.return_value = ["lidar"]
+    mock_rio.open.return_value.__enter__.return_value = mock_tif
+
+    # Set mock output values for function calls
+    mock_loader = MockLidarLoader()
+    mock_loader._get_filenames_from_archive = MagicMock(
+        return_value=("tif_loc", "tfw_loc")
+    )
+    mock_loader._get_bbox_from_tfw = MagicMock(return_value="bbox")
+
+    # Set expected output
+    tgt_lidar, tgt_bbox = "lidar", "bbox"
+
+    # Act #####################################################################
+    res_lidar, res_bbox = mock_loader.load_lidar_and_bbox_from_folder(
+        test_lidar_dir
+    )
+
+    # Assert ##################################################################
+
+    # Correct archive is opened
+    mock_zipfile.ZipFile.assert_called_once_with("lidar_dir", mode="r")
+
+    # Correct files are read
+    mock_archive.open.assert_called_once_with("tif_loc")
+    mock_archive.read.assert_called_once_with("tfw_loc")
+
+    # Decoded TFW is transformed to bbox
+    mock_loader._get_bbox_from_tfw.assert_called_once_with(
+        mock_archive.read.return_value.decode.return_value
+    )
+
+    # Expected output is generated
+    assert res_lidar == tgt_lidar
+    assert res_bbox == tgt_bbox
 
 
 def test_generate_file_id():
     """Check that file IDs are being generated properly"""
     # Arrange
-    test_lidar_dir = "/some/folder/lidar_composite_dtm-2020-1-SU20ne"
+    test_lidar_dir = "/some/folder/lidar_composite_dtm-2020-1-SU20ne.zip"
     target = "SU20ne"
 
     # Act
@@ -167,18 +197,22 @@ def test_generate_df_from_lidar_array():
     test_lidar = test_lidar.reshape(5000, 5000)
 
     # fmt: off
-    target_head = pl.DataFrame({
-        'easting': np.array([100000, 100001, 100002, 100003, 100004]).astype('int32'),
-        'northing': np.array([204999, 204999, 204999, 204999, 204999]).astype('int32'),
-        'elevation': np.array([0, 1, 2, 3, 4])
-    },
-            orient='row')
-    target_tail = pl.DataFrame({
-        'easting': np.array([104995, 104996, 104997, 104998, 104999]).astype('int32'),
-        'northing': np.array([200000, 200000, 200000, 200000, 200000]).astype('int32'),
-        'elevation': np.array([24999995, 24999996, 24999997, 24999998, 24999999])
-    },
-            orient='row')
+    target_head = pl.DataFrame(
+            {
+                'easting': np.array([100000, 100001, 100002, 100003, 100004]).astype('int32'),
+                'northing': np.array([204999, 204999, 204999, 204999, 204999]).astype('int32'),
+                'elevation': np.array([0, 1, 2, 3, 4])
+            },
+            orient='row'
+    )
+    target_tail = pl.DataFrame(
+        {
+            'easting': np.array([104995, 104996, 104997, 104998, 104999]).astype('int32'),
+            'northing': np.array([200000, 200000, 200000, 200000, 200000]).astype('int32'),
+            'elevation': np.array([24999995, 24999996, 24999997, 24999998, 24999999])
+        },
+        orient='row'
+    )
 
     # fmt: on
 
@@ -193,8 +227,7 @@ def test_generate_df_from_lidar_array():
     assert_frame_equal(result_tail, target_tail)
 
 
-@patch("fell_loader.parsing.lidar_loader.get_available_folders")
-def test_add_file_ids(mock_get_available_folders: MagicMock):
+def test_add_file_ids():
     """Check that file IDs are being added properly"""
     # Arrange #################################################################
 
@@ -212,12 +245,11 @@ def test_add_file_ids(mock_get_available_folders: MagicMock):
 
     test_df = pl.DataFrame(data=test_data, schema=test_schema, orient="row")
 
-    test_lidar_dir = "/some/folder/lidar_composite_dtm-2020-1-SU20ne"
+    test_lidar_dir = "/some/folder/lidar_composite_dtm-2020-1-SU20ne.zip"
 
-    mock_get_available_folders.return_value = []
-    mock_loader = LidarLoader(data_dir="dummy")
+    mock_loader = MockLidarLoader()
 
-    # ----- Target Data -----=
+    # ----- Target Data -----
     # fmt: off
     _ = (
         ['inx', 'file_id'])
@@ -245,7 +277,7 @@ def test_set_output_schema():
     # ----- Test Data -----
     # fmt: off
     test_cols = (
-        ['easting', 'northing', 'elevation', 'file_id', 'easting_ptn', 'northing_ptn', 'other'])
+        ['easting', 'northing', 'elevation', 'file_id', 'other'])
 
     test_data = [
         [0] * len(test_cols)
@@ -257,7 +289,7 @@ def test_set_output_schema():
     # ----- Target Data -----=
     # fmt: off
     tgt_cols = (
-        ['easting', 'northing', 'elevation', 'file_id', 'easting_ptn', 'northing_ptn'])
+        ['easting', 'northing', 'elevation', 'file_id'])
 
     tgt_data = [
         [0] * len(tgt_cols)
@@ -273,48 +305,20 @@ def test_set_output_schema():
     assert_frame_equal(tgt_df, res_df)
 
 
-@patch("fell_loader.parsing.lidar_loader.get_available_folders")
-def test_write_df_to_parquet(mock_get_available_folders: MagicMock):
-    """Ensure the correct calls are made when writing data"""
-
-    # Arrange
-    mock_write_parquet = MagicMock()
-    mock_df = MagicMock()
-    mock_df.write_parquet = mock_write_parquet
-
-    mock_loader = LidarLoader("data_dir")
-
-    mock_get_available_folders.return_value = []
-
-    target_args = ["data_dir/parsed/lidar"]
-    target_kwargs = {
-        "use_pyarrow": True,
-        "pyarrow_options": {"partition_cols": ["easting_ptn", "northing_ptn"]},
-    }
-
-    # Act
-    mock_loader.write_df_to_parquet(mock_df)
-
-    # Assert
-    mock_write_parquet.assert_called_once_with(*target_args, **target_kwargs)
-
-
-@patch("fell_loader.parsing.lidar_loader.get_available_folders")
-def test_parse_lidar_folder(mock_get_available_folders: MagicMock):
+def test_parse_lidar_folder():
     """Ensure the correct calls are made, and output is as expected"""
 
     # Arrange #################################################################
 
     # Mock Loader -------------------------------------------------------------
+    mock_load_lidar_and_bbox_from_folder = MagicMock(
+        return_value=("lidar", "bbox")
+    )
 
-    mock_get_available_folders.return_value = []
-
-    mock_load_lidar_from_folder = MagicMock()
-    mock_load_bbox_from_folder = MagicMock()
-
-    mock_loader = LidarLoader("dummy")
-    mock_loader.load_lidar_from_folder = mock_load_lidar_from_folder
-    mock_loader.load_bbox_from_folder = mock_load_bbox_from_folder
+    mock_loader = MockLidarLoader()
+    mock_loader.load_lidar_and_bbox_from_folder = (
+        mock_load_lidar_and_bbox_from_folder
+    )
 
     # Test Data ---------------------------------------------------------------
 
@@ -342,18 +346,18 @@ def test_parse_lidar_folder(mock_get_available_folders: MagicMock):
         mock_generate_df_from_lidar_array
     )
 
-    test_lidar_dir = "/some/folder/lidar_composite_dtm-2020-1-SU20ne"
+    # Provided Arguments ------------------------------------------------------
+
+    test_lidar_dir = "/some/folder/lidar_composite_dtm-2020-1-SU20ne.zip"
 
     # Target Data -------------------------------------------------------------
 
-    easting_ptn, northing_ptn = get_partitions(easting, northing)
-
     # fmt: off
     _ = (
-        ['easting', 'northing', 'elevation', 'file_id', 'easting_ptn', 'northing_ptn'])
+        ['easting', 'northing', 'elevation', 'file_id'])
 
     tgt_data = [
-        [easting  , northing  , 100.0      , 'SU20ne' , easting_ptn  , northing_ptn]
+        [easting  , northing  , 100.0      , 'SU20ne']
     ]
     # fmt: on
 
@@ -362,8 +366,6 @@ def test_parse_lidar_folder(mock_get_available_folders: MagicMock):
         "northing": pl.Int32(),
         "elevation": pl.Float64(),
         "file_id": pl.String(),
-        "easting_ptn": pl.Int32(),
-        "northing_ptn": pl.Int32(),
     }
 
     tgt_df = pl.DataFrame(data=tgt_data, schema=tgt_schema, orient="row")
@@ -373,34 +375,172 @@ def test_parse_lidar_folder(mock_get_available_folders: MagicMock):
     result_df = mock_loader.parse_lidar_folder(test_lidar_dir)
 
     # Assert ##################################################################
-    mock_load_lidar_from_folder.assert_called_once_with(test_lidar_dir)
-    mock_load_bbox_from_folder.assert_called_once_with(test_lidar_dir)
+    mock_load_lidar_and_bbox_from_folder.assert_called_once_with(
+        test_lidar_dir
+    )
     mock_generate_df_from_lidar_array.assert_called_once()
 
     assert_frame_equal(result_df, tgt_df)
 
 
-@patch("fell_loader.parsing.lidar_loader.get_available_folders")
-def test_load(mock_get_available_folders: MagicMock):
+def test_write_df_to_parquet():
     """Ensure the correct calls are made when writing data"""
 
     # Arrange
-    mock_get_available_folders.return_value = ["file_one", "file_two"]
+    mock_write_parquet = MagicMock()
+    mock_df = MagicMock()
+    mock_df.write_parquet = mock_write_parquet
 
-    mock_loader = LidarLoader("dummy")
+    mock_loader = MockLidarLoader()
 
-    mock_parse_lidar_folder = MagicMock(side_effect=["df_1", "df_2"])
-    mock_loader.parse_lidar_folder = mock_parse_lidar_folder
+    target_args = ["data_dir/parsed/lidar"]
+    target_kwargs = {
+        "use_pyarrow": True,
+        "pyarrow_options": {
+            "partition_cols": ["file_id"],
+            "compression": "snappy",
+        },
+    }
 
-    mock_write_df_to_parquet = MagicMock()
-    mock_loader.write_df_to_parquet = mock_write_df_to_parquet
+    # Act
+    mock_loader.write_df_to_parquet(mock_df)
 
-    tgt_parse_calls = [call("file_one"), call("file_two")]
-    tgt_write_calls = [call("df_1"), call("df_2")]
+    # Assert
+    mock_write_parquet.assert_called_once_with(*target_args, **target_kwargs)
+
+
+@patch("fell_loader.parsing.lidar_loader.os.path.exists")
+class TestProcessLidarFile:
+    """Make sure lidar files are being processed as-expected"""
+
+    @patch("fell_loader.parsing.lidar_loader.open")
+    def test_processing_success(
+        self, mock_open: MagicMock, mock_exists: MagicMock
+    ):
+        """Happy path, no issues while processing"""
+
+        # Arrange #############################################################
+
+        # Provided Arguments --------------------------------------------------
+
+        test_lidar_dir = "/some/folder/lidar_composite_dtm-2020-1-SU20ne.zip"
+
+        # Mock Loader ---------------------------------------------------------
+
+        mock_loader = MockLidarLoader()
+        mock_loader.generate_file_id = MagicMock(return_value="file_id")
+        mock_loader.parse_lidar_folder = MagicMock(return_value="lidar_df")
+        mock_loader.write_df_to_parquet = MagicMock()
+
+        # Other ---------------------------------------------------------------
+        mock_exists.return_value = False
+
+        # Act #################################################################
+
+        mock_loader.process_lidar_file(test_lidar_dir)
+
+        # Assert ##############################################################
+
+        # Correct file was polled
+        mock_exists.assert_called_once_with(
+            "data_dir/parsed/lidar/file_id=file_id"
+        )
+
+        # Correct calls were generated
+        mock_loader.parse_lidar_folder.assert_called_once_with(test_lidar_dir)
+        mock_loader.write_df_to_parquet.assert_called_once_with("lidar_df")
+
+        # Nothing was written to bad_files.txt
+        mock_open.assert_not_called()
+
+    def test_file_already_processed(self, mock_exists: MagicMock):
+        """No action if file has already been processed"""
+
+        # ----- Arrange -----
+        mock_loader = MockLidarLoader()
+        mock_loader.generate_file_id = MagicMock(return_value="file_id")
+        mock_loader.parse_lidar_folder = MagicMock()
+
+        mock_exists.return_value = True
+
+        # ----- Act -----
+        result = mock_loader.process_lidar_file("lidar_dir")
+
+        # ----- Assert -----
+
+        # Nothing was returned
+        assert result is None
+
+        # Function exited early
+        mock_loader.parse_lidar_folder.assert_not_called()
+
+    @patch("fell_loader.parsing.lidar_loader.open")
+    def test_processing_failure(
+        self, mock_open: MagicMock, mock_exists: MagicMock
+    ):
+        """Unhappy path, non-standard file"""
+
+        # Arrange #############################################################
+
+        # Provided Arguments --------------------------------------------------
+
+        test_lidar_dir = "/some/folder/lidar_composite_dtm-2020-1-SU20ne.zip"
+
+        # Mock Loader ---------------------------------------------------------
+
+        mock_loader = MockLidarLoader()
+        mock_loader.generate_file_id = MagicMock(return_value="file_id")
+        mock_loader.parse_lidar_folder = MagicMock(
+            side_effect=pl.exceptions.ShapeError
+        )
+        mock_loader.write_df_to_parquet = MagicMock()
+
+        # Mock File Writer ----------------------------------------------------
+        mock_write = MagicMock()
+        mock_open.return_value.__enter__.return_value.write = mock_write
+
+        # Other ---------------------------------------------------------------
+        mock_exists.return_value = False
+
+        # Act #################################################################
+
+        mock_loader.process_lidar_file(test_lidar_dir)
+
+        # Assert ##############################################################
+
+        # Correct file was polled
+        mock_exists.assert_called_once_with(
+            "data_dir/parsed/lidar/file_id=file_id"
+        )
+
+        # Attempted file parsing
+        mock_loader.parse_lidar_folder.assert_called_once_with(test_lidar_dir)
+
+        # No parquet files generated
+        mock_loader.write_df_to_parquet.assert_not_called()
+
+        # Log file was opened, correct contents written
+        mock_open.assert_called_once_with("bad_files.txt", "a")
+        mock_write.assert_called_once_with(f"{test_lidar_dir}\n")
+
+
+@patch("fell_loader.parsing.lidar_loader.process_map")
+def test_load(mock_process_map: MagicMock):
+    """Ensure the correct info is passed to process_map"""
+
+    # Arrange
+    mock_loader = MockLidarLoader()
+
+    mock_process_lidar_file = MagicMock()
+    mock_loader.process_lidar_file = mock_process_lidar_file
 
     # Act
     mock_loader.load()
 
     # Assert
-    mock_parse_lidar_folder.assert_has_calls(tgt_parse_calls)
-    mock_write_df_to_parquet.assert_has_calls(tgt_write_calls)
+    mock_process_map.assert_called_once_with(
+        mock_process_lidar_file,
+        {"file_1"},  # Set as part of MockLidarLoader definition
+        desc="Parsing LIDAR data",
+        chunksize=1,
+    )

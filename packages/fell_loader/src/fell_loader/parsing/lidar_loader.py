@@ -12,8 +12,6 @@ import polars as pl
 import rasterio as rio
 from tqdm.contrib.concurrent import process_map
 
-from fell_loader.utils.partitioning import add_partitions_to_polars_df
-
 
 class LidarLoader:
     """This contains all of the functions required to convert the data held in
@@ -59,7 +57,23 @@ class LidarLoader:
         return set(all_lidar_dirs)
 
     @staticmethod
+    def _get_filenames_from_archive(
+        archive: zipfile.ZipFile,
+    ) -> tuple[str, str]:
+        """Fetch the names of required .tif and .tfw files from the provided
+        archive. Improved error handling to be added in a later build."""
+        tif_loc = next(
+            x.filename for x in archive.filelist if ".tif" in x.filename
+        )
+        tfw_loc = next(
+            x.filename for x in archive.filelist if ".tfw" in x.filename
+        )
+        return tif_loc, tfw_loc
+
+    @staticmethod
     def _get_bbox_from_tfw(tfw: str) -> np.ndarray:
+        """Unpack the contents of the .tfw file to fetch its bounding box,
+        where corners are defined according to the BNG coordinate system"""
         lines = tfw.split("\n")
 
         easting_min = int(float(lines[4].strip()))
@@ -97,12 +111,7 @@ class LidarLoader:
         """
 
         with zipfile.ZipFile(lidar_dir, mode="r") as archive:
-            tif_loc = next(
-                x.filename for x in archive.filelist if ".tif" in x.filename
-            )
-            tfw_loc = next(
-                x.filename for x in archive.filelist if ".tfw" in x.filename
-            )
+            tif_loc, tfw_loc = self._get_filenames_from_archive(archive)
 
             with rio.open(archive.open(tif_loc)) as tif:
                 lidar = tif.read()
@@ -243,7 +252,6 @@ class LidarLoader:
 
         lidar_df = self.generate_df_from_lidar_array(lidar, bbox)
 
-        lidar_df = add_partitions_to_polars_df(lidar_df)
         lidar_df = self.add_file_ids(lidar_df, lidar_dir)
         lidar_df = self.set_output_schema(lidar_df)
         return lidar_df
@@ -269,6 +277,15 @@ class LidarLoader:
         )
 
     def process_lidar_file(self, lidar_dir: str) -> None:
+        """Process a single zip file containing LIDAR data. If the file has
+        already been processed, no action will be taken. If an error is
+        encountered during process, the name of the offending file will be
+        written to bad_files.txt (in the current working directory).
+
+        Args:
+            lidar_dir: The location of the lidar file to be parsed
+
+        """
         file_id = self.generate_file_id(lidar_dir)
 
         # TODO: Test this, set up script to read in all parquet files and
