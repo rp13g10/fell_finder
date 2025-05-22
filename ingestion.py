@@ -1,6 +1,8 @@
 """Primary execution script (for now). Triggers ingestion of LIDAR and OSM
 data, joins the two datasets together to create a single augmented graph."""
 
+# ruff: noqa: ERA001, F401
+
 import os
 from fell_loader import (
     BelterLoader,
@@ -11,43 +13,46 @@ from fell_loader import (
 )
 from pyspark.sql import SparkSession
 
+
 if __name__ == "__main__":
     # Raw Data ################################################################
 
     # Config set for testing on personal laptop, will need tuning for the cloud
-    # spark = (
-    #     SparkSession.builder.appName("fell_finder")  # type: ignore
-    #     .config("spark.master", "local[*]")
-    #     .config("spark.driver.memory", "8g")
-    #     .config("spark.driver.memoryOverhead", "2g")
-    #     .config("spark.executor.memory", "40g")
-    #     .config("spark.executor.memoryOverhead", "10g")
-    #     .config("spark.sql.files.maxPartitionBytes", "67108864")
-    #     .config("spark.sql.adaptive.enabled", "true")
-    #     .config("spark.sql.adaptive.coalescePartitions.enabled", "true")
-    #     .config("spark.sql.shuffle.partitions", "512")
-    #     .config(
-    #         "spark.local.dir", os.path.join(os.environ["FF_DATA_DIR"], "temp")
-    #     )
-    #     .config("spark.log.level", "WARN")
-    #     .getOrCreate()
-    # )
+    spark = (
+        SparkSession.builder.appName("fell_finder")  # type: ignore
+        .config("spark.master", "local[*]")
+        .config("spark.driver.memory", "16g")
+        .config("spark.driver.memoryOverhead", "4g")
+        # .config("spark.executor.memory", "20g")
+        # .config("spark.executor.memoryOverhead", "5g")
+        .config("spark.sql.files.maxPartitionBytes", "67108864")
+        .config("spark.sql.adaptive.enabled", "true")
+        .config("spark.sql.adaptive.coalescePartitions.enabled", "true")
+        .config("spark.sql.shuffle.partitions", "512")
+        .config(
+            "spark.local.dir", os.path.join(os.environ["FF_DATA_DIR"], "temp")
+        )
+        .config("spark.log.level", "WARN")
+        .config(
+            "spark.eventLog.gcMetrics.youngGenerationGarbageCollectors", "true"
+        )
+        .getOrCreate()
+    )
 
-    lidar_loader = LidarLoader()
-    lidar_loader.load()
-    del lidar_loader
+    # lidar_loader = LidarLoader()
+    # lidar_loader.load()
+    # del lidar_loader
 
-    # osm_loader = OsmLoader(spark)
-    # osm_loader.load()
-    # del osm_loader
+    osm_loader = OsmLoader(spark)
+    osm_loader.load()
+    del osm_loader
 
     # Combine Datasets ########################################################
+    graph_enricher = GraphEnricher(spark)
+    graph_enricher.enrich()
+    del graph_enricher
 
     # Optimise Graph ##########################################################
-    # graph_enricher = GraphEnricher(DATA_DIR, spark)
-    # graph_enricher.enrich()
-    # del graph_enricher
-
     # graph_contractor = GraphContractor(DATA_DIR, spark)
     # graph_contractor.contract()
     # del graph_contractor
