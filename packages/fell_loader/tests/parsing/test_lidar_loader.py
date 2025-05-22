@@ -1,7 +1,6 @@
 """Unit tests for the LIDAR parsing script"""
 
-import os
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 from textwrap import dedent
 from dataclasses import dataclass
 
@@ -13,7 +12,6 @@ from polars.testing import assert_frame_equal
 from fell_loader.parsing.lidar_loader import (
     LidarLoader,
 )
-from fell_loader.utils.partitioning import get_partitions
 
 
 class MockLidarLoader(LidarLoader):
