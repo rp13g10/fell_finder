@@ -17,11 +17,11 @@ def test_tag_nodes(test_session: SparkSession):
 
     # fmt: off
     _ = (
-        ['easting', 'northing', 'easting_ptn', 'northing_ptn', 'other_nodes'])
+        ['easting', 'northing', 'other_nodes'])
 
     test_node_data = [
-        ['left'   , 'left'    , 'left'       , 'left'        , 'other_nodes'],
-        ['both'   , 'both'    , 'both'       , 'both'        , 'other_nodes'],
+        ['left'   , 'left'    , 'other_nodes'],
+        ['both'   , 'both'    , 'other_nodes'],
     ]
     # fmt: on
 
@@ -29,8 +29,6 @@ def test_tag_nodes(test_session: SparkSession):
         [
             StructField("easting", StringType()),
             StructField("northing", StringType()),
-            StructField("easting_ptn", StringType()),
-            StructField("northing_ptn", StringType()),
             StructField("other_nodes", StringType()),
         ]
     )
@@ -43,11 +41,11 @@ def test_tag_nodes(test_session: SparkSession):
 
     # fmt: off
     _ = (
-        ['easting', 'northing', 'easting_ptn', 'northing_ptn', 'other_elevation'])
+        ['easting', 'northing', 'other_elevation'])
 
     test_ele_data = [
-        ['both'   , 'both'    , 'both'       , 'both'        , 'other_elevation'],
-        ['right'  , 'right'   , 'right'      , 'right'       , 'other_elevation']
+        ['both'   , 'both'    , 'other_elevation'],
+        ['right'  , 'right'   , 'other_elevation']
     ]
     # fmt: on
 
@@ -55,8 +53,6 @@ def test_tag_nodes(test_session: SparkSession):
         [
             StructField("easting", StringType()),
             StructField("northing", StringType()),
-            StructField("easting_ptn", StringType()),
-            StructField("northing_ptn", StringType()),
             StructField("other_elevation", StringType()),
         ]
     )
@@ -67,10 +63,10 @@ def test_tag_nodes(test_session: SparkSession):
 
     # fmt: off
     _ = (
-        ['easting', 'northing', 'easting_ptn', 'northing_ptn', 'other_nodes', 'other_elevation'])
+        ['easting', 'northing', 'other_nodes', 'other_elevation'])
 
     target_data = [
-        ['both'   , 'both'    , 'both'       , 'both'        , 'other_nodes', 'other_elevation']
+        ['both'   , 'both'    , 'other_nodes', 'other_elevation']
     ]
     # fmt: on
 
@@ -78,8 +74,6 @@ def test_tag_nodes(test_session: SparkSession):
         [
             StructField("easting", StringType()),
             StructField("northing", StringType()),
-            StructField("easting_ptn", StringType()),
-            StructField("northing_ptn", StringType()),
             StructField("other_nodes", StringType()),
             StructField("other_elevation", StringType()),
         ]
@@ -108,8 +102,6 @@ def test_set_node_output_schema(test_session: SparkSession):
         "lat",
         "lon",
         "elevation",
-        "easting_ptn",
-        "northing_ptn",
         "other",
     ]
 
@@ -124,8 +116,6 @@ def test_set_node_output_schema(test_session: SparkSession):
         "lat",
         "lon",
         "elevation",
-        "easting_ptn",
-        "northing_ptn",
     ]
 
     target_data = [[0 for _ in target_cols]]

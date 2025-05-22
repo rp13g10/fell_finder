@@ -723,8 +723,6 @@ def test_set_edge_output_schema(test_session: SparkSession):
         "distance",
         "elevation_gain",
         "elevation_loss",
-        "easting_ptn",
-        "northing_ptn",
         "other",
     ]
 
@@ -748,8 +746,6 @@ def test_set_edge_output_schema(test_session: SparkSession):
         "distance",
         "elevation_gain",
         "elevation_loss",
-        "easting_ptn",
-        "northing_ptn",
     ]
 
     target_data = [[0 for _ in target_cols]]

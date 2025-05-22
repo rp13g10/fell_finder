@@ -377,8 +377,6 @@ class EdgeMixin(ABC):
             "distance",
             "elevation_gain",
             "elevation_loss",
-            "easting_ptn",
-            "northing_ptn",
         )
 
         return edges

@@ -32,7 +32,7 @@ class NodeMixin(ABC):
         """
         tagged = nodes.join(
             elevation,
-            on=["easting_ptn", "northing_ptn", "easting", "northing"],
+            on=["easting", "northing"],
             how="inner",
         )
 
@@ -50,8 +50,6 @@ class NodeMixin(ABC):
             A subset of the input dataset
 
         """
-        nodes = nodes.select(
-            "id", "lat", "lon", "elevation", "easting_ptn", "northing_ptn"
-        )
+        nodes = nodes.select("id", "lat", "lon", "elevation")
 
         return nodes
