@@ -8,7 +8,6 @@ from pyspark.sql import DataFrame, SparkSession
 
 from fell_loader.enriching.edge_mixin import EdgeMixin
 from fell_loader.enriching.node_mixin import NodeMixin
-from fell_loader.utils.partitioning import add_partitions_to_spark_df
 
 
 class GraphEnricher(NodeMixin, EdgeMixin):
@@ -97,13 +96,9 @@ class GraphEnricher(NodeMixin, EdgeMixin):
         edges_df = self.calculate_step_metrics(edges_df)
         edges_df = self.explode_edges(edges_df)
         edges_df = self.unpack_exploded_edges(edges_df)
-        edges_df = add_partitions_to_spark_df(edges_df)
         edges_df = self.tag_exploded_edges(edges_df, elevation_df)
         edges_df = self.calculate_elevation_changes(edges_df)
         edges_df = self.implode_edges(edges_df)
-        edges_df = add_partitions_to_spark_df(
-            edges_df, easting_col="src_easting", northing_col="src_northing"
-        )
         edges_df = self.calculate_edge_distances(edges_df)
         edges_df = self.set_edge_output_schema(edges_df)
 
