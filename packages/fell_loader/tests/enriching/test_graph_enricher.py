@@ -60,8 +60,7 @@ def test_store_df():
     )
 
 
-@patch("fell_loader.enriching.graph_enricher.add_partitions_to_spark_df")
-def test_enrich(mock_add_partitions_to_spark_df: MagicMock):
+def test_enrich():
     """Make sure the correct functions are being called with the correct
     arguments"""
 
@@ -107,12 +106,6 @@ def test_enrich(mock_add_partitions_to_spark_df: MagicMock):
 
     # Keep track of what's being stored and where
     test_enricher.store_df = MagicMock()
-
-    # Keep track of partitions being added
-    def add_partitions_side_effect(df: Any, *args, **kwargs) -> Any:
-        return df
-
-    mock_add_partitions_to_spark_df.side_effect = add_partitions_side_effect
 
     # Targets -----------------------------------------------------------------
 

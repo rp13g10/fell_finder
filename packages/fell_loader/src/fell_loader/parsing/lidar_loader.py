@@ -259,7 +259,7 @@ class LidarLoader:
     def write_df_to_parquet(self, lidar_df: pl.DataFrame) -> None:
         """Write the contents of a dataframe containing lidar data to the
         specified location. Data will be written in the parquet format, with
-        partitioning set on the `easting_ptn` and `northing_ptn` columns
+        partitioning set on the `file_id` column
 
         Args:
             lidar_df: A dataframe containing lidar data

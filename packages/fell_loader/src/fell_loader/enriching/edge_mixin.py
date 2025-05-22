@@ -206,7 +206,7 @@ class EdgeMixin(ABC):
         """
         tagged = edges.join(
             elevation,
-            on=["easting_ptn", "northing_ptn", "easting", "northing"],
+            on=["easting", "northing"],
             how="inner",
         )
 

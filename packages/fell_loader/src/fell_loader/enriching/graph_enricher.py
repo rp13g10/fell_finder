@@ -61,8 +61,7 @@ class GraphEnricher(NodeMixin, EdgeMixin):
     def store_df(
         self, df: DataFrame, target: Literal["nodes", "edges", "lidar"]
     ) -> None:
-        """Store an enriched dataframe to disk, partitioning it by easting_ptn
-        and northing_ptn.
+        """Store an enriched dataframe to disk.
 
         Args:
             df: The dataframe to be stored
