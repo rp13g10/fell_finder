@@ -4,11 +4,6 @@ import inspect
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-import pytest
-from pyspark.sql import SparkSession
-from pyspark.sql.types import IntegerType, StructField, StructType
-from pyspark.testing import assertDataFrameEqual
-
 from fell_loader.enriching.graph_enricher import GraphEnricher
 
 
