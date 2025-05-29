@@ -1,8 +1,8 @@
 """Unit tests for the LIDAR parsing script"""
 
-from unittest.mock import MagicMock, patch
-from textwrap import dedent
 from dataclasses import dataclass
+from textwrap import dedent
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import polars as pl
@@ -225,49 +225,6 @@ def test_generate_df_from_lidar_array():
     assert_frame_equal(result_tail, target_tail)
 
 
-def test_add_file_ids():
-    """Check that file IDs are being added properly"""
-    # Arrange #################################################################
-
-    # ----- Test Data -----
-    # fmt: off
-    _ = (
-        ['inx'])
-
-    test_data = [
-        [0]
-    ]
-    # fmt: on
-
-    test_schema = {"inx": pl.Int32()}
-
-    test_df = pl.DataFrame(data=test_data, schema=test_schema, orient="row")
-
-    test_lidar_dir = "/some/folder/lidar_composite_dtm-2020-1-SU20ne.zip"
-
-    mock_loader = MockLidarLoader()
-
-    # ----- Target Data -----
-    # fmt: off
-    _ = (
-        ['inx', 'file_id'])
-
-    tgt_data = [
-        [0    , 'SU20ne']
-    ]
-    # fmt: on
-
-    tgt_schema = {"inx": pl.Int32(), "file_id": pl.String()}
-
-    tgt_df = pl.DataFrame(data=tgt_data, schema=tgt_schema, orient="row")
-
-    # Act
-    res_df = mock_loader.add_file_ids(test_df, test_lidar_dir)
-
-    # Assert
-    assert_frame_equal(tgt_df, res_df)
-
-
 def test_set_output_schema():
     """Check that the correct output schema is being set"""
     # Arrange #################################################################
@@ -275,7 +232,7 @@ def test_set_output_schema():
     # ----- Test Data -----
     # fmt: off
     test_cols = (
-        ['easting', 'northing', 'elevation', 'file_id', 'other'])
+        ['easting', 'northing', 'elevation', 'ptn', 'other'])
 
     test_data = [
         [0] * len(test_cols)
@@ -287,7 +244,7 @@ def test_set_output_schema():
     # ----- Target Data -----=
     # fmt: off
     tgt_cols = (
-        ['easting', 'northing', 'elevation', 'file_id'])
+        ['easting', 'northing', 'elevation', 'ptn'])
 
     tgt_data = [
         [0] * len(tgt_cols)
@@ -303,6 +260,7 @@ def test_set_output_schema():
     assert_frame_equal(tgt_df, res_df)
 
 
+@patch("fell_loader.utils.partitioning.PTN_EDGE_SIZE_M", 10000)
 def test_parse_lidar_folder():
     """Ensure the correct calls are made, and output is as expected"""
 
@@ -352,10 +310,10 @@ def test_parse_lidar_folder():
 
     # fmt: off
     _ = (
-        ['easting', 'northing', 'elevation', 'file_id'])
+        ['easting', 'northing', 'elevation', 'ptn'])
 
     tgt_data = [
-        [easting  , northing  , 100.0      , 'SU20ne']
+        [easting  , northing  , 100.0      , '12_98']
     ]
     # fmt: on
 
@@ -363,7 +321,7 @@ def test_parse_lidar_folder():
         "easting": pl.Int32(),
         "northing": pl.Int32(),
         "elevation": pl.Float64(),
-        "file_id": pl.String(),
+        "ptn": pl.String(),
     }
 
     tgt_df = pl.DataFrame(data=tgt_data, schema=tgt_schema, orient="row")
@@ -395,7 +353,7 @@ def test_write_df_to_parquet():
     target_kwargs = {
         "use_pyarrow": True,
         "pyarrow_options": {
-            "partition_cols": ["file_id"],
+            "partition_cols": ["ptn"],
             "compression": "snappy",
         },
     }
@@ -407,14 +365,11 @@ def test_write_df_to_parquet():
     mock_write_parquet.assert_called_once_with(*target_args, **target_kwargs)
 
 
-@patch("fell_loader.parsing.lidar_loader.os.path.exists")
 class TestProcessLidarFile:
     """Make sure lidar files are being processed as-expected"""
 
     @patch("fell_loader.parsing.lidar_loader.open")
-    def test_processing_success(
-        self, mock_open: MagicMock, mock_exists: MagicMock
-    ):
+    def test_processing_success(self, mock_open: MagicMock):
         """Happy path, no issues while processing"""
 
         # Arrange #############################################################
@@ -426,23 +381,14 @@ class TestProcessLidarFile:
         # Mock Loader ---------------------------------------------------------
 
         mock_loader = MockLidarLoader()
-        mock_loader.generate_file_id = MagicMock(return_value="file_id")
         mock_loader.parse_lidar_folder = MagicMock(return_value="lidar_df")
         mock_loader.write_df_to_parquet = MagicMock()
-
-        # Other ---------------------------------------------------------------
-        mock_exists.return_value = False
 
         # Act #################################################################
 
         mock_loader.process_lidar_file(test_lidar_dir)
 
         # Assert ##############################################################
-
-        # Correct file was polled
-        mock_exists.assert_called_once_with(
-            "data_dir/parsed/lidar/file_id=file_id"
-        )
 
         # Correct calls were generated
         mock_loader.parse_lidar_folder.assert_called_once_with(test_lidar_dir)
@@ -451,31 +397,8 @@ class TestProcessLidarFile:
         # Nothing was written to bad_files.txt
         mock_open.assert_not_called()
 
-    def test_file_already_processed(self, mock_exists: MagicMock):
-        """No action if file has already been processed"""
-
-        # ----- Arrange -----
-        mock_loader = MockLidarLoader()
-        mock_loader.generate_file_id = MagicMock(return_value="file_id")
-        mock_loader.parse_lidar_folder = MagicMock()
-
-        mock_exists.return_value = True
-
-        # ----- Act -----
-        result = mock_loader.process_lidar_file("lidar_dir")
-
-        # ----- Assert -----
-
-        # Nothing was returned
-        assert result is None
-
-        # Function exited early
-        mock_loader.parse_lidar_folder.assert_not_called()
-
     @patch("fell_loader.parsing.lidar_loader.open")
-    def test_processing_failure(
-        self, mock_open: MagicMock, mock_exists: MagicMock
-    ):
+    def test_processing_failure(self, mock_open: MagicMock):
         """Unhappy path, non-standard file"""
 
         # Arrange #############################################################
@@ -487,7 +410,6 @@ class TestProcessLidarFile:
         # Mock Loader ---------------------------------------------------------
 
         mock_loader = MockLidarLoader()
-        mock_loader.generate_file_id = MagicMock(return_value="file_id")
         mock_loader.parse_lidar_folder = MagicMock(
             side_effect=pl.exceptions.ShapeError
         )
@@ -497,19 +419,11 @@ class TestProcessLidarFile:
         mock_write = MagicMock()
         mock_open.return_value.__enter__.return_value.write = mock_write
 
-        # Other ---------------------------------------------------------------
-        mock_exists.return_value = False
-
         # Act #################################################################
 
         mock_loader.process_lidar_file(test_lidar_dir)
 
         # Assert ##############################################################
-
-        # Correct file was polled
-        mock_exists.assert_called_once_with(
-            "data_dir/parsed/lidar/file_id=file_id"
-        )
 
         # Attempted file parsing
         mock_loader.parse_lidar_folder.assert_called_once_with(test_lidar_dir)

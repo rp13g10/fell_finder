@@ -5,16 +5,16 @@ from unittest.mock import MagicMock, patch
 import pytest
 from pyspark.sql import SparkSession
 from pyspark.sql.types import (
-    StructField,
-    StructType,
-    StringType,
-    IntegerType,
-    DoubleType,
     ArrayType,
     BinaryType,
-    MapType,
     BooleanType,
+    DoubleType,
+    IntegerType,
     LongType,
+    MapType,
+    StringType,
+    StructField,
+    StructType,
 )
 from pyspark.testing import assertDataFrameEqual
 
@@ -401,8 +401,9 @@ def test_get_tag_as_column(test_session: SparkSession):
     assertDataFrameEqual(res_df, tgt_df)
 
 
-def test_remove_restricted_routes(test_session: SparkSession):
-    """Check that restricted edges are being removed properly"""
+def test_get_roads_and_paths(test_session: SparkSession):
+    """Make sure filtering out of non-traversible ways has been set up
+    properly"""
     # Arrange #################################################################
 
     # ----- Test Data -----
@@ -410,12 +411,8 @@ def test_remove_restricted_routes(test_session: SparkSession):
     # fmt: off
     #   inx, tags
     test_data = [
-        [0 , {'access': 'yes'}],
-        [1 , {'access': 'no'}],
-        [2 , {'access': 'permissive'}],
-        [3 , {'access': 'designated'}],
-        [4 , {'access': 'other'}],
-        [5 , {}],
+        [0 , {'highway': 'some'}],
+        [1 , {}],
     ]
     # fmt: on
 
@@ -432,12 +429,9 @@ def test_remove_restricted_routes(test_session: SparkSession):
 
     # ----- Target Data -----
     # fmt: off
-    #   inx, tags
+    #   inx, tags               , highway
     tgt_data = [
-        [0 , {'access': 'yes'}],
-        [2 , {'access': 'permissive'}],
-        [3 , {'access': 'designated'}],
-        [5 , {}],
+        [0 , {'highway': 'some'}, 'some'],
     ]
     # fmt: on
 
@@ -445,6 +439,136 @@ def test_remove_restricted_routes(test_session: SparkSession):
         [
             StructField("inx", IntegerType()),
             StructField("tags", MapType(StringType(), StringType())),
+            StructField("highway", StringType()),
+        ]
+    )
+
+    tgt_df = test_session.createDataFrame(tgt_data, schema=tgt_schema)
+
+    # Act #####################################################################
+    res_df = test_loader.get_roads_and_paths(test_df)
+
+    # Assert ##################################################################
+    assertDataFrameEqual(res_df, tgt_df)
+
+
+def test_flag_explicit_footways(test_session: SparkSession):
+    """Check that ways with explicit footways are being flagged correctly"""
+    # Arrange #################################################################
+
+    # ----- Test Data -----
+
+    # fmt: off
+    #   inx, tags
+    test_data = [
+        # Explicit yes
+        [0 , {'foot': 'yes'}],
+        [1 , {'sidewalk': 'yes'}],
+        # Explicit no
+        [2 , {'foot': 'no'}],
+        # Multiple explicit yes
+        [3 , {'foot': 'yes', 'sidwalk': 'yes'}],
+        # Mixed
+        [4 , {'foot': 'yes', 'sidewalk': 'no'}],
+        # No tag set
+        [4 , {}],
+    ]
+    # fmt: on
+
+    test_schema = StructType(
+        [
+            StructField("inx", IntegerType()),
+            StructField("tags", MapType(StringType(), StringType())),
+        ]
+    )
+
+    test_df = test_session.createDataFrame(test_data, schema=test_schema)
+
+    test_loader = MockOsmLoader()
+
+    # ----- Target Data -----
+    # fmt: off
+    #   inx, tags                             , explicit_footway
+    tgt_data = [
+        # Explicit yes
+        [0 , {'foot': 'yes'}                  , True],
+        [1 , {'sidewalk': 'yes'}              , True],
+        # Explicit no
+        [2 , {'foot': 'no'}                   , False],
+        # Multiple explicit yes
+        [3 , {'foot': 'yes', 'sidwalk': 'yes'}, True],
+        # Mixed
+        [4 , {'foot': 'yes', 'sidewalk': 'no'}, True],
+        # No tag set
+        [4 , {}                               , False],
+    ]
+    # fmt: on
+
+    tgt_schema = StructType(
+        [
+            StructField("inx", IntegerType()),
+            StructField("tags", MapType(StringType(), StringType())),
+            StructField("explicit_footway", BooleanType()),
+        ]
+    )
+
+    tgt_df = test_session.createDataFrame(tgt_data, schema=tgt_schema)
+
+    # Act #####################################################################
+    res_df = test_loader.flag_explicit_footways(test_df)
+
+    # Assert ##################################################################
+    assertDataFrameEqual(res_df, tgt_df)
+
+
+def test_remove_restricted_routes(test_session: SparkSession):
+    """Check that restricted edges are being removed properly"""
+    # Arrange #################################################################
+
+    # ----- Test Data -----
+
+    # fmt: off
+    #   inx, tags                    , explicit_footway
+    test_data = [
+        [0 , {'access': 'yes'}       , False],
+        [1 , {'access': 'no'}        , False],
+        [2 , {'access': 'permissive'}, False],
+        [3 , {'access': 'designated'}, False],
+        [4 , {'access': 'other'}     , False],
+        [5 , {}                      , False],
+        [6 , {'access': 'no'}        , True],
+    ]
+    # fmt: on
+
+    test_schema = StructType(
+        [
+            StructField("inx", IntegerType()),
+            StructField("tags", MapType(StringType(), StringType())),
+            StructField("explicit_footway", BooleanType()),
+        ]
+    )
+
+    test_df = test_session.createDataFrame(test_data, schema=test_schema)
+
+    test_loader = MockOsmLoader()
+
+    # ----- Target Data -----
+    # fmt: off
+    #   inx, tags                    , explicit_footway
+    tgt_data = [
+        [0 , {'access': 'yes'}       , False],
+        [2 , {'access': 'permissive'}, False],
+        [3 , {'access': 'designated'}, False],
+        [5 , {}                      , False],
+        [6 , {'access': 'no'}        , True],
+    ]
+    # fmt: on
+
+    tgt_schema = StructType(
+        [
+            StructField("inx", IntegerType()),
+            StructField("tags", MapType(StringType(), StringType())),
+            StructField("explicit_footway", BooleanType()),
         ]
     )
 
@@ -452,6 +576,79 @@ def test_remove_restricted_routes(test_session: SparkSession):
 
     # Act #####################################################################
     res_df = test_loader.remove_restricted_routes(test_df)
+
+    # Assert ##################################################################
+    assertDataFrameEqual(res_df, tgt_df)
+
+
+def test_remove_unsafe_routes(test_session: SparkSession):
+    """Check that unsafe roads are being removed properly"""
+    # Arrange #################################################################
+
+    # ----- Test Data -----
+
+    # fmt: off
+    #   inx, tags                      , highway   , explicit_footway
+    test_data = [
+        # Dropped, motorway
+        [0 , {}                        , 'motorway', False],
+        # Dropped, roundabout
+        [1 , {'junction': 'roundabout'}, 'other'   , False],
+        # Dropped, 60 mph, no footway
+        [2 , {'maxspeed': '60 mph'}    , 'other'   , False],
+        # Dropped, 70 mph, no footway
+        [3 , {'maxspeed': '70 mph'}    , 'other'   , False],
+        # Retained, 60 mph, footway
+        [4 , {'maxspeed': '60 mph'}    , 'other'   , True],
+        # Retained, 30 mph, no (explicit) footway
+        [5 , {'maxspeed': '30 mph'}    , 'other'   , False],
+        # Dropped, motorway (with speed limit tag)
+        [6 , {'maxspeed': '70 mph'}    , 'motorway', False]
+    ]
+    # fmt: on
+
+    test_schema = StructType(
+        [
+            StructField("inx", IntegerType()),
+            StructField("tags", MapType(StringType(), StringType())),
+            StructField("highway", StringType()),
+            StructField("explicit_footway", BooleanType()),
+        ]
+    )
+
+    test_df = test_session.createDataFrame(test_data, schema=test_schema)
+
+    test_loader = MockOsmLoader()
+
+    # ----- Target Data -----
+    # fmt: off
+    #   inx, tags                      , highway   , explicit_footway
+    tgt_data = [
+        # Dropped, motorway
+        # Dropped, roundabout
+        # Dropped, 60 mph, no footway
+        # Dropped, 70 mph, no footway
+        # Retained, 60 mph, footway
+        [4 , {'maxspeed': '60 mph'}    , 'other'   , True],
+        # Retained, 30 mph, no (explicit) footway
+        [5 , {'maxspeed': '30 mph'}    , 'other'   , False],
+        # Dropped, motorway (with speed limit tag)
+    ]
+    # fmt: on
+
+    tgt_schema = StructType(
+        [
+            StructField("inx", IntegerType()),
+            StructField("tags", MapType(StringType(), StringType())),
+            StructField("highway", StringType()),
+            StructField("explicit_footway", BooleanType()),
+        ]
+    )
+
+    tgt_df = test_session.createDataFrame(tgt_data, schema=tgt_schema)
+
+    # Act #####################################################################
+    res_df = test_loader.remove_unsafe_routes(test_df)
 
     # Assert ##################################################################
     assertDataFrameEqual(res_df, tgt_df)

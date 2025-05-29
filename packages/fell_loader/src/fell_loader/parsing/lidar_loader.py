@@ -2,7 +2,6 @@
 extracts into a tabular format."""
 
 import os
-import re
 import zipfile
 from glob import glob
 from typing import Set
@@ -11,6 +10,11 @@ import numpy as np
 import polars as pl
 import rasterio as rio
 from tqdm.contrib.concurrent import process_map
+
+from fell_loader.utils.partitioning import add_bng_partition_to_polars_df
+
+# TODO: Add support for resume of partial loads, will need a thread-safe
+#       cache
 
 
 class LidarLoader:
@@ -123,34 +127,6 @@ class LidarLoader:
         return lidar, bbox
 
     @staticmethod
-    def generate_file_id(lidar_dir: str) -> str:
-        """Extract the OS grid reference for a given LIDAR file based on its
-        full location on the filesystem.
-
-        Args:
-            lidar_dir: The full path to a LIDAR file, expected format is
-              /DATA_DIR/extracts/lidar/lidar_composite_dtm_YYYY-1-XXDDxx
-
-        Returns:
-            The OS grid reference for the file, expected format is
-            XXDDxx (e.g. SU20ne)
-
-        """
-
-        id_match = re.search(r"([A-Z][A-Z]\d\d[ns][ew])\.zip$", lidar_dir)
-
-        if id_match:
-            file_id = id_match.group(1)
-            return file_id
-
-        raise ValueError(
-            (
-                "Unable to extract grid reference from provided lidar_dir: "
-                + lidar_dir
-            )
-        )
-
-    @staticmethod
     def generate_df_from_lidar_array(
         lidar: np.ndarray, bbox: np.ndarray
     ) -> pl.DataFrame:
@@ -192,29 +168,6 @@ class LidarLoader:
 
         return df
 
-    def add_file_ids(
-        self, lidar_df: pl.DataFrame, lidar_dir: str
-    ) -> pl.DataFrame:
-        """Generate a file ID for a given file name, and store it in the
-        provided dataframe under the 'file_id' column name. The file ID will be
-        the OS grid reference for the provided file name. For example,
-        lidar_composite_dtm_2022-1-SU20ne would generate a file ID of SU20ne.
-
-        Args:
-            lidar_df: A dataframe containing LIDAR data
-            lidar_dir: The name of the file from which `lidar_df` was created
-
-        Returns:
-            The input dataset, with an additional 'file_id' column
-
-        """
-
-        file_id = self.generate_file_id(lidar_dir)
-
-        lidar_df = lidar_df.with_columns(pl.lit(file_id).alias("file_id"))
-
-        return lidar_df
-
     @staticmethod
     def set_output_schema(lidar_df: pl.DataFrame) -> pl.DataFrame:
         """Set expected column order
@@ -226,12 +179,7 @@ class LidarLoader:
             A copy of the input dataframe with an updated schema
 
         """
-        lidar_df = lidar_df.select(
-            "easting",
-            "northing",
-            "elevation",
-            "file_id",
-        )
+        lidar_df = lidar_df.select("easting", "northing", "elevation", "ptn")
 
         return lidar_df
 
@@ -252,14 +200,14 @@ class LidarLoader:
 
         lidar_df = self.generate_df_from_lidar_array(lidar, bbox)
 
-        lidar_df = self.add_file_ids(lidar_df, lidar_dir)
+        lidar_df = add_bng_partition_to_polars_df(lidar_df)
         lidar_df = self.set_output_schema(lidar_df)
         return lidar_df
 
     def write_df_to_parquet(self, lidar_df: pl.DataFrame) -> None:
         """Write the contents of a dataframe containing lidar data to the
         specified location. Data will be written in the parquet format, with
-        partitioning set on the `file_id` column
+        partitioning set on the `ptn` column
 
         Args:
             lidar_df: A dataframe containing lidar data
@@ -271,7 +219,7 @@ class LidarLoader:
             tgt_loc,
             use_pyarrow=True,
             pyarrow_options={
-                "partition_cols": ["file_id"],
+                "partition_cols": ["ptn"],
                 "compression": "snappy",
             },
         )
@@ -286,14 +234,7 @@ class LidarLoader:
             lidar_dir: The location of the lidar file to be parsed
 
         """
-        file_id = self.generate_file_id(lidar_dir)
 
-        # TODO: Test this, set up script to read in all parquet files and
-        #       validate that row count is as expected
-        if os.path.exists(
-            os.path.join(self.data_dir, "parsed/lidar", f"file_id={file_id}")
-        ):
-            return
         try:
             lidar_df = self.parse_lidar_folder(lidar_dir)
             self.write_df_to_parquet(lidar_df)

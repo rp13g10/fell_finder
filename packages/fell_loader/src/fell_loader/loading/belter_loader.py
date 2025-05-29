@@ -31,10 +31,10 @@ class BelterLoader:
     """Class responsible for initializing the postgres database and loading
     data into it"""
 
-    def __init__(self, data_dir: str) -> None:
+    def __init__(self) -> None:
         self.db = self._get_db_conn()
         self.db.autocommit = True
-        self.data_dir = data_dir
+        self.data_dir = os.environ["FF_DATA_DIR"]
 
     def _get_credentials(self) -> tuple[str, str]:
         """Quick & dirty function to fetch credentials for database access,

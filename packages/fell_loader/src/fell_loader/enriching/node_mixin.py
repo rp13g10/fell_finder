@@ -30,9 +30,13 @@ class NodeMixin(ABC):
             A copy of nodes with an additional elevation field
 
         """
+
+        nodes = nodes.repartition("ptn")
+        elevation = elevation.repartition("ptn")
+
         tagged = nodes.join(
             elevation,
-            on=["easting", "northing"],
+            on=["ptn", "easting", "northing"],
             how="inner",
         )
 

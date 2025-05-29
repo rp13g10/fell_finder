@@ -2,20 +2,21 @@
 complexity of the graph when loaded into networkx for route creation"""
 
 import os
-import re
-from glob import glob
-from typing import Literal, Set, Tuple
+from typing import Literal
 
+from pyspark import StorageLevel
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.window import Window
+
+from fell_loader.utils.partitioning import add_coords_partition_to_spark_df
 
 
 class GraphContractor:
     """Class which is responsible for minimising the complexity of the graph
     when loaded into networkx for route creation"""
 
-    def __init__(self, data_dir: str, spark: SparkSession) -> None:
+    def __init__(self, spark: SparkSession) -> None:
         """Create a graph contractor object, which exposes an optimise method
         that removes nodes from the graph which do not form junctions
 
@@ -24,65 +25,8 @@ class GraphContractor:
             spark: The active spark session
 
         """
-        self.data_dir = data_dir
+        self.data_dir = os.environ["FF_DATA_DIR"]
         self.spark = spark
-        self.num_ptns = 0
-
-    def get_available_partitions(self) -> Set[Tuple[int, int]]:
-        """Use the filesystem to determine which partitions are available in
-        the specified subfolder. This should be much faster than using a
-        pyspark groupby operation.
-
-        Args:
-            subfolder: The subfolder containing the dataset to be analysed
-
-        Raises:
-            FileNotFoundError: If no partitions can be identified, an exception
-              will be raised
-
-        Returns:
-            A set in which each tuple represents a single
-            easting_ptn/northing_ptn pair which is present in the data
-
-        """
-
-        # Fetch a list of all parquet files in the dataset
-        all_files = glob(
-            os.path.join(self.data_dir, "enriched/nodes", "**", "*.parquet"),
-            recursive=True,
-        )
-
-        def _get_easting_northing(file_path: str) -> Tuple[int, int]:
-            """Helper function which uses regular expressions to fetch the
-            easting and northing partition for the provided file path and
-            return them as a tuple.
-
-            Args:
-                file_path: The file path to be analysed
-
-            Raises:
-                FileNotFoundError: If no partitions can be identified, an
-                  exception will be raised
-
-            Returns:
-                A tuple containing the easting_ptn and northing_ptn for the
-                provided file_path
-
-            """
-            match_ = re.search(
-                r".*/easting_ptn=(\d+)/northing_ptn=(\d+)/.*", file_path
-            )
-            if match_ is None:
-                raise FileNotFoundError(
-                    f"Unable to identify a partition for {file_path}"
-                )
-            easting = int(match_.group(1))
-            northing = int(match_.group(2))
-            return easting, northing
-
-        all_partitions = {_get_easting_northing(file_) for file_ in all_files}
-
-        return all_partitions
 
     def load_df(self, dataset: Literal["edges", "nodes"]) -> DataFrame:
         """Load in the contents of a single dataset as a spark dataframe.
@@ -98,7 +42,6 @@ class GraphContractor:
         data_dir = os.path.join(self.data_dir, "enriched", dataset)
 
         df = self.spark.read.parquet(data_dir)
-        df = df.repartition(self.num_ptns, "easting_ptn", "northing_ptn")
 
         return df
 
@@ -346,11 +289,7 @@ class GraphContractor:
             F.sum("elevation_loss").alias("elevation_loss"),
             F.sum("distance").alias("distance"),
             F.array_sort(
-                F.collect_list(
-                    F.struct(
-                        "way_inx", "distance", "easting_ptn", "northing_ptn"
-                    )
-                )
+                F.collect_list(F.struct("way_inx", "distance"))
             ).alias("geom"),
             F.array_sort(
                 F.collect_list(
@@ -508,15 +447,7 @@ class GraphContractor:
             F.col("geom_lon").alias("lons"),
             F.col("geom_elevation").alias("eles"),
             F.col("geom_distance").alias("dists"),
-            F.replace(
-                F.concat_ws(
-                    "_",
-                    F.col("src_lat").astype("integer").astype("string"),
-                    F.col("src_lon").astype("integer").astype("string"),
-                ),
-                F.lit("-"),
-                F.lit("n"),
-            ).alias("ptn"),
+            "ptn",
         )
 
         edges = edges.dropna(subset=["src", "dst"])
@@ -545,8 +476,6 @@ class GraphContractor:
 
         return nodes
 
-    # TODO: Wrap concat_ws logic in separate function
-
     @staticmethod
     def set_node_output_schema(nodes: DataFrame) -> DataFrame:
         """Ensure the nodes dataset has a consistent schema
@@ -558,29 +487,15 @@ class GraphContractor:
             A subset of the input dataframe
 
         """
-        nodes = nodes.select(
-            "id",
-            "lat",
-            "lon",
-            "elevation",
-            F.replace(
-                F.concat_ws(
-                    "_",
-                    F.col("lat").astype("integer").astype("string"),
-                    F.col("lon").astype("integer").astype("string"),
-                ),
-                F.lit("-"),
-                F.lit("n"),
-            ).alias("ptn"),
-        )
+        nodes = nodes.select("id", "lat", "lon", "elevation", "ptn")
 
         nodes = nodes.dropna(subset=["id"])
 
         return nodes
 
     def store_df(self, df: DataFrame, target: str) -> None:
-        """Store an enriched dataframe to disk, partitioning it by easting_ptn
-        and northing_ptn.
+        """Store an enriched dataframe to disk, as utf-8 encoded CSV files.
+        These can then be bulk loaded directly into postgres.
 
         Args:
             df: The dataframe to be stored
@@ -608,38 +523,30 @@ class GraphContractor:
         performance of the route finding algorithm.
         """
 
-        self.num_ptns = len(self.get_available_partitions())
-        start_shuffle_ptns = self.spark.conf.get(
-            "spark.sql.shuffle.partitions", "200"
-        )
-
-        self.spark.conf.set("spark.sql.shuffle.partitions", str(self.num_ptns))
-
         nodes = self.load_df("nodes")
         edges = self.load_df("edges")
 
         nodes = self.add_degrees_to_nodes(nodes, edges)
         nodes = self.derive_node_flags(nodes)
+        nodes = nodes.persist(StorageLevel.DISK_ONLY)
 
         edges = self.derive_way_start_end_flags(edges)
         edges = self.derive_chain_src_dst(nodes, edges)
         edges = self.propagate_chain_src_dst(edges)
+        edges = edges.persist(StorageLevel.DISK_ONLY)
 
         edges = self.contract_chains(edges)
-
         edges = self.generate_new_edges_from_chains(edges)
         edges = self.drop_dead_ends(edges)
         edges = self.set_geom_to_pgsql_format(edges)
+        edges = add_coords_partition_to_spark_df(
+            edges, lat_col="src_lat", lon_col="src_lon"
+        )
         edges = self.set_edge_output_schema(edges)
 
         nodes = self.drop_unused_nodes(nodes, edges)
+        nodes = add_coords_partition_to_spark_df(nodes)
         nodes = self.set_node_output_schema(nodes)
 
         self.store_df(nodes, "nodes")
         self.store_df(edges, "edges")
-
-        # Restore the original settings of the spark session
-        self.spark.conf.set(
-            "spark.sql.shuffle.partitions",
-            start_shuffle_ptns,  # type: ignore
-        )

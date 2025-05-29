@@ -5,9 +5,10 @@ import os
 from glob import glob
 from typing import Literal
 
-from pyspark.sql import DataFrame, functions as F, SparkSession, Window
-from pyspark.sql import types as T
 from bng_latlon import WGS84toOSGB36
+from pyspark.sql import DataFrame, SparkSession, Window
+from pyspark.sql import functions as F
+from pyspark.sql import types as T
 
 
 class OsmLoader:
@@ -227,6 +228,61 @@ class OsmLoader:
 
         return df
 
+    def get_roads_and_paths(self, ways: DataFrame) -> DataFrame:
+        """A Way in the OSM dataset may represent areas on the map (e.g.
+        woodland) as well as paths and roads. For the purposes of generating
+        running routes, we're only interested in the latter. We can determine
+        if a Way is part of the road/path network based on the presence of the
+        'highway' tag. The highway tag is retained as a new column for use
+        downstream.
+
+        Args:
+            ways: A dataframe containing the ways from the OSM extract
+
+        Returns:
+            A filtered copy of the input dataset with a new 'highway' column
+
+        """
+
+        ways = self.get_tag_as_column(ways, "highway")
+
+        ways = ways.dropna(subset=["highway"])
+
+        return ways
+
+    def flag_explicit_footways(self, ways: DataFrame) -> DataFrame:
+        """Attempt to use tags to determine which ways have been explicitly
+        marked as accessible by foot. This may indicate a public crossing over
+        private land, or the presence of a footpath next to a busy road.
+
+        Args:
+            ways: A dataframe containing the ways from the OSM extract
+
+        Returns:
+            A copy of the input dataset with an additional boolean
+            `explicit_footway` column
+
+        """
+
+        footway_tags = [
+            "foot",
+            "sidewalk",
+            "sidewalk:left",
+            "sidewalk:right",
+            "sidewalk:both",
+        ]
+
+        ways = ways.withColumn("explicit_footway", F.lit(False))
+        for tag in footway_tags:
+            ways = self.get_tag_as_column(ways, tag)
+            ways = ways.withColumn(tag, F.col(tag) != "no").fillna(False)
+            ways = ways.withColumn(
+                "explicit_footway", F.col("explicit_footway") | F.col(tag)
+            )
+            ways = ways.drop(tag)
+
+        return ways
+
     def remove_restricted_routes(self, ways: DataFrame) -> DataFrame:
         """Remove any ways which correspond to routes with access controls,
         which are not usable by the public
@@ -247,7 +303,57 @@ class OsmLoader:
 
         noflag_mask = F.col("access").isNull()
 
-        ways = ways.filter(accessible_mask | noflag_mask).drop("access")
+        explicit_mask = F.col("explicit_footway")
+
+        ways = ways.filter(accessible_mask | noflag_mask | explicit_mask).drop(
+            "access"
+        )
+
+        return ways
+
+    def remove_unsafe_routes(self, ways: DataFrame) -> DataFrame:
+        """Some parts of the map will not be suitable for use by the routing
+        algorithm as they are not safe to run on. This function will exclude
+        all motorways, and any high-speed roads (<=50 mph) which do not have
+        a footpath.
+
+        Args:
+            ways: A dataframe containing the ways from the OSM extract
+
+        Returns:
+            A filtered copy of the input dataset
+
+        """
+        # Drop motorways & motorway links
+        not_motorway_mask = ~F.col("highway").contains(F.lit("motorway"))
+        ways = ways.filter(not_motorway_mask)
+
+        # Get rid of roundabouts
+        ways = self.get_tag_as_column(ways, "junction")
+        not_roundabout_mask = F.col("junction") != "roundabout"
+        not_junction_mask = F.col("junction").isNull()
+        ways = ways.filter(not_roundabout_mask | not_junction_mask).drop(
+            "junction"
+        )
+
+        # Extract max speed on other roads as an integer
+        ways = self.get_tag_as_column(ways, "maxspeed")
+
+        ways = ways.withColumn(
+            "maxspeed",
+            F.regexp_extract(
+                F.col("maxspeed"), r"[A-Za-z\s]*(\d{1,3})[A-Za-z\s]*", 1
+            ),  # .cast(T.IntegerType()),
+        )
+
+        # Keep records with max speed below 50, no known max speed, or have
+        # been flagged as having a footpath
+        low_speed_mask = F.col("maxspeed") < 50
+        no_speed_mask = F.col("maxspeed").isNull()
+        footway_mask = F.col("explicit_footway")
+        ways = ways.filter(low_speed_mask | no_speed_mask | footway_mask).drop(
+            "maxspeed"
+        )
 
         return ways
 
@@ -509,10 +615,12 @@ class OsmLoader:
         nodes = self.read_from_parquet("nodes")
 
         ways = self.unpack_tags(ways)
+        ways = self.get_roads_and_paths(ways)
+        ways = self.flag_explicit_footways(ways)
         ways = self.remove_restricted_routes(ways)
+        ways = self.remove_unsafe_routes(ways)
         ways = self.set_flat_flag(ways)
         ways = self.set_oneway_flag(ways)
-        ways = self.get_tag_as_column(ways, "highway")
         ways = self.get_tag_as_column(ways, "surface")
 
         self.write_to_parquet(ways, "ways")

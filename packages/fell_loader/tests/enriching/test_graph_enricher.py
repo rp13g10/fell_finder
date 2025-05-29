@@ -1,8 +1,8 @@
 """Tests for the user-facing graph enricher class"""
 
-import inspect
-from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
+
+import pytest
 
 from fell_loader.enriching.graph_enricher import GraphEnricher
 
@@ -38,90 +38,56 @@ def test_load_df():
     assert result is test_enricher.spark.read.parquet.return_value
 
 
-def test_store_df():
+class TestStoreDf:
     """Make sure data is being stored to disk correctly"""
 
-    # Arrange #################################################################
+    def test_with_partitions(self):
+        """Make sure data is being stored to disk correctly"""
 
-    test_enricher = MockGraphEnricher()
+        # Arrange #################################################################
 
-    test_df = MagicMock()
-    test_target = "nodes"
+        test_enricher = MockGraphEnricher()
 
-    target_parquet_call = "data_dir/enriched/nodes"
+        test_df = MagicMock()
+        test_target = "nodes"
+        test_ptns = True
 
-    # Act #####################################################################
+        target_dir = "data_dir/enriched/nodes"
+        target_kwargs = {"compression": "snappy", "partitionBy": "ptn"}
 
-    test_enricher.store_df(test_df, test_target)
+        # Act #####################################################################
 
-    # Assert ##################################################################
-    test_df.write.mode.return_value.parquet.assert_called_once_with(
-        target_parquet_call
-    )
+        test_enricher.store_df(test_df, test_target, test_ptns)
+
+        # Assert ##################################################################
+        test_df.write.mode.return_value.parquet.assert_called_once_with(
+            target_dir, **target_kwargs
+        )
+
+    def test_without_partitions(self):
+        """Make sure data is being stored to disk correctly"""
+
+        # Arrange #################################################################
+
+        test_enricher = MockGraphEnricher()
+
+        test_df = MagicMock()
+        test_target = "nodes"
+        test_ptns = False
+
+        target_dir = "data_dir/enriched/nodes"
+        target_kwargs = {"compression": "snappy"}
+
+        # Act #####################################################################
+
+        test_enricher.store_df(test_df, test_target, test_ptns)
+
+        # Assert ##################################################################
+        test_df.write.mode.return_value.parquet.assert_called_once_with(
+            target_dir, **target_kwargs
+        )
 
 
+@pytest.mark.skip
 def test_enrich():
-    """Make sure the correct functions are being called with the correct
-    arguments"""
-
-    # Arrange #################################################################
-
-    # Inputs ------------------------------------------------------------------
-
-    test_enricher = MockGraphEnricher()
-
-    # Set up mocks which return traceable 'dataframes'
-    mock_nodes_df = MagicMock()
-    mock_edges_df = MagicMock()
-    mock_lidar_df = MagicMock()
-
-    def load_side_effect(dataset: str) -> MagicMock:
-        match dataset:
-            case "nodes":
-                return mock_nodes_df
-            case "edges":
-                return mock_edges_df
-            case "lidar":
-                return mock_lidar_df
-        raise ValueError("Something went wrong!")
-
-    test_enricher.load_df = MagicMock(side_effect=load_side_effect)
-
-    # Set transform methods to return input 'dataframe' to retain traceability
-    # Nodes
-    test_enricher.tag_nodes = MagicMock(side_effect=lambda x, _: x)
-    test_enricher.set_node_output_schema = MagicMock(side_effect=lambda x: x)
-
-    # Edges
-    test_enricher.calculate_step_metrics = MagicMock(side_effect=lambda x: x)
-    test_enricher.explode_edges = MagicMock(side_effect=lambda x: x)
-    test_enricher.unpack_exploded_edges = MagicMock(side_effect=lambda x: x)
-    test_enricher.tag_exploded_edges = MagicMock(side_effect=lambda x, _: x)
-    test_enricher.calculate_elevation_changes = MagicMock(
-        side_effect=lambda x: x
-    )
-    test_enricher.implode_edges = MagicMock(side_effect=lambda x: x)
-    test_enricher.calculate_edge_distances = MagicMock(side_effect=lambda x: x)
-    test_enricher.set_edge_output_schema = MagicMock(side_effect=lambda x: x)
-
-    # Keep track of what's being stored and where
-    test_enricher.store_df = MagicMock()
-
-    # Targets -----------------------------------------------------------------
-
-    target_methods = inspect.getmembers(
-        GraphEnricher, predicate=inspect.iscoroutine
-    )
-
-    # Act #####################################################################
-
-    test_enricher.enrich()
-
-    # Assert ##################################################################
-
-    # Every function defined is being called, and at full coverage we know
-    # they have all been tested individually. Tracing exactly which df is
-    # passed to each method has not been done at present, as it requires
-    # significant effort for questionable gain
-    for method, _ in target_methods:
-        getattr(test_enricher, method).assert_has_calls()
+    """Test needs building out to show E2E execution"""

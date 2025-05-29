@@ -1,7 +1,7 @@
 """Primary execution script (for now). Triggers ingestion of LIDAR and OSM
 data, joins the two datasets together to create a single augmented graph."""
 
-# ruff: noqa: ERA001, F401
+# ruff: noqa: ERA001, F401, E501
 
 import os
 from fell_loader import (
@@ -11,20 +11,24 @@ from fell_loader import (
     LidarLoader,
     OsmLoader,
 )
-from pyspark.sql import SparkSession
+from pyspark.sql import SparkSession, functions as F
 
+# TODO: Build in some more detailed logging throughout
 
 if __name__ == "__main__":
     # Raw Data ################################################################
 
-    # Config set for testing on personal laptop, will need tuning for the cloud
+    lidar_loader = LidarLoader()
+    self = lidar_loader
+    lidar_loader.load()
+    del lidar_loader
+
+    # Config set for execution on personal devices, not tuned for cloud
     spark = (
         SparkSession.builder.appName("fell_finder")  # type: ignore
         .config("spark.master", "local[*]")
         .config("spark.driver.memory", "16g")
         .config("spark.driver.memoryOverhead", "4g")
-        # .config("spark.executor.memory", "20g")
-        # .config("spark.executor.memoryOverhead", "5g")
         .config("spark.sql.files.maxPartitionBytes", "67108864")
         .config("spark.sql.adaptive.enabled", "true")
         .config("spark.sql.adaptive.coalescePartitions.enabled", "true")
@@ -33,15 +37,9 @@ if __name__ == "__main__":
             "spark.local.dir", os.path.join(os.environ["FF_DATA_DIR"], "temp")
         )
         .config("spark.log.level", "WARN")
-        .config(
-            "spark.eventLog.gcMetrics.youngGenerationGarbageCollectors", "true"
-        )
+        .config("spark.driver.extraJavaOptions", "-XX:+UseG1GC")
         .getOrCreate()
     )
-
-    # lidar_loader = LidarLoader()
-    # lidar_loader.load()
-    # del lidar_loader
 
     osm_loader = OsmLoader(spark)
     osm_loader.load()
@@ -53,15 +51,15 @@ if __name__ == "__main__":
     del graph_enricher
 
     # Optimise Graph ##########################################################
-    # graph_contractor = GraphContractor(DATA_DIR, spark)
-    # graph_contractor.contract()
-    # del graph_contractor
+    graph_contractor = GraphContractor(spark)
+    graph_contractor.contract()
+    del graph_contractor
 
-    # spark.stop()
+    spark.stop()
 
     # Load to Postgres ########################################################
 
-    # db_loader = BelterLoader(DATA_DIR)
-    # db_loader.init_db()
-    # db_loader.load_nodes()
-    # db_loader.load_edges()
+    db_loader = BelterLoader()
+    db_loader.init_db()
+    db_loader.load_nodes()
+    db_loader.load_edges()
