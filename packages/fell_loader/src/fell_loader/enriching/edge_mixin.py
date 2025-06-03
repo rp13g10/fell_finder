@@ -204,9 +204,12 @@ class EdgeMixin(ABC):
             A copy of the edges dataframe with an additional elevation column
 
         """
+        edges = edges.repartition("ptn")
+        elevation = elevation.repartition("ptn")
+
         tagged = edges.join(
             elevation,
-            on=["easting_ptn", "northing_ptn", "easting", "northing"],
+            on=["ptn", "easting", "northing"],
             how="inner",
         )
 
@@ -226,6 +229,7 @@ class EdgeMixin(ABC):
             "highway",
             "surface",
             "is_flat",
+            "ptn",
         )
 
         return tagged
@@ -288,17 +292,22 @@ class EdgeMixin(ABC):
         edges = edges.groupBy(
             "src",
             "dst",
-            "src_lat",
-            "src_lon",
-            "dst_lat",
-            "dst_lon",
-            "src_easting",
-            "src_northing",
-            "way_id",
-            "way_inx",
-            "highway",
-            "surface",
         ).agg(
+            *[
+                F.first_value(col).alias(col)
+                for col in [
+                    "src_lat",
+                    "src_lon",
+                    "dst_lat",
+                    "dst_lon",
+                    "src_easting",
+                    "src_northing",
+                    "way_id",
+                    "way_inx",
+                    "highway",
+                    "surface",
+                ]
+            ],
             F.sum(F.col("elevation_gain")).alias("elevation_gain"),
             F.sum(F.col("elevation_loss")).alias("elevation_loss"),
         )
@@ -377,8 +386,6 @@ class EdgeMixin(ABC):
             "distance",
             "elevation_gain",
             "elevation_loss",
-            "easting_ptn",
-            "northing_ptn",
         )
 
         return edges

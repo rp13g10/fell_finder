@@ -321,11 +321,11 @@ def test_tag_exploded_edges(test_session: SparkSession):
 
     # fmt: off
     _ = (
-        ['easting', 'northing', 'easting_ptn', 'northing_ptn', 'src' , 'dst' , 'src_lat', 'src_lon', 'dst_lat', 'dst_lon', 'src_easting', 'src_northing', 'inx', 'way_id', 'way_inx', 'highway', 'surface', 'is_flat'])
+        ['easting', 'northing', 'src' , 'dst' , 'src_lat', 'src_lon', 'dst_lat', 'dst_lon', 'src_easting', 'src_northing', 'inx', 'way_id', 'way_inx', 'highway', 'surface', 'is_flat', 'ptn'])
 
     test_edge_data = [
-        ['left'   , 'left'    , 'left'       , 'left'        , 'left', 'left', 'src_lat', 'src_lon', 'dst_lat', 'dst_lon', 'src_easting', 'src_northing', 'inx', 'way_id', 'way_inx', 'highway', 'surface', 'is_flat'],
-        ['both'   , 'both'    , 'both'       , 'both'        , 'both', 'both', 'src_lat', 'src_lon', 'dst_lat', 'dst_lon', 'src_easting', 'src_northing', 'inx', 'way_id', 'way_inx', 'highway', 'surface', 'is_flat']
+        ['left'   , 'left'    , 'left', 'left', 'src_lat', 'src_lon', 'dst_lat', 'dst_lon', 'src_easting', 'src_northing', 'inx', 'way_id', 'way_inx', 'highway', 'surface', 'is_flat', 'ptn'],
+        ['both'   , 'both'    , 'both', 'both', 'src_lat', 'src_lon', 'dst_lat', 'dst_lon', 'src_easting', 'src_northing', 'inx', 'way_id', 'way_inx', 'highway', 'surface', 'is_flat', 'ptn']
     ]
     # fmt: on
 
@@ -333,8 +333,6 @@ def test_tag_exploded_edges(test_session: SparkSession):
         [
             StructField("easting", StringType()),
             StructField("northing", StringType()),
-            StructField("easting_ptn", StringType()),
-            StructField("northing_ptn", StringType()),
             StructField("src", StringType()),
             StructField("dst", StringType()),
             StructField("src_lat", StringType()),
@@ -349,6 +347,7 @@ def test_tag_exploded_edges(test_session: SparkSession):
             StructField("highway", StringType()),
             StructField("surface", StringType()),
             StructField("is_flat", StringType()),
+            StructField("ptn", StringType()),
         ]
     )
 
@@ -360,11 +359,11 @@ def test_tag_exploded_edges(test_session: SparkSession):
 
     # fmt: off
     _ = (
-        ['easting', 'northing', 'easting_ptn', 'northing_ptn', 'elevation'])
+        ['easting', 'northing', 'elevation', 'ptn'])
 
     test_ele_data = [
-        ['both'   , 'both'    , 'both'       , 'both'        , 'both'],
-        ['right'  , 'right'   , 'right'      , 'right'       , 'right']
+        ['both'   , 'both'    , 'both'     , 'ptn'],
+        ['right'  , 'right'   , 'right'    , 'ptn']
     ]
     # fmt: on
 
@@ -372,9 +371,8 @@ def test_tag_exploded_edges(test_session: SparkSession):
         [
             StructField("easting", StringType()),
             StructField("northing", StringType()),
-            StructField("easting_ptn", StringType()),
-            StructField("northing_ptn", StringType()),
             StructField("elevation", StringType()),
+            StructField("ptn", StringType()),
         ]
     )
 
@@ -384,10 +382,10 @@ def test_tag_exploded_edges(test_session: SparkSession):
 
     # fmt: off
     _ = (
-        ['src'  , 'dst' , 'src_lat', 'src_lon', 'dst_lat', 'dst_lon', 'src_easting', 'src_northing', 'inx', 'elevation', 'way_id', 'way_inx', 'highway', 'surface', 'is_flat'])
+        ['src'  , 'dst' , 'src_lat', 'src_lon', 'dst_lat', 'dst_lon', 'src_easting', 'src_northing', 'inx', 'elevation', 'way_id', 'way_inx', 'highway', 'surface', 'is_flat', 'ptn'])
 
     target_data = [
-        ['both' , 'both', 'src_lat', 'src_lon', 'dst_lat', 'dst_lon', 'src_easting', 'src_northing', 'inx', 'both'     , 'way_id', 'way_inx', 'highway', 'surface', 'is_flat']
+        ['both' , 'both', 'src_lat', 'src_lon', 'dst_lat', 'dst_lon', 'src_easting', 'src_northing', 'inx', 'both'     , 'way_id', 'way_inx', 'highway', 'surface', 'is_flat', 'ptn']
     ]
     # fmt: on
 
@@ -408,6 +406,7 @@ def test_tag_exploded_edges(test_session: SparkSession):
             StructField("highway", StringType()),
             StructField("surface", StringType()),
             StructField("is_flat", StringType()),
+            StructField("ptn", StringType()),
         ]
     )
 
@@ -723,8 +722,6 @@ def test_set_edge_output_schema(test_session: SparkSession):
         "distance",
         "elevation_gain",
         "elevation_loss",
-        "easting_ptn",
-        "northing_ptn",
         "other",
     ]
 
@@ -748,8 +745,6 @@ def test_set_edge_output_schema(test_session: SparkSession):
         "distance",
         "elevation_gain",
         "elevation_loss",
-        "easting_ptn",
-        "northing_ptn",
     ]
 
     target_data = [[0 for _ in target_cols]]

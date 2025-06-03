@@ -6,7 +6,11 @@ authors = [{ name = "Ross Piper", email = "rp-webservices@outlook.com" }]
 license = { text = "MIT License" }
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
-dependencies = ["fell-viewer", "fell-loader", "hatchling>=1.27.0"]
+dependencies = [
+    "fell-viewer",
+    "fell-loader",
+    "hatchling>=1.27.0",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["packages/fell_loader/tests", "packages/fell_viewer/tests"]

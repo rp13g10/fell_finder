@@ -182,6 +182,7 @@ pub fn get_dissimilar_routes(
     candidates: &mut Vec<Candidate>,
     target_count: usize,
     config: Arc<RouteConfig>,
+    max_similarity: f64,
 ) -> Vec<Candidate> {
     // TODO: Run profiler and check if there are any bottlenecks here
     // TODO: Add support for max_similarity here using FF_MAX_SIMILARITY evar
@@ -230,9 +231,12 @@ pub fn get_dissimilar_routes(
 
         // If required number of candidates has not been seleted, increase
         // the threshold and try again
-        if !target_met {
+        if (!target_met) & (threshold < max_similarity) {
             to_process.extend(too_similar.drain(..));
             threshold += 0.1;
+            if threshold > max_similarity {
+                threshold = max_similarity;
+            }
         }
     }
 
@@ -252,6 +256,14 @@ pub fn prune_candidates(
         return candidates;
     }
 
+    // Set max similarity between candidates
+    let threshold: f64 = match env::var("FF_PRUNING_THRESHOLD") {
+        Ok(val) => val
+            .parse()
+            .expect("FF_PRUNING_THRESHOLD must be set to a float value"),
+        Err(_) => 0.95, // Default behaviour, will apply during test runs
+    };
+
     // TODO: Improve error handling here
 
     let binned = match bin_candidates(candidates) {
@@ -268,7 +280,12 @@ pub fn prune_candidates(
     vec_binned
         .par_iter_mut()
         .map(|bin_cands| {
-            get_dissimilar_routes(bin_cands, bin_target, Arc::clone(&config))
+            get_dissimilar_routes(
+                bin_cands,
+                bin_target,
+                Arc::clone(&config),
+                threshold,
+            )
         })
         .collect_into_vec(&mut vec_selected);
 
@@ -790,6 +807,7 @@ mod tests {
 
         let test_config = Arc::new(get_test_config());
         let test_target_count: usize = 3;
+        let test_threshold: f64 = 0.95;
 
         let mut test_candidates = vec![
             test_candidate_1.clone(),
@@ -806,6 +824,7 @@ mod tests {
             &mut test_candidates,
             test_target_count,
             test_config,
+            test_threshold,
         );
 
         assert_eq!(result, target);
