@@ -11,7 +11,7 @@ from fell_loader import (
     LidarLoader,
     OsmLoader,
 )
-from pyspark.sql import SparkSession, functions as F
+from pyspark.sql import SparkSession
 
 # TODO: Build in some more detailed logging throughout
 
