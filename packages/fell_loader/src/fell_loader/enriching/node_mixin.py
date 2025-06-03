@@ -30,9 +30,13 @@ class NodeMixin(ABC):
             A copy of nodes with an additional elevation field
 
         """
+
+        nodes = nodes.repartition("ptn")
+        elevation = elevation.repartition("ptn")
+
         tagged = nodes.join(
             elevation,
-            on=["easting_ptn", "northing_ptn", "easting", "northing"],
+            on=["ptn", "easting", "northing"],
             how="inner",
         )
 
@@ -50,8 +54,6 @@ class NodeMixin(ABC):
             A subset of the input dataset
 
         """
-        nodes = nodes.select(
-            "id", "lat", "lon", "elevation", "easting_ptn", "northing_ptn"
-        )
+        nodes = nodes.select("id", "lat", "lon", "elevation")
 
         return nodes

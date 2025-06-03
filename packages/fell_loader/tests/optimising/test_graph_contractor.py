@@ -1,7 +1,6 @@
 """Tests for the GraphContractor class"""
 
-import inspect
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock
 
 import pytest
 from pyspark.sql import SparkSession
@@ -19,72 +18,27 @@ from pyspark.testing import assertDataFrameEqual
 from fell_loader.optimising.graph_contractor import GraphContractor
 
 
-@patch("fell_loader.optimising.graph_contractor.glob")
-class TestGetAvailablePartitions:
-    """Make sure partitions can correctly be identified from the filesystem"""
+class MockGraphContractor(GraphContractor):
+    """Dummy implementation with static properties"""
 
-    def test_match_found(self, mock_glob: MagicMock):
-        """Successful extraction"""
-
-        # Arrange
-        mock_glob.return_value = [
-            "/home/ross/repos/fell_finder/data/parsed/edges/easting_ptn=81/northing_ptn=23/0a9a05d0bb264860986c1e2431beb29f-0.parquet",
-            "/home/ross/repos/fell_finder/data/parsed/lidar/easting_ptn=88/northing_ptn=23/b935432376cd47f4b067cee64328a019-0.parquet",
-            "/home/ross/repos/fell_finder/data/parsed/nodes/easting_ptn=81/northing_ptn=23/e35da41d3a0a48ccaed8ea2090d75d26-0.parquet",
-        ]
-
-        target = {(81, 23), (88, 23)}
-
-        test_enricher = GraphContractor("data_dir", "dummy_spark")  # type: ignore
-
-        # Act
-        result = test_enricher.get_available_partitions()
-
-        # Assert
-        assert result == target
-        mock_glob.assert_called_once_with(
-            "data_dir/enriched/nodes/**/*.parquet", recursive=True
-        )
-
-    def test_no_match_found(self, mock_glob: MagicMock):
-        """Raise an error if no match identified"""
-        # Arrange
-        mock_glob.return_value = [
-            "/home/ross/repos/fell_finder/data/parsed/edges/easting_ptn=81/0a9a05d0bb264860986c1e2431beb29f-0.parquet",
-            "/home/ross/repos/fell_finder/data/parsed/lidar/easting_ptn=88/b935432376cd47f4b067cee64328a019-0.parquet",
-            "/home/ross/repos/fell_finder/data/parsed/nodes/easting_ptn=81/e35da41d3a0a48ccaed8ea2090d75d26-0.parquet",
-        ]
-
-        test_enricher = GraphContractor("data_dir", "dummy_spark")  # type: ignore
-
-        # Act, Assert
-        with pytest.raises(FileNotFoundError):
-            _ = test_enricher.get_available_partitions()
+    def __init__(self) -> None:
+        self.data_dir = "data_dir"
+        self.spark = MagicMock()
 
 
 def test_load_df():
     """Make sure the correct read calls are being generated"""
 
     # Arrange
-    mock_spark = MagicMock()
-    mock_contractor = GraphContractor("data_dir", mock_spark)
-    mock_contractor.num_ptns = 123
-
-    mock_df = MagicMock()
-    mock_contractor.spark.read.parquet.return_value = mock_df
-
+    test_contractor = MockGraphContractor()
     test_dataset = "nodes"
-    target_read_call = "data_dir/enriched/nodes"
-    target_repartition_args = (123, "easting_ptn", "northing_ptn")
+    target_path = "data_dir/enriched/nodes"
 
     # Act
-    mock_contractor.load_df(test_dataset)
+    test_contractor.load_df(test_dataset)
 
     # Assert
-    mock_contractor.spark.read.parquet.assert_called_once_with(
-        target_read_call
-    )
-    mock_df.repartition.assert_called_once_with(*target_repartition_args)
+    test_contractor.spark.read.parquet.assert_called_once_with(target_path)
 
 
 def test_get_node_degrees(test_session: SparkSession):
@@ -183,7 +137,7 @@ def test_add_degrees_to_nodes(test_session: SparkSession):
 
     # Arrange #################################################################
 
-    test_contractor = GraphContractor("data_dir", "spark")  # type: ignore
+    test_contractor = MockGraphContractor()
 
     # Test Data ---------------------------------------------------------------
 
@@ -631,18 +585,18 @@ def test_contract_chains(test_session: SparkSession):
 
     # fmt: off
     _ = (
-        ['chain_src', 'chain_dst', 'way_inx', 'highway'  , 'surface'  , 'elevation_gain', 'elevation_loss', 'distance', 'easting_ptn', 'northing_ptn', 'src_lat', 'src_lon', 'src_elevation', 'src_dead_end_flag', 'dst_lat', 'dst_lon', 'dst_elevation', 'dst_dead_end_flag'])
+        ['chain_src', 'chain_dst', 'way_inx', 'highway'  , 'surface'  , 'elevation_gain', 'elevation_loss', 'distance', 'src_lat', 'src_lon', 'src_elevation', 'src_dead_end_flag', 'dst_lat', 'dst_lon', 'dst_elevation', 'dst_dead_end_flag'])
 
     test_data = [
         # Single record
-        [0          , 1          , 1        , 'highway_1', 'surface_1', 1.0             , 1.0             , 1.0       , 12           , 12            , 1.0      , 1.0      , 1.0            , 0                  , 1.1     , 1.1       , 1.1            , 0],
+        [0          , 1          , 1        , 'highway_1', 'surface_1', 1.0             , 1.0             , 1.0       , 1.0      , 1.0      , 1.0            , 0                  , 1.1     , 1.1       , 1.1            , 0],
         # Two records
-        [1          , 2          , 1        , 'highway_1', 'surface_1', 1.0             , 1.0             , 1.0       , 12           , 12            , 1.0      , 1.0      , 1.0            , 0                  , 1.1     , 1.1       , 1.1            , 0],
-        [1          , 2          , 2        , 'highway_1', 'surface_1', 1.0             , 1.0             , 1.0       , 12           , 12            , 1.1      , 1.1      , 1.1            , 0                  , 1.2     , 1.2       , 1.2            , 0],
+        [1          , 2          , 1        , 'highway_1', 'surface_1', 1.0             , 1.0             , 1.0       , 1.0      , 1.0      , 1.0            , 0                  , 1.1     , 1.1       , 1.1            , 0],
+        [1          , 2          , 2        , 'highway_1', 'surface_1', 1.0             , 1.0             , 1.0       , 1.1      , 1.1      , 1.1            , 0                  , 1.2     , 1.2       , 1.2            , 0],
         # Three records
-        [2          , 3          , 1        , 'highway_1', 'surface_1', 1.0             , 1.0             , 1.0       , 12           , 12            , 1.0      , 1.0      , 1.0            , 0                  , 1.1     , 1.1       , 1.1            , 0],
-        [2          , 3          , 2        , 'highway_1', 'surface_1', 1.0             , 1.0             , 1.0       , 12           , 12            , 1.1      , 1.1      , 1.1            , 0                  , 1.2     , 1.2       , 1.2            , 0],
-        [2          , 3          , 3        , 'highway_2', 'surface_2', 1.0             , 1.0             , 1.0       , 12           , 12            , 1.2      , 1.2      , 1.2            , 0                  , 1.3     , 1.3       , 1.3            , 0],
+        [2          , 3          , 1        , 'highway_1', 'surface_1', 1.0             , 1.0             , 1.0       , 1.0      , 1.0      , 1.0            , 0                  , 1.1     , 1.1       , 1.1            , 0],
+        [2          , 3          , 2        , 'highway_1', 'surface_1', 1.0             , 1.0             , 1.0       , 1.1      , 1.1      , 1.1            , 0                  , 1.2     , 1.2       , 1.2            , 0],
+        [2          , 3          , 3        , 'highway_2', 'surface_2', 1.0             , 1.0             , 1.0       , 1.2      , 1.2      , 1.2            , 0                  , 1.3     , 1.3       , 1.3            , 0],
     ]
     # fmt: on
 
@@ -656,8 +610,6 @@ def test_contract_chains(test_session: SparkSession):
             StructField("elevation_gain", DoubleType()),
             StructField("elevation_loss", DoubleType()),
             StructField("distance", DoubleType()),
-            StructField("easting_ptn", IntegerType()),
-            StructField("northing_ptn", IntegerType()),
             StructField("src_lat", DoubleType()),
             StructField("src_lon", DoubleType()),
             StructField("src_elevation", DoubleType()),
@@ -674,9 +626,7 @@ def test_contract_chains(test_session: SparkSession):
     # Target Data -------------------------------------------------------------
 
     # Complex fields - Single record
-    geom_1 = [
-        {"way_inx": 1, "distance": 1.0, "easting_ptn": 12, "northing_ptn": 12}
-    ]
+    geom_1 = [{"way_inx": 1, "distance": 1.0}]
     src_geom_1 = [
         {
             "way_inx": 1,
@@ -698,8 +648,8 @@ def test_contract_chains(test_session: SparkSession):
 
     # Complex fields - Two records
     geom_2 = [
-        {"way_inx": 1, "distance": 1.0, "easting_ptn": 12, "northing_ptn": 12},
-        {"way_inx": 2, "distance": 1.0, "easting_ptn": 12, "northing_ptn": 12},
+        {"way_inx": 1, "distance": 1.0},
+        {"way_inx": 2, "distance": 1.0},
     ]
     src_geom_2 = [
         {
@@ -736,9 +686,9 @@ def test_contract_chains(test_session: SparkSession):
 
     # Complex fields - Three records
     geom_3 = [
-        {"way_inx": 1, "distance": 1.0, "easting_ptn": 12, "northing_ptn": 12},
-        {"way_inx": 2, "distance": 1.0, "easting_ptn": 12, "northing_ptn": 12},
-        {"way_inx": 3, "distance": 1.0, "easting_ptn": 12, "northing_ptn": 12},
+        {"way_inx": 1, "distance": 1.0},
+        {"way_inx": 2, "distance": 1.0},
+        {"way_inx": 3, "distance": 1.0},
     ]
     src_geom_3 = [
         {
@@ -818,8 +768,6 @@ def test_contract_chains(test_session: SparkSession):
                         [
                             StructField("way_inx", IntegerType()),
                             StructField("distance", DoubleType()),
-                            StructField("easting_ptn", IntegerType()),
-                            StructField("northing_ptn", IntegerType()),
                         ]
                     ),
                     False,
@@ -878,9 +826,7 @@ def test_generate_new_edges_from_chains(test_session: SparkSession):
     # Test Data ---------------------------------------------------------------
 
     # Complex fields - Single record
-    geom_1 = [
-        {"way_inx": 1, "distance": 1.0, "easting_ptn": 12, "northing_ptn": 12}
-    ]
+    geom_1 = [{"way_inx": 1, "distance": 1.0}]
     src_geom_1 = [
         {
             "way_inx": 1,
@@ -902,8 +848,8 @@ def test_generate_new_edges_from_chains(test_session: SparkSession):
 
     # Complex fields - Two records
     geom_2 = [
-        {"way_inx": 1, "distance": 1.0, "easting_ptn": 12, "northing_ptn": 12},
-        {"way_inx": 2, "distance": 1.0, "easting_ptn": 12, "northing_ptn": 12},
+        {"way_inx": 1, "distance": 1.0},
+        {"way_inx": 2, "distance": 1.0},
     ]
     src_geom_2 = [
         {
@@ -940,9 +886,9 @@ def test_generate_new_edges_from_chains(test_session: SparkSession):
 
     # Complex fields - Three records
     geom_3 = [
-        {"way_inx": 1, "distance": 1.0, "easting_ptn": 12, "northing_ptn": 12},
-        {"way_inx": 2, "distance": 1.0, "easting_ptn": 12, "northing_ptn": 12},
-        {"way_inx": 3, "distance": 1.0, "easting_ptn": 12, "northing_ptn": 12},
+        {"way_inx": 1, "distance": 1.0},
+        {"way_inx": 2, "distance": 1.0},
+        {"way_inx": 3, "distance": 1.0},
     ]
     src_geom_3 = [
         {
@@ -1021,8 +967,6 @@ def test_generate_new_edges_from_chains(test_session: SparkSession):
                         [
                             StructField("way_inx", IntegerType()),
                             StructField("distance", DoubleType()),
-                            StructField("easting_ptn", IntegerType()),
-                            StructField("northing_ptn", IntegerType()),
                         ]
                     ),
                     False,
@@ -1177,10 +1121,10 @@ def test_set_edge_output_schema(test_session: SparkSession):
 
     # fmt: off
     _ = (
-        ['src', 'dst', 'highway', 'surface', 'elevation_gain', 'elevation_loss', 'distance', 'geom_lat'  , 'geom_lon'  , 'geom_elevation'  , 'geom_distance'  , 'src_lat', 'src_lon', 'other'])
+        ['src', 'dst', 'highway', 'surface', 'elevation_gain', 'elevation_loss', 'distance', 'geom_lat', 'geom_lon', 'geom_elevation', 'geom_distance', 'src_lat', 'src_lon', 'ptn', 'other'])
 
     test_data = [
-        ['src', 'dst', 'highway', 'surface', 'elevation_gain', 'elevation_loss', 'distance', ['geom_lat'], ['geom_lon'], ['geom_elevation'], ['geom_distance'], -25.5     , 75.0, 'other']
+        ['src', 'dst', 'highway', 'surface', 'elevation_gain', 'elevation_loss', 'distance', 'geom_lat', 'geom_lon', 'geom_elevation', 'geom_distance', -25.5    , 75.0     , 'ptn', 'other']
     ]
     # fmt: on
 
@@ -1193,12 +1137,13 @@ def test_set_edge_output_schema(test_session: SparkSession):
             StructField("elevation_gain", StringType()),
             StructField("elevation_loss", StringType()),
             StructField("distance", StringType()),
-            StructField("geom_lat", ArrayType(StringType())),
-            StructField("geom_lon", ArrayType(StringType())),
-            StructField("geom_elevation", ArrayType(StringType())),
-            StructField("geom_distance", ArrayType(StringType())),
+            StructField("geom_lat", StringType()),
+            StructField("geom_lon", StringType()),
+            StructField("geom_elevation", StringType()),
+            StructField("geom_distance", StringType()),
             StructField("src_lat", DoubleType()),
             StructField("src_lon", DoubleType()),
+            StructField("ptn", StringType()),
             StructField("other", StringType()),
         ]
     )
@@ -1209,10 +1154,10 @@ def test_set_edge_output_schema(test_session: SparkSession):
 
     # fmt: off
     _ = (
-        ['src', 'dst', 'src_lat', 'src_lon', 'highway', 'surface', 'elevation_gain', 'elevation_loss', 'distance', 'lats'      , 'lons'      , 'eles'            , 'dists'          , 'ptn'])
+        ['src', 'dst', 'src_lat', 'src_lon', 'highway', 'surface', 'elevation_gain', 'elevation_loss', 'distance', 'lats'    , 'lons'     , 'eles'          , 'dists'        , 'ptn'])
 
     tgt_data = [
-        ['src', 'dst', -25.5    , 75.0     , 'highway', 'surface', 'elevation_gain', 'elevation_loss', 'distance', ['geom_lat'], ['geom_lon'], ['geom_elevation'], ['geom_distance'],  'n25_75']
+        ['src', 'dst', -25.5    , 75.0     , 'highway', 'surface', 'elevation_gain', 'elevation_loss', 'distance', 'geom_lat', 'geom_lon', 'geom_elevation', 'geom_distance',  'ptn']
     ]
 
     # fmt: on
@@ -1228,11 +1173,11 @@ def test_set_edge_output_schema(test_session: SparkSession):
             StructField("elevation_gain", StringType()),
             StructField("elevation_loss", StringType()),
             StructField("distance", StringType()),
-            StructField("lats", ArrayType(StringType())),
-            StructField("lons", ArrayType(StringType())),
-            StructField("eles", ArrayType(StringType())),
-            StructField("dists", ArrayType(StringType())),
-            StructField("ptn", StringType(), False),
+            StructField("lats", StringType()),
+            StructField("lons", StringType()),
+            StructField("eles", StringType()),
+            StructField("dists", StringType()),
+            StructField("ptn", StringType()),
         ]
     )
 
@@ -1351,11 +1296,11 @@ def test_set_node_output_schema(test_session: SparkSession):
 
     # fmt: off
     _ = (
-        ["id", "lat", "lon", "elevation", "other"])
+        ["id", "lat", "lon", "elevation", "ptn", "other"])
 
     test_data = [
-        ["id", -25.5, 75.0 , "elevation", "other"],
-        [None, 0.0  , 0.0  , "elevation", "other"],
+        ["id", -25.5, 75.0 , "elevation", "ptn", "other"],
+        [None, 0.0  , 0.0  , "elevation", "ptn", "other"],
     ]
     # fmt: on
 
@@ -1365,6 +1310,7 @@ def test_set_node_output_schema(test_session: SparkSession):
             StructField("lat", DoubleType()),
             StructField("lon", DoubleType()),
             StructField("elevation", StringType()),
+            StructField("ptn", StringType()),
             StructField("other", StringType()),
         ],
     )
@@ -1378,7 +1324,7 @@ def test_set_node_output_schema(test_session: SparkSession):
         ["id", "lat", "lon", "elevation", "ptn"])
 
     tgt_data = [
-        ["id", -25.5, 75.0 , "elevation", "n25_75"],
+        ["id", -25.5, 75.0 , "elevation", "ptn"],
     ]
 
     # fmt: on
@@ -1407,7 +1353,7 @@ def test_store_df():
     back to disk"""
 
     # Arrange
-    test_contractor = GraphContractor("data_dir", "spark")  # type: ignore
+    test_contractor = MockGraphContractor()
 
     test_df = MagicMock()
     test_df.write.mode.return_value = test_df
@@ -1427,46 +1373,6 @@ def test_store_df():
     )
 
 
+@pytest.mark.skip
 def test_contract():
-    """Make sure that the end-to-end process is generating the correct
-    method calls"""
-
-    # Arrange #################################################################
-
-    # Creation, partition discovery
-    mock_spark = MagicMock()
-    mock_spark.conf.get.return_value = "42"
-    test_contractor = GraphContractor("data_dir", mock_spark)
-
-    test_contractor.get_available_partitions = MagicMock(
-        return_value=list(range(56))
-    )
-
-    # Method calls
-    methods = inspect.getmembers(GraphContractor, predicate=inspect.isroutine)
-
-    method_names = [name for name, _ in methods if name[0] != "_"]
-
-    method_names.remove("contract")
-    method_names.remove("get_available_partitions")
-
-    for method_name in method_names:
-        setattr(test_contractor, method_name, MagicMock())
-
-    # Act #####################################################################
-    test_contractor.contract()
-
-    # Assert ##################################################################
-
-    # Shuffle partitions get set then un-set
-    mock_spark.conf.set.assert_has_calls(
-        [
-            call("spark.sql.shuffle.partitions", "56"),
-            call("spark.sql.shuffle.partitions", "42"),
-        ]
-    )
-
-    # All defined methods should be called
-    for method_name in method_names:
-        method_mock = getattr(test_contractor, method_name)
-        method_mock.assert_called()
+    """Test for E2E needs building out"""

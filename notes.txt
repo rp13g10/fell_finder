@@ -1,13 +1,6 @@
 To Do
 
 Current status:
-Building out tests for rust code
-Refining structure as required
-
-Commands for use
-
-Tab 1
-> packages/fell_finder/target/release/fell-finder
-
-Tab 2
-> uv run --env-file .env webapp.py
+Looking into switching over to daft for ingestion
+FoI request is in for LIDAR data
+osm-parquetizer repo has been cloned, should be ready to use

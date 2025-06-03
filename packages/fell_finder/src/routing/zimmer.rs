@@ -106,6 +106,18 @@ fn get_num_routes_to_display() -> usize {
     }
 }
 
+fn get_max_similarity_for_display() -> f64 {
+    let maybe_usr_pref = env::var("FF_DISPLAY_THRESHOLD");
+
+    match maybe_usr_pref {
+        Ok(str) => match str.parse() {
+            Ok(float) => float,
+            Err(_) => 0.9,
+        },
+        Err(_) => 0.9,
+    }
+}
+
 /// Recursive algorithm which crawls the provided graph for routes, starting at
 /// the provided start_inx. This will attempt to return routes which meet all
 /// of the criteria provided by the user
@@ -139,13 +151,15 @@ pub fn generate_routes(
         bar.set_position(avg_dist);
     }
 
-    bar.finish();
+    bar.finish_and_clear();
 
     let to_display = get_num_routes_to_display();
+    let max_similarity = get_max_similarity_for_display();
     completed = get_dissimilar_routes(
         &mut completed,
         to_display,
         Arc::clone(&shared_config),
+        max_similarity,
     );
 
     let mut routes: Vec<Route> =
