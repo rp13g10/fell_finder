@@ -189,8 +189,6 @@ class OsmLoader:
 
         """
 
-        # TODO: Confirm that utf8 is the correct encoding
-
         @F.udf(returnType=T.MapType(T.StringType(), T.StringType()))
         def tags_udf(tags: list[dict]) -> dict[str, str]:
             tags_dict = {}
