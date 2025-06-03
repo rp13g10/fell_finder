@@ -40,9 +40,7 @@ Eventually, everything will be set up to run in containers. Until then, it takes
     
 ## Environment Variables
 
-Proper documentation for these is pending (as the list of variables is not yet complete). You will need the following environment variables set in order to run the code. The recommendation is that this be done with a `.env` file.
-
-UPDATED SPEC TO GO HERE, WITH .env.example
+Proper documentation for these is pending (as the list of variables is not yet complete). Please refer to `.env.example` for details of the environment variables currently required in order for this script to run as-expected.
 
 ## Roadmap
 
