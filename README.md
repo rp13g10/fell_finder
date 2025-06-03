@@ -42,18 +42,7 @@ Eventually, everything will be set up to run in containers. Until then, it takes
 
 Proper documentation for these is pending (as the list of variables is not yet complete). You will need the following environment variables set in order to run the code. The recommendation is that this be done with a `.env` file.
 
-```
-FF_DATA_DIR = /path/to/your/data/dir
-FF_DEBUG_MODE = true
-FF_MAX_CANDS = 2048
-FF_MAX_SIMILARITY = 0.99
-FF_DIST_TOLERANCE = 0.1
-FF_DB_USER = your_db_user
-FF_DB_PASS = your_db_pass
-FF_ING_PTN_SIZE = 5000
-FF_APP_NO_ROUTES = 10
-```
-
+UPDATED SPEC TO GO HERE, WITH .env.example
 
 ## Roadmap
 
@@ -70,19 +59,19 @@ These new features are listed in approximate order of priority
 * Bring in data for all of the UK
   * osm-parquetizer can remove pandas as a bottleneck
   * Potential for switching over to daft instead of pyspark, should give better performance
+* Look into ways to improve classification of roads/paths
+* Look into ways to improve quality of generated routes by improving input data
+  * e.g. preventing backtracking along a road after heading out along the path next to it
 * Identify ways to further improve the accuracy of calculated elevation gain/loss
   * Alter join between OSM and elevation, bring in a larger area for each point and average it out?
   * Other sources of elevation data to be evaluated, candidates are OS Terrain and SRTM
   * Post-processing may be a valid tactic, smoothing out the profile for each edge in the graph
   * Further checks on the tags present in the OSM data may also help (tunnels, bridges, etc)
-* Set up an airflow pipeline for ingestion, bring in data for all of the UK
-  * Elevation unlikely to change much, but map data will
+* Set up an airflow pipeline for ingestion
   * Spark profile may need tuning to handle increased volume
-  * Check for OSM parsers which can evaluate lazily
 
 ### API
 
-* Add max similarity parameter when getting dissimilar routes, apply it when getting final routes to show to user
 * Run profiling through again, check for any issues introduced by recent changes
 * Improve error handling in Rust API, should be able to return other status codes
 * Hyperparameter optimisation for created routes
@@ -115,6 +104,7 @@ These new features are listed in approximate order of priority
 * Estimated gain/loss is typically ~30% higher than it should be, this needs to be investigated further
   * Part of the issue seems to be with the LIDAR data itself being a few metres out at times (vs. Strava)
   * Other issues include bridges/tunnels where the path stays level but the ground does not. Some mitigations are in place for this, but making better use of the OSM tags may be able to improve the situation further.
+  * High accuracy of the LIDAR system also leads to some false-positive elevation changes. A flat road with a large tree, might appear to have a small hill on it in the data.
 * Further investigation is needed around surface types, some local footpaths seem to be showing as paved. This may be an issue with the underlying data.
 * Data is being combined into a limited number of partitions during the ingestion phase, causing higher memory usage than I would like
   * More in-depth analysis of the execution plan is required to debug this behaviour

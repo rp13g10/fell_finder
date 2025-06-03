@@ -163,19 +163,6 @@ def test_load_lidar_and_bbox_from_folder(
     assert res_bbox == tgt_bbox
 
 
-def test_generate_file_id():
-    """Check that file IDs are being generated properly"""
-    # Arrange
-    test_lidar_dir = "/some/folder/lidar_composite_dtm-2020-1-SU20ne.zip"
-    target = "SU20ne"
-
-    # Act
-    result = LidarLoader.generate_file_id(test_lidar_dir)
-
-    # Assert
-    assert result == target
-
-
 def test_generate_df_from_lidar_array():
     """Check that LIDAR data is correctly being converted into records"""
 

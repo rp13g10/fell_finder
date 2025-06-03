@@ -275,7 +275,13 @@ class OsmLoader:
         ways = ways.withColumn("explicit_footway", F.lit(False))
         for tag in footway_tags:
             ways = self.get_tag_as_column(ways, tag)
-            ways = ways.withColumn(tag, F.col(tag) != "no").fillna(False)
+            # NOTE: sidewalk = separate denotes a sidwalk which is mapped as
+            #       a separate way. We don't want to send people down the road,
+            #       as the sidewalk will also be pulled through as part of the
+            #       graph.
+            ways = ways.withColumn(
+                tag, ~F.col(tag).isin("no", "separate")
+            ).fillna(False)
             ways = ways.withColumn(
                 "explicit_footway", F.col("explicit_footway") | F.col(tag)
             )

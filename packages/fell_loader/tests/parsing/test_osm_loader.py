@@ -472,6 +472,8 @@ def test_flag_explicit_footways(test_session: SparkSession):
         [4 , {'foot': 'yes', 'sidewalk': 'no'}],
         # No tag set
         [4 , {}],
+        # Footpath mapped separately
+        [5 , {'sidewalk': 'separate'}]
     ]
     # fmt: on
 
@@ -501,6 +503,8 @@ def test_flag_explicit_footways(test_session: SparkSession):
         [4 , {'foot': 'yes', 'sidewalk': 'no'}, True],
         # No tag set
         [4 , {}                               , False],
+        # Footpath mapped separately
+        [5 , {'sidewalk': 'separate'}         , False]
     ]
     # fmt: on
 
