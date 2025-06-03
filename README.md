@@ -57,11 +57,7 @@ These new features are listed in approximate order of priority
 ### Ingestion
 
 * Bring in data for all of the UK
-  * osm-parquetizer can remove pandas as a bottleneck
-  * Potential for switching over to daft instead of pyspark, should give better performance
-* Look into ways to improve classification of roads/paths
-* Look into ways to improve quality of generated routes by improving input data
-  * e.g. preventing backtracking along a road after heading out along the path next to it
+  * Some LIDAR files failed to parse, needs investigation
 * Identify ways to further improve the accuracy of calculated elevation gain/loss
   * Alter join between OSM and elevation, bring in a larger area for each point and average it out?
   * Other sources of elevation data to be evaluated, candidates are OS Terrain and SRTM
