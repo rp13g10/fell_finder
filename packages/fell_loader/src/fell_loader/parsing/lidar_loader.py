@@ -2,9 +2,11 @@
 extracts into a tabular format."""
 
 import os
+import sys
 import zipfile
 from glob import glob
 from typing import Set
+from xml.etree import ElementTree as ET
 
 import numpy as np
 import polars as pl
@@ -64,30 +66,54 @@ class LidarLoader:
     def _get_filenames_from_archive(
         archive: zipfile.ZipFile,
     ) -> tuple[str, str]:
-        """Fetch the names of required .tif and .tfw files from the provided
+        """Fetch the names of required .tif and .xml files from the provided
         archive. Improved error handling to be added in a later build."""
         tif_loc = next(
             x.filename for x in archive.filelist if ".tif" in x.filename
         )
-        tfw_loc = next(
-            x.filename for x in archive.filelist if ".tfw" in x.filename
+        xml_loc = next(
+            x.filename for x in archive.filelist if ".xml" in x.filename
         )
-        return tif_loc, tfw_loc
+        return tif_loc, xml_loc
 
     @staticmethod
-    def _get_bbox_from_tfw(tfw: str) -> np.ndarray:
-        """Unpack the contents of the .tfw file to fetch its bounding box,
-        where corners are defined according to the BNG coordinate system"""
-        lines = tfw.split("\n")
+    def _get_bbox_from_xml(xml: str) -> np.ndarray:
+        tree = ET.fromstring(xml)
 
-        easting_min = int(float(lines[4].strip()))
-        easting_max = easting_min + 5000
+        corners = tree.findall("./spatRepInfo/Georect/cornerPts/pos")
 
-        northing_max = int(float(lines[5].strip())) + 1
-        northing_min = northing_max - 5000
+        min_easting = sys.maxsize
+        max_easting = -sys.maxsize
+        min_northing = sys.maxsize
+        max_northing = -sys.maxsize
+        for corner in corners:
+            corner_text = corner.text
+            if corner_text is None:
+                raise AssertionError("oops!")
+            easting, northing = corner_text.split(" ")
+            easting = int(float(easting))
+            northing = int(float(northing))
+
+            if easting < min_easting:
+                min_easting = easting
+            if easting > max_easting:
+                max_easting = easting
+            if northing < min_northing:
+                min_northing = northing
+            if northing > max_northing:
+                max_northing = northing
+
+        assert all(
+            [
+                (abs(x) != sys.maxsize)
+                for x in [min_easting, max_easting, min_northing, max_northing]
+            ]
+        ), "Error while extracting bbox"
+        assert min_easting < max_easting, "Error while extracting bbox"
+        assert min_northing < max_northing, "Error while extracting bbox"
 
         bbox = np.array(
-            [easting_min, northing_min, easting_max, northing_max], dtype=int
+            [min_easting, min_northing, max_easting, max_northing], dtype=int
         )
 
         return bbox
@@ -115,13 +141,13 @@ class LidarLoader:
         """
 
         with zipfile.ZipFile(lidar_dir, mode="r") as archive:
-            tif_loc, tfw_loc = self._get_filenames_from_archive(archive)
+            tif_loc, xml_loc = self._get_filenames_from_archive(archive)
 
             with rio.open(archive.open(tif_loc)) as tif:
                 lidar = tif.read()
 
-            tfw = archive.read(tfw_loc).decode("utf8")
-            bbox = self._get_bbox_from_tfw(tfw)
+            xml = archive.read(xml_loc).decode("utf8")
+            bbox = self._get_bbox_from_xml(xml)
 
         lidar = lidar[0]
         return lidar, bbox
@@ -150,11 +176,12 @@ class LidarLoader:
         elevations = lidar.flatten(order="C")
 
         # Repeat eastings by array (A, B, A, B)
-        eastings = np.tile(range(bbox[0], bbox[2]), size_s).astype("int32")
+        eastings = np.tile(range(bbox[0], bbox[2]), size_e).astype("int32")
 
-        # Repeat northings by element (A, A, B, B)
+        # Repeat northings by element (A, A, B, B), stepping backwards as row
+        # 0 is the northernmost section of the grid
         northings = np.repeat(
-            range(bbox[3] - 1, bbox[1] - 1, -1), size_e
+            range(bbox[3] - 1, bbox[1] - 1, -1), size_s
         ).astype("int32")
 
         df = pl.DataFrame(

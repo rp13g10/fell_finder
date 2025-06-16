@@ -1,8 +1,0 @@
-/run/media/ross/ff_data/extracts/lidar/LIDAR-DTM-1m-2022-TM59se.zip
-/run/media/ross/ff_data/extracts/lidar/LIDAR-DTM-1m-2022-TM58se.zip
-/run/media/ross/ff_data/extracts/lidar/LIDAR-DTM-1m-2022-TM59se.zip
-/run/media/ross/ff_data/extracts/lidar/LIDAR-DTM-1m-2022-SV80se.zip
-/run/media/ross/ff_data/extracts/lidar/LIDAR-DTM-1m-2022-SV80sw.zip
-/run/media/ross/ff_data/extracts/lidar/LIDAR-DTM-1m-2022-TG50se.zip
-/run/media/ross/ff_data/extracts/lidar/LIDAR-DTM-1m-2022-TM59ne.zip
-/run/media/ross/ff_data/extracts/lidar/LIDAR-DTM-1m-2022-TM58ne.zip

@@ -68,13 +68,13 @@ def test_get_filenames_from_archive():
     mock_archive.filelist = [
         MockFile("file_one.other"),
         MockFile("file_two.other"),
-        MockFile("file_three.tfw"),
+        MockFile("file_three.xml"),
         MockFile("file_five.other"),
         MockFile("folder/file_six.other"),
         MockFile("file_seven.tif"),
     ]
 
-    target = ("file_seven.tif", "file_three.tfw")
+    target = ("file_seven.tif", "file_three.xml")
 
     # Act
     result = LidarLoader._get_filenames_from_archive(mock_archive)
@@ -83,27 +83,75 @@ def test_get_filenames_from_archive():
     assert result == target
 
 
-def test_get_bbox_from_tfw():
-    """Check that the contents of TFW files is being parsed correctly to
+def test_get_bbox_from_xml():
+    """Check that the contents of XML files is being parsed correctly to
     generate bounding boxes for each file"""
 
     # Arrange
-    test_tfw = dedent(
+    test_xml = dedent(
         """
-        1.0000000000
-        0.0000000000
-        0.0000000000
-        -1.0000000000
-        445000.5000000000
-        119999.5000000000
+        <metadata xml:lang="en">
+        <Esri>TRUNCATED</Esri>
+        <dataIdInfo>TRUNCATED</dataIdInfo>
+        <mdLang>TRUNCATED</mdLang>
+        <distInfo>TRUNCATED</distInfo>
+        <mdHrLv>TRUNCATED</mdHrLv>
+        <mdHrLvName Sync="TRUE">dataset</mdHrLvName>
+        <refSysInfo>TRUNCATED</refSysInfo>
+        <spatRepInfo>
+            <Georect>
+                <cellGeo>
+                    <CellGeoCd Sync="TRUE" value="002" />
+                </cellGeo>
+                <numDims Sync="TRUE">2</numDims>
+                <tranParaAv Sync="TRUE">1</tranParaAv>
+                <chkPtAv Sync="TRUE">0</chkPtAv>
+                <cornerPts>
+                    <pos Sync="TRUE">85000.000000 4000.000000</pos>
+                </cornerPts>
+                <cornerPts>
+                    <pos Sync="TRUE">85000.000000 5000.000000</pos>
+                </cornerPts>
+                <cornerPts>
+                    <pos Sync="TRUE">90000.000000 5000.000000</pos>
+                </cornerPts>
+                <cornerPts>
+                    <pos Sync="TRUE">90000.000000 4000.000000</pos>
+                </cornerPts>
+                <centerPt>
+                    <pos Sync="TRUE">87500.000000 4500.000000</pos>
+                </centerPt>
+                <axisDimension type="002">
+                    <dimSize Sync="TRUE">5000</dimSize>
+                    <dimResol>
+                        <value Sync="TRUE" uom="m">1.000000</value>
+                    </dimResol>
+                </axisDimension>
+                <axisDimension type="001">
+                    <dimSize Sync="TRUE">1000</dimSize>
+                    <dimResol>
+                        <value Sync="TRUE" uom="m">1.000000</value>
+                    </dimResol>
+                </axisDimension>
+                <ptInPixel>
+                    <PixOrientCd Sync="TRUE" value="001" />
+                </ptInPixel>
+            </Georect>
+        </spatRepInfo>
+        <contInfo>TRUNCATED</contInfo>
+        <mdDateSt Sync="TRUE">20220909</mdDateSt>
+        <dqInfo>TRUNCATED</dqInfo>
+        <eainfo>TRUNCATED</eainfo>
+        <dataSetURI />
+    </metadata>
         """.strip()
     )
     test_loader = MockLidarLoader()
 
-    target = np.array([445000, 115000, 450000, 120000])
+    target = np.array([85000, 4000, 90000, 5000])
 
     # Act
-    result = test_loader._get_bbox_from_tfw(test_tfw)
+    result = test_loader._get_bbox_from_xml(test_xml)
 
     # Assert
     assert (result == target).all()
@@ -132,9 +180,9 @@ def test_load_lidar_and_bbox_from_folder(
     # Set mock output values for function calls
     mock_loader = MockLidarLoader()
     mock_loader._get_filenames_from_archive = MagicMock(
-        return_value=("tif_loc", "tfw_loc")
+        return_value=("tif_loc", "xml_loc")
     )
-    mock_loader._get_bbox_from_tfw = MagicMock(return_value="bbox")
+    mock_loader._get_bbox_from_xml = MagicMock(return_value="bbox")
 
     # Set expected output
     tgt_lidar, tgt_bbox = "lidar", "bbox"
@@ -151,10 +199,10 @@ def test_load_lidar_and_bbox_from_folder(
 
     # Correct files are read
     mock_archive.open.assert_called_once_with("tif_loc")
-    mock_archive.read.assert_called_once_with("tfw_loc")
+    mock_archive.read.assert_called_once_with("xml_loc")
 
     # Decoded TFW is transformed to bbox
-    mock_loader._get_bbox_from_tfw.assert_called_once_with(
+    mock_loader._get_bbox_from_xml.assert_called_once_with(
         mock_archive.read.return_value.decode.return_value
     )
 
@@ -163,53 +211,108 @@ def test_load_lidar_and_bbox_from_folder(
     assert res_bbox == tgt_bbox
 
 
-def test_generate_df_from_lidar_array():
+class TestGenerateDfFromLidarArray:
     """Check that LIDAR data is correctly being converted into records"""
 
-    # Arrange
-    test_bbox = np.array(
-        [
-            100000,  # Min easting
-            200000,  # Min northing
-            105000,  # Max easting
-            205000,  # Max northing
-        ]
-    )
+    def test_square_bbox(self):
+        """Check the standard case (5000x5000 grid)"""
 
-    # [0, 1, 2, ..., 24999999]                                                 # noqa: ERA001
-    test_lidar = np.array(range(0, 5000**2))
-    # [[0, 1, ..., 4999], [5000, ..., 9999], ..., [24995000, ..., 24999999]]   # noqa: ERA001
-    test_lidar = test_lidar.reshape(5000, 5000)
+        # Arrange
+        test_bbox = np.array(
+            [
+                100000,  # Min easting
+                200000,  # Min northing
+                105000,  # Max easting
+                205000,  # Max northing
+            ]
+        )
 
-    # fmt: off
-    target_head = pl.DataFrame(
+        # [0, 1, 2, ..., 24999999]                                                 # noqa: ERA001
+        test_lidar = np.array(range(0, 5000**2))
+        # [[0, 1, ..., 4999], [5000, ..., 9999], ..., [24995000, ..., 24999999]]   # noqa: ERA001
+        test_lidar = test_lidar.reshape(5000, 5000)
+
+        # fmt: off
+        target_head = pl.DataFrame(
+                {
+                    'easting': np.array([100000, 100001, 100002, 100003, 100004]).astype('int32'),
+                    'northing': np.array([204999, 204999, 204999, 204999, 204999]).astype('int32'),
+                    'elevation': np.array([0, 1, 2, 3, 4])
+                },
+                orient='row'
+        )
+        target_tail = pl.DataFrame(
             {
-                'easting': np.array([100000, 100001, 100002, 100003, 100004]).astype('int32'),
-                'northing': np.array([204999, 204999, 204999, 204999, 204999]).astype('int32'),
-                'elevation': np.array([0, 1, 2, 3, 4])
+                'easting': np.array([104995, 104996, 104997, 104998, 104999]).astype('int32'),
+                'northing': np.array([200000, 200000, 200000, 200000, 200000]).astype('int32'),
+                'elevation': np.array([24999995, 24999996, 24999997, 24999998, 24999999])
             },
             orient='row'
-    )
-    target_tail = pl.DataFrame(
-        {
-            'easting': np.array([104995, 104996, 104997, 104998, 104999]).astype('int32'),
-            'northing': np.array([200000, 200000, 200000, 200000, 200000]).astype('int32'),
-            'elevation': np.array([24999995, 24999996, 24999997, 24999998, 24999999])
-        },
-        orient='row'
-    )
+        )
 
-    # fmt: on
+        # fmt: on
 
-    # Act
-    result = LidarLoader.generate_df_from_lidar_array(test_lidar, test_bbox)
+        # Act
+        result = LidarLoader.generate_df_from_lidar_array(
+            test_lidar, test_bbox
+        )
 
-    result_head = result.head(5)
-    result_tail = result.tail(5)
+        result_head = result.head(5)
+        result_tail = result.tail(5)
 
-    # Assert
-    assert_frame_equal(result_head, target_head)
-    assert_frame_equal(result_tail, target_tail)
+        # Assert
+        assert_frame_equal(result_head, target_head)
+        assert_frame_equal(result_tail, target_tail)
+
+    def test_rectangular_bbox(self):
+        """Check the standard case (5000x5000 grid)"""
+
+        # Arrange
+        test_bbox = np.array(
+            [
+                655000,  # Min easting
+                295000,  # Min northing
+                656000,  # Max easting
+                300000,  # Max northing
+            ]
+        )
+
+        # [0, 1, 2, ..., 4999999]                                              # noqa: ERA001
+        test_lidar = np.array(range(0, 1000 * 5000))
+        # [[0, 1, ..., 999], [1000, ..., 1999], ..., [4999000, ..., 4999999]]  # noqa: ERA001
+        test_lidar = test_lidar.reshape(5000, 1000)
+
+        # fmt: off
+        target_head = pl.DataFrame(
+                {
+                    'easting': np.array([655000, 655001, 655002, 655003, 655004]).astype('int32'),
+                    'northing': np.array([299999, 299999, 299999, 299999, 299999]).astype('int32'),
+                    'elevation': np.array([0, 1, 2, 3, 4])
+                },
+                orient='row'
+        )
+        target_tail = pl.DataFrame(
+            {
+                'easting': np.array([655995, 655996, 655997, 655998, 655999]).astype('int32'),
+                'northing': np.array([295000, 295000, 295000, 295000, 295000]).astype('int32'),
+                'elevation': np.array([4999995, 4999996, 4999997, 4999998, 4999999])
+            },
+            orient='row'
+        )
+
+        # fmt: on
+
+        # Act
+        result = LidarLoader.generate_df_from_lidar_array(
+            test_lidar, test_bbox
+        )
+
+        result_head = result.head(5)
+        result_tail = result.tail(5)
+
+        # Assert
+        assert_frame_equal(result_head, target_head)
+        assert_frame_equal(result_tail, target_tail)
 
 
 def test_set_output_schema():
