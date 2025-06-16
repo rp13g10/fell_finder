@@ -7,13 +7,13 @@ A personal project which aims to help you find the hilliest possible routes in y
 ## Objectives
 
 The aims of this project are twofold. Primarily, it is intended that the final product will be a webapp which can be used to generate superlative routes (the hilli**est**, the flatt**est**), as opposed to simply a 'hilly' route. Future builds are likely to include other features which make it easier for users to identify large hills to run up, and may go as far as to offer integrations with other popular services (Strava, Komoot) depending on which APIs are available.
-The secondary objective is to provide myself with a challenge, and an opportunity to try out some different technologies. Once the current phase is complete (getting a fully tested PoC running locally, with an architecture I'm satisfied with), the next step will be setting everything up to scale and deploying it to the cloud.
+The secondary objective is to provide myself with a challenge, and an opportunity to try out some different technologies.
 
 ## Current State
 
-This project is still in early development, with significant work still required before it's ready for general use. That said, with a little leg-work a viable PoC is now up and running. At present, the ingestion pipeline is largely up and running (although it's executed on-demand at the moment). A basic webapp is provided, which is able to plot routes on demand and display them to the user. Route creation has been sped up significantly following a rewrite in rust, although longer distances can still take a few seconds to generate.
+This project is still in early development, with significant work still required before it's ready for general use. That said, with a little leg-work a viable PoC is now up and running. At present, the ingestion pipeline is largely complete (although it's executed on-demand at the moment). A basic webapp is provided, which is able to plot routes on demand and display them to the user. Route creation has been sped up significantly following a rewrite in rust, although longer distances can still take a few seconds to generate.
 
-The rust portion of the code is currently in MVP state, and has a number of improvements which need to be made. My immediate next priority is configuring the project to work in Docker containers with either k8s or swarm. Once this has been achieved, I will continue working through remaining items in the backlog below.
+The rust portion of the code is currently in MVP state, and has a number of improvements which need to be made. The main priority is getting the webapp moved into containers and ready to scale, although this is likely to be a slow burner due to poor internet connectivity on the trains (where most of the dev work is done). While offline, I am continuing to work through the backlog below (in approximate priority order).
 
 
 ## Instructions for use

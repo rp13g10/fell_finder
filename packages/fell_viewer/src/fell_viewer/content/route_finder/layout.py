@@ -10,6 +10,8 @@ from fell_viewer.content.route_finder.components import (
     sidebar_contents,
 )
 
+# TODO: Set this up to use new Column class, set up test page to speed up dev
+
 sidebar = html.Div(className="col-3", children=sidebar_contents)
 
 
