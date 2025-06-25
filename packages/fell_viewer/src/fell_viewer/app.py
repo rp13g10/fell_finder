@@ -5,6 +5,7 @@ import os
 import diskcache
 from celery import Celery
 from dash import CeleryManager, Dash, DiskcacheManager
+import dash_bootstrap_components as dbc
 
 ASSETS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
 
@@ -25,5 +26,5 @@ else:
 app = Dash(
     __name__,
     suppress_callback_exceptions=True,
-    assets_folder=ASSETS_DIR,
+    external_stylesheets=[dbc.themes.BOOTSTRAP],
 )

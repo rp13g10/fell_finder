@@ -1,13 +1,13 @@
 """Convenience functions for the creation of common page elements"""
 
 from dataclasses import dataclass
-from typing import Literal, override
+from typing import Literal, override, Any
 
-from dash import dcc, html
-
+from dash import dcc
 from dash.development.base_component import Component
+import dash_bootstrap_components as dbc
 
-from fell_viewer.common.grid import PageItem
+from fell_viewer.common._fv_component import FVComponent
 
 
 @dataclass
@@ -15,52 +15,31 @@ class ButtonConfig:
     """Configuration for a standard button"""
 
     name: str
-    colour: Literal["green", "blue", "teal", "yellow", "red"]
-    compact: bool = False
+    colour: Literal[
+        "primary", "secondary", "success", "info", "warning", "danger"
+    ]
+    size: Literal["sm", "md", "lg"] = "md"
     disabled: bool = False
-    id: str | None = None
+    id: str | dict | None = None
 
 
-class Button(PageItem):
+class Button(FVComponent):
     """Class representing a button"""
 
     def __init__(self, config: ButtonConfig) -> None:
         self.config = config
 
-    def get_classname(self) -> str:
-        """Set the button style based on the provided config"""
-        styles = ["btn", "m-1"]
-
-        match self.config.colour:
-            case "green":
-                styles.append("btn-success")
-            case "blue":
-                styles.append("btn-primary")
-            case "teal":
-                styles.append("btn-info")
-            case "yellow":
-                styles.append("btn-warning")
-            case "red":
-                styles.append("btn-danger")
-
-        if self.config.compact:
-            styles.append("btn-sm")
-
-        if self.config.disabled:
-            styles.append("disabled")
-
-        style = " ".join(styles)
-        return style
-
     def generate(self) -> Component:
         """Generate a button element based on the provided config. Note that
         dcc.Link is used instead of html.A to avoid a full page refresh on
         click"""
-        button = html.Div(
-            self.config.name,
-            className=self.get_classname(),
+        button = dbc.Button(
+            type="button",
+            size=self.config.size,
+            disabled=self.config.disabled,
             id=self.config.id,
-            role="button",
+            color=self.config.colour,
+            children=self.config.name,
         )
 
         return button
@@ -79,6 +58,22 @@ class NavButton(Button):
 
     def __init__(self, config: NavButtonConfig) -> None:
         self.config = config
+
+    def get_classname(self) -> str:
+        """Set the button style based on the provided config"""
+        styles = ["btn", "m-1"]
+
+        if self.config.colour:
+            styles.append(f"btn-{self.config.colour}")
+
+        if self.config.size:
+            styles.append(f"btn-{self.config.size}")
+
+        if self.config.disabled:
+            styles.append("disabled")
+
+        style = " ".join(styles)
+        return style
 
     def get_href(self) -> str:
         """Set the button link based on the provided config"""
@@ -99,11 +94,14 @@ class NavButton(Button):
         """Generate a button element based on the provided config. Note that
         dcc.Link is used instead of html.A to avoid a full page refresh on
         click"""
-        button = dcc.Link(
-            self.config.name,
+
+        kwargs: dict[str, Any] = dict(
+            children=self.config.name,
             href=self.get_href(),
             className=self.get_classname(),
-            id=self.config.id,
         )
+        if self.config.id:
+            kwargs["id"] = self.config.id
+        button = dcc.Link(**kwargs)
 
         return button

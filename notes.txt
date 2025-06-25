@@ -1,6 +1,10 @@
 To Do
 
-Current status:
-Looking into switching over to daft for ingestion
-FoI request is in for LIDAR data
-osm-parquetizer repo has been cloned, should be ready to use
+Address any todos added in the code
+Continue tidying up page formatting
+Plots need wrapping up into components, get rid of generators.py
+Plots need jazzing up a bit
+Tidy up code (linting, comments, etc)
+Clear out any unused code (grid should be able to go)
+Put something on the homepage
+Consider adding a popup while routes are generating (or some sort of loading indicator)

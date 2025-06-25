@@ -113,7 +113,7 @@ class BBox:
         """Return the bounds of a route in a format which can be used by
         plotly maps"""
 
-        return ((self.min_lat, self.max_lon), (self.max_lat, self.min_lon))
+        return ((self.min_lat, self.min_lon), (self.max_lat, self.max_lon))
 
     def to_viewport(self) -> dict[str, Any]:
         """Returns a dict which can be used to define the viewport of a plotly
@@ -267,22 +267,25 @@ class Route:
             metrics=RouteMetrics.from_dict(content["metrics"]),
         )
 
-    def to_polyline(self, id_: str) -> dl.Polyline:
+    def to_polyline(self, id: str | None = None) -> dl.Polyline:
         """For a generated route, generate a dash-leaflet polyline which can be
         displayed on a map
 
         Args:
-            id_: The id which should be set for the generated polyline
+            id: The id which should be set for the generated polyline
 
         Returns:
             A polyline which can be added to a dash_leaflet map
 
         """
 
-        polyline = dl.Polyline(
-            positions=self.geometry.coords,
-            id=id_,
-            interactive=True,
+        kwargs: dict[str, Any] = dict(
+            positions=self.geometry.coords, interactive=True
         )
+
+        if id:
+            kwargs["id"] = id
+
+        polyline = dl.Polyline(**kwargs)
 
         return polyline

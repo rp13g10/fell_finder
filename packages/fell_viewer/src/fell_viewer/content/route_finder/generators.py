@@ -5,53 +5,13 @@ from datetime import datetime
 
 import dash_leaflet as dl
 from dash import html
-from dash.development.base_component import Component
 from plotly import graph_objects as go
 
-from fell_viewer.containers.routes import Route
-from fell_viewer.utils.element_generators import (
+from fell_viewer.common.containers import Route
+from fell_viewer.elements.buttons import (
     NavButtonConfig,
-    generate_nav_button,
+    NavButton,
 )
-from fell_viewer.utils.plotting import (
-    generate_polyline_from_route,
-)
-
-
-def generate_progress_bar(
-    cur_val: int, max_val: int, attempt: int, valid_routes: int
-) -> Component:
-    """Generates a progress bar based on the provided status
-
-    Args:
-        cur_val: The current progress value
-        max_val: The value which represents 100% completion
-        attempt: The current iteration number
-        valid_routes: The number of valid routes generated so far (if any)
-
-    Returns:
-        An html component containing a progress bar for the provided status
-
-    """
-    colours = {0: "#0d6efd ", 1: "#ffc107", 2: "#fd7e14", 3: "#dc3545"}
-
-    if valid_routes:
-        colour = "#198754"
-    else:
-        colour = colours[attempt]
-
-    width = int((cur_val / max_val) * 100)
-    bar = html.Div(
-        className="progress-bar",
-        role="progressbar",
-        style={"width": f"{width}%", "background-color": colour},
-        **{
-            "aria-valuenow": str(cur_val),
-            "aria-valuemin": "0",
-            "aria-valuemax": str(max_val),
-        },
-    )
-    return bar
 
 
 def generate_elevation_plot(route: Route) -> go.Figure:
@@ -89,66 +49,3 @@ def generate_elevation_plot(route: Route) -> go.Figure:
     figure = go.Figure(data=[route_trace], layout=layout)
 
     return figure
-
-
-def generate_route_card(route: Route) -> html.Div:
-    """For a completed route, generate a bootstrap card element which contains
-    a miniature map of the route, high-level stats about its distance/elevation
-    and a link to view it properly.
-
-    Args:
-        route: The route to generate a card for
-
-    Returns:
-        A card for the provided route
-
-    """
-
-    # Create a map of the route
-    polyline = generate_polyline_from_route(route)
-
-    # Each plot must have a unique ID in order for the viewport to update
-    # between runs
-    unique_id = f"{route.route_id}{datetime.now()}"
-
-    plot = dl.Map(
-        id=unique_id,
-        children=[dl.TileLayer(), polyline],
-        center=route.geometry.bbox.centre,
-        style={"width": "192px", "height": "128px"},
-        bounds=route.geometry.bbox.bounds,
-    )
-
-    # Generate a summary of distance/elevation
-    card_text = [
-        html.Div(f"Distance: {route.metrics.dist:,.0f}"),
-        html.Div(f"Elevation: {route.metrics.gain:,.0f}"),
-    ]
-
-    # Generate a button to view the route
-    route_id = route.route_id
-    button_config = NavButtonConfig(
-        name="View",
-        search=f"route_id={route_id}",
-        colour="blue",
-        compact=True,
-    )
-    view_button = generate_nav_button(button_config)
-
-    # Combine all elements into a single card
-    card = html.Div(
-        className="card mx-2",
-        children=[
-            html.Div(className="card-img-top", children=plot),
-            html.Div(
-                className="card-body",
-                children=html.Div(
-                    className="card-text fs-6", children=card_text
-                ),
-            ),
-            view_button,
-        ],
-        style={"min-width": "192px"},
-    )
-
-    return card

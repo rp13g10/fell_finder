@@ -3,19 +3,21 @@ be rendered on all pages of the app"""
 
 from dash import Input, Output, callback, html
 from dash.development.base_component import Component
+import dash_bootstrap_components as dbc
 
 from fell_viewer.app import app, celery_app
-from fell_viewer.components import footer, navbar, url_bar
+from fell_viewer.content.static.components import (
+    url_bar,
+    page_header,
+)
 from fell_viewer.content import home, route_finder
 
-page_content = html.Div(
-    children=[html.Div(id="inx-page-content")],
-    className="container-fluid pb-5",
-)
+page_content = dbc.Container(id="inx-page-content", fluid=True)
 
-layout = html.Div(
-    children=[url_bar, navbar, page_content, footer],
-    className="container-fluid p-0 m-0",
+layout = dbc.Container(
+    children=[url_bar, page_header, page_content],
+    fluid=True,
+    class_name="p-0 m-0",
 )
 
 

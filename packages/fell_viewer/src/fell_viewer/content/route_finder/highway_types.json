@@ -13,7 +13,8 @@
     "Minor Roads": [
         "residential",
         "living_street",
-        "track"
+        "track",
+        "road"
     ],
     "Service Roads*": [
         "service",
@@ -45,7 +46,6 @@
         "via_ferrata"
     ],
     "Unclassified": [
-        "unclassified",
-        "road"
+        "unclassified"
     ]
 }
