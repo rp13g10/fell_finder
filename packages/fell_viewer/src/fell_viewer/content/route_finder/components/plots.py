@@ -1,29 +1,82 @@
 """Defines the (blank) plots which make up the route finder page"""
 
+import dash_bootstrap_components as dbc
 import dash_leaflet as dl
 from dash import dcc
 from plotly import graph_objects as go
 
-blank_map = dl.Map(
-    id="route-plot",
-    children=[
-        dl.TileLayer(id="route-plot-tiles"),
-        dl.ScaleControl(position="bottomleft", id="route-plot-scale"),
-        dl.Marker(
-            position=[50.9690528, -1.3832098],  # type: ignore
-            id="route-plot-marker",
-        ),
-    ],
-    center=[50.9690528, -1.3832098],  # type: ignore
-    style={"width": "100%", "height": "50vh"},
-    zoom=14,
-)
+from fell_viewer.common.icons import ROUTE_START_PNG
+from fell_viewer.common._fv_component import FVComponent
 
-blank_profile = dcc.Graph(
-    id="route-profile",
-    figure=go.Figure(
-        data=go.Scatter(),
-        layout=go.Layout(margin=dict(l=20, r=20, t=40, b=20)),
-    ),
-    style={"width": "100%", "height": "20vh"},
-)
+
+class RouteMap(FVComponent):
+    def __init__(self, id: str) -> None:
+        self.id = id
+
+    def _gen_blank_map(self) -> dl.Map:
+        iconurl = f"data:/image/png;base64,{ROUTE_START_PNG.decode('utf8')}"
+
+        blank_map = dl.Map(
+            id=self.id,
+            children=[
+                dl.TileLayer(id=f"{self.id}-tiles"),
+                dl.ScaleControl(position="bottomleft", id=f"{self.id}-scale"),
+                dl.Marker(
+                    position=[50.9690528, -1.3832098],  # type: ignore
+                    id=f"{self.id}-marker",
+                    icon={
+                        "iconUrl": iconurl,
+                        "iconSize": [48, 48],
+                        "iconAnchor": [24, 48],
+                    },
+                ),
+            ],
+            center=[50.9690528, -1.3832098],  # type: ignore
+            zoom=14,
+            className="w-100 h-100",
+        )
+
+        return blank_map
+
+    def generate(self) -> dbc.Container:
+        blank_map = self._gen_blank_map()
+        wrapped = dbc.Container(
+            blank_map,
+            # TODO: Set this to grow to fill remaining viewport
+        )
+
+        return wrapped
+
+
+class RouteProfile(FVComponent):
+    def __init__(self, id: str) -> None:
+        self.id = id
+
+    # TODO: Add toggle to switch between elevation & cumulative gain
+
+    def _gen_blank_profile(self) -> dcc.Graph:
+        figure = go.Figure(
+            data=go.Scatter(),
+            layout=go.Layout(
+                margin=dict(l=20, r=20, t=40, b=20),
+                xaxis={"showgrid": False, "range": [0, 5000]},
+                yaxis={"showgrid": False, "range": [0, 100]},
+            ),
+        )
+
+        blank_profile = dcc.Graph(
+            id=self.id,
+            figure=figure,
+            className="w-100 h-100",
+        )
+
+        return blank_profile
+
+    def generate(self) -> dbc.Container:
+        blank_profile = self._gen_blank_profile()
+        wrapped = dbc.Container(blank_profile, style={"height": "192px"})
+        return wrapped
+
+
+blank_map = RouteMap(id="route-plot").generate()
+blank_profile = RouteProfile(id="route-profile").generate()

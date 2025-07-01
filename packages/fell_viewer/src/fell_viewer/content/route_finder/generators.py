@@ -1,17 +1,9 @@
 """Functions which generate components for the route finder page based on
 configurable inputs"""
 
-from datetime import datetime
-
-import dash_leaflet as dl
-from dash import html
 from plotly import graph_objects as go
 
 from fell_viewer.common.containers import Route
-from fell_viewer.elements.buttons import (
-    NavButtonConfig,
-    NavButton,
-)
 
 
 def generate_elevation_plot(route: Route) -> go.Figure:
@@ -39,11 +31,21 @@ def generate_elevation_plot(route: Route) -> go.Figure:
         y=route.geometry.eles,
         line=dict(shape="spline"),
         customdata=route.geometry.coords,
+        fill="tozeroy",
+        hovertemplate="%{y:,.2f} m",
+        name="Elevation",
     )
 
     layout = go.Layout(
         margin=dict(l=20, r=0, t=20, b=20),
-        xaxis_range=[0, route.metrics.dist],
+        xaxis={"showgrid": False, "range": [0, route.metrics.dist]},
+        yaxis={
+            "showgrid": False,
+            "range": [
+                0.9 * min(route.geometry.eles),
+                1.1 * max(route.geometry.eles),
+            ],
+        },
     )
 
     figure = go.Figure(data=[route_trace], layout=layout)

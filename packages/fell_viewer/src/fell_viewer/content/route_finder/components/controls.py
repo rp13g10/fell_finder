@@ -5,12 +5,12 @@ import os
 
 from dash import dcc
 
-from fell_viewer.elements.buttons import Button, ButtonConfig
 from fell_viewer.components.control_panel import (
     Control,
-    PanelSection,
     Panel,
+    PanelSection,
 )
+from fell_viewer.elements.buttons import Button, ButtonConfig
 
 CUR_DIR = os.path.dirname(os.path.abspath(__file__))
 with open(
@@ -61,7 +61,7 @@ control_panel = Panel(
                     title="Way Types",
                     control=dcc.Dropdown(
                         options=HIGHWAY_TYPES,
-                        value=HIGHWAY_TYPES,
+                        value=[x for x in HIGHWAY_TYPES if "*" not in x],
                         multi=True,
                         id="route-highway",
                     ),
@@ -93,10 +93,10 @@ control_panel = Panel(
                 Control(
                     title=r"Max %",
                     control=dcc.Slider(
-                        value=0.0,
+                        value=0,
                         min=0,
-                        max=1,
-                        step=0.01,
+                        max=100,
+                        step=1,
                         id="route-restricted-perc",
                         marks=None,
                         className="w-100",

@@ -5,12 +5,13 @@ import json
 import os
 from typing import Dict, List, Literal, Tuple, Union
 
-import dash_leaflet as dl
 import dash_bootstrap_components as dbc
-from dash import Input, Output, State, callback, no_update, ALL, ctx
+import dash_leaflet as dl
+from dash import ALL, Input, Output, State, callback, ctx, no_update
 from dash._callback import NoUpdate  # type: ignore
 from plotly.graph_objects import Figure
 
+from fell_viewer.common.icons import MAP_PIN_PNG, ROUTE_START_PNG
 from fell_viewer.app import background_callback_manager
 from fell_viewer.common.containers import RouteConfig
 from fell_viewer.content.route_finder.components.cards import RouteCard
@@ -24,6 +25,7 @@ from fell_viewer.utils.caching import (
 )
 
 CUR_DIR = os.path.dirname(os.path.abspath(__file__))
+
 
 with open(
     os.path.join(CUR_DIR, "highway_types.json"), "r", encoding="utf8"
@@ -68,7 +70,16 @@ def init_callbacks() -> None:
         lat = click_data["latlng"]["lat"]
         lon = click_data["latlng"]["lng"]
 
-        new_marker = dl.Marker(position=[lat, lon], id="route-plot-marker")  # type: ignore
+        iconurl = f"data:/image/png;base64,{ROUTE_START_PNG.decode('utf8')}"
+        new_marker = dl.Marker(
+            position=[lat, lon],  # type: ignore
+            id="route-plot-marker",
+            icon={
+                "iconUrl": iconurl,
+                "iconSize": [48, 48],
+                "iconAnchor": [24, 48],
+            },
+        )
 
         new_children = [
             child
@@ -112,15 +123,13 @@ def init_callbacks() -> None:
         route_highways: List[str],
         route_allowed_surfaces: List[str],
         route_restricted_surfaces: List[str],
-        route_restricted_perc: float,
+        route_restricted_perc: int,
     ) -> List[str] | NoUpdate:
         """Based on the user's selection, generate a circular route which meets
         their requirements. Periodically update the progress bar to keep them
         informed.
 
         Args:
-            set_progress: Function provided by dash which can be used to update
-              the progress bar as the function executes
             n_clicks: The number of times the calculate button has been clicked
             current_children: The contents of the current route plot
             route_dist: The user requested distance
@@ -138,7 +147,6 @@ def init_callbacks() -> None:
         """
 
         # TODO: Bring back the progress bar
-        # TODO: remove set_progress from the docstring
 
         if not n_clicks:
             return no_update
@@ -160,6 +168,10 @@ def init_callbacks() -> None:
         for surface_type in route_allowed_surfaces:
             surface_types += SURFACE_TYPES[surface_type]
 
+        restricted_surfaces = []
+        for surface_type in route_restricted_surfaces:
+            restricted_surfaces += SURFACE_TYPES[surface_type]
+
         config = RouteConfig(
             start_lat=lat,
             start_lon=lon,
@@ -168,8 +180,8 @@ def init_callbacks() -> None:
             max_candidates=max_candidates,
             highway_types=highway_types,
             surface_types=surface_types,
-            restricted_surfaces=route_restricted_surfaces,
-            restricted_surfaces_perc=route_restricted_perc,
+            restricted_surfaces=restricted_surfaces,
+            restricted_surfaces_perc=route_restricted_perc / 100.0,
         )
 
         routes = get_user_requested_route(config)
@@ -263,22 +275,30 @@ def init_callbacks() -> None:
         prevent_initial_call=True,
     )
     def update_primary_plot_on_view_click(
-        all_n_clicks, all_ids, cached_routes, current_children: list
+        all_n_clicks: list[int],
+        all_ids: list[dict],
+        cached_routes: str,
+        current_children: list,
     ) -> tuple[NoUpdate, NoUpdate, NoUpdate] | tuple[list, dict, Figure]:
         """When the user selects a new route for display in the primary plot,
         fetch the relevant data and render it as a polyline
 
         Args:
-            search_str: The requested route ID
-            cached_routes: The cached route data
+            all_n_clicks: The number of clicks for all of the 'View' buttons
+                on route cards
+            all_ids: The IDs for all of the 'View' buttons on route
+                cards
+            cached_routes: The contents of the route cache, a JSON encoded
+                string containing the details of all generated routes
             current_children: The current contents of the primary plot
-            current_page: The currently selected page
 
         Returns:
             The updated contents of the primary plot, with any old polylines
             removed and a new one added
 
         """
+
+        # TODO: Switch this over to using partial updates if appropriate
 
         # Determine which route was clicked
         if not ctx.triggered_id:
@@ -304,10 +324,11 @@ def init_callbacks() -> None:
 
         viewport = route.geometry.bbox.to_viewport()
 
+        # Clear out the old polyline & markers, retain the tile layer
         new_children = [
             x
             for x in current_children
-            if x["props"]["id"] != "route-plot-trace"
+            if x["props"]["id"] not in {"route-plot-trace", "selected-point"}
         ]
         new_children.append(polyline)
 
@@ -321,25 +342,25 @@ def init_callbacks() -> None:
         [
             State({"type": "route-dl-button", "route-id": ALL}, "id"),
             State("route-store", "data"),
-            State("route-plot", "children"),
         ],
         prevent_initial_call=True,
     )
     def download_gpx_on_dl_click(
-        all_n_clicks, all_ids, cached_routes, current_children: list
+        all_n_clicks: list[int], all_ids: list[dict], cached_routes: str
     ) -> NoUpdate | dict[str, str]:
         """When the user selects a new route for display in the primary plot,
         fetch the relevant data and render it as a polyline
 
         Args:
-            search_str: The requested route ID
-            cached_routes: The cached route data
-            current_children: The current contents of the primary plot
-            current_page: The currently selected page
+            all_n_clicks: The number of clicks for all of the 'View' buttons
+                on route cards
+            all_ids: The IDs for all of the 'View' buttons on route
+                cards
+            cached_routes: The contents of the route cache, a JSON encoded
+                string containing the details of all generated routes
 
         Returns:
-            The updated contents of the primary plot, with any old polylines
-            removed and a new one added
+            The details of a GPX file to trigger a download for
 
         """
 
@@ -398,7 +419,16 @@ def init_callbacks() -> None:
 
         lat_lon = hover_data["points"][0]["customdata"]
 
-        route_marker = dl.Marker(position=lat_lon, id="selected-point")
+        iconurl = f"data:/image/png;base64,{MAP_PIN_PNG.decode('utf8')}"
+        route_marker = dl.Marker(
+            position=lat_lon,
+            id="selected-point",
+            icon={
+                "iconUrl": iconurl,
+                "iconSize": [48, 48],
+                "iconAnchor": [24, 48],
+            },
+        )
 
         new_children = [
             x for x in current_children if x["props"]["id"] != "selected-point"

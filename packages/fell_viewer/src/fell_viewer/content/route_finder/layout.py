@@ -1,7 +1,7 @@
 """Sets the layout for the route finder page"""
 
-from dash import dcc
 import dash_bootstrap_components as dbc
+from dash import dcc
 
 from fell_viewer.content.route_finder.callbacks import init_callbacks
 from fell_viewer.content.route_finder.components import (
@@ -18,13 +18,10 @@ plots = dbc.Col(
     children=[
         dcc.Store(id="route-store", storage_type="memory"),
         dcc.Download(id="route-download"),
-        dbc.Row(
-            children=[dbc.Col(width=12, children=blank_map)],
-        ),
-        dbc.Row(
-            children=[dbc.Col(width=12, children=blank_profile)],
-        ),
+        dbc.Row(blank_map, style={"height": "calc(100vh - 256px)"}),
+        dbc.Row(blank_profile),
     ],
+    class_name="d-flex flex-column",
 )
 
 layout = dbc.Row(children=[sidebar, plots])
