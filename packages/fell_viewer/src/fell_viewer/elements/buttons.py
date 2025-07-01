@@ -1,11 +1,11 @@
 """Convenience functions for the creation of common page elements"""
 
 from dataclasses import dataclass
-from typing import Literal, override, Any
+from typing import Any, Literal, override
 
+import dash_bootstrap_components as dbc
 from dash import dcc
 from dash.development.base_component import Component
-import dash_bootstrap_components as dbc
 
 from fell_viewer.common._fv_component import FVComponent
 

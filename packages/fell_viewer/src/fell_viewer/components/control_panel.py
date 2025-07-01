@@ -1,11 +1,13 @@
 """Defines utilities for the creation of complex control panels which can be
 used to collect multiple user inputs"""
 
-from typing import Sequence, Literal
-from fell_viewer.common._fv_component import FVComponent
-from dash.development.base_component import Component
-from dash import html
+from typing import Literal, Sequence
+
 import dash_bootstrap_components as dbc
+from dash import html
+from dash.development.base_component import Component
+
+from fell_viewer.common._fv_component import FVComponent
 
 type SectionControlType = Control
 type ControlType = FVComponent | Control | "PanelSection"

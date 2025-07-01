@@ -8,9 +8,9 @@ import pytest
 from pytest import approx
 
 from fell_viewer.common.containers import (
-    RouteConfig,
     BBox,
     Route,
+    RouteConfig,
     RouteGeometry,
     RouteMetrics,
 )

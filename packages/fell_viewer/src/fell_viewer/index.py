@@ -1,16 +1,16 @@
 """Sets the high-level page layout, which includes any components which will
 be rendered on all pages of the app"""
 
+import dash_bootstrap_components as dbc
 from dash import Input, Output, callback, html
 from dash.development.base_component import Component
-import dash_bootstrap_components as dbc
 
 from fell_viewer.app import app, celery_app
-from fell_viewer.content.static.components import (
-    url_bar,
-    page_header,
-)
 from fell_viewer.content import home, route_finder
+from fell_viewer.content.static.components import (
+    page_header,
+    url_bar,
+)
 
 page_content = dbc.Container(id="inx-page-content", fluid=True)
 

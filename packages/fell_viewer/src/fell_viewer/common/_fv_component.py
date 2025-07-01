@@ -2,6 +2,7 @@
 
 from abc import ABC, abstractmethod
 from typing import Sequence
+
 from dash.development.base_component import Component
 
 type ComponentType = Component | Sequence[Component] | str | int | None

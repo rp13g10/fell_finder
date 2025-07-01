@@ -2,10 +2,10 @@
 
 import os
 
+import dash_bootstrap_components as dbc
 import diskcache
 from celery import Celery
 from dash import CeleryManager, Dash, DiskcacheManager
-import dash_bootstrap_components as dbc
 
 ASSETS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
 

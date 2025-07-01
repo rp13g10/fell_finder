@@ -1,11 +1,11 @@
 """Defines all of the components required for the route finder page"""
 
 from typing import Any
+
 import dash_bootstrap_components as dbc
 
-
-from fell_viewer.content.route_finder.components.controls import control_panel
 from fell_viewer.content.route_finder.components.cards import cards
+from fell_viewer.content.route_finder.components.controls import control_panel
 from fell_viewer.content.route_finder.components.plots import (
     blank_map,
     blank_profile,

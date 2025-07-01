@@ -2,11 +2,12 @@
 for page elements/components. These will generally be used as wrappers around
 small pieces of page content."""
 
-from typing import Sequence, TypeVar, Generic, override, Literal
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from dash.development.base_component import Component
+from typing import Generic, Literal, Sequence, TypeVar, override
+
 from dash import html
+from dash.development.base_component import Component
 
 type ComponentType = Component | Sequence[Component] | str | int | None
 

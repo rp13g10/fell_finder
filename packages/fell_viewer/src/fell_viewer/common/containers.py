@@ -3,10 +3,9 @@ information through this package."""
 
 import os
 from dataclasses import dataclass, field
-from typing import List, Literal
-from typing import Any
-import dash_leaflet as dl
+from typing import Any, List, Literal
 
+import dash_leaflet as dl
 import gpxpy
 import gpxpy.gpx
 

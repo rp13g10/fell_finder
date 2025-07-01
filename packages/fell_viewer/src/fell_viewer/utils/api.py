@@ -7,7 +7,7 @@ from dataclasses import fields
 
 import requests
 
-from fell_viewer.common.containers import RouteConfig, Route
+from fell_viewer.common.containers import Route, RouteConfig
 
 
 def _gen_query_url(config: RouteConfig) -> str:
