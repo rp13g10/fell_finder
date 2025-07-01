@@ -44,7 +44,7 @@ Proper documentation for these is pending (as the list of variables is not yet c
 
 ## Roadmap
 
-These new features are listed in approximate order of priority
+These new features are listed in approximate order of priority. A number of smaller tasks are also recorded as TODO comments inline with the code.
 
 ### Execution
 
@@ -55,18 +55,20 @@ These new features are listed in approximate order of priority
 ### Ingestion
 
 * Bring in data for all of the UK
-  * Some LIDAR files failed to parse, needs investigation
 * Identify ways to further improve the accuracy of calculated elevation gain/loss
   * Alter join between OSM and elevation, bring in a larger area for each point and average it out?
   * Other sources of elevation data to be evaluated, candidates are OS Terrain and SRTM
   * Post-processing may be a valid tactic, smoothing out the profile for each edge in the graph
   * Further checks on the tags present in the OSM data may also help (tunnels, bridges, etc)
+* See if a better way to handle shared cycle paths can be determined
+  * Consider using the foot tag to amend the highway tag?
 * Set up an airflow pipeline for ingestion
   * Spark profile may need tuning to handle increased volume
 
 ### API
 
 * Run profiling through again, check for any issues introduced by recent changes
+  * Longer routes seem to spend a lot of time running on a single core
 * Improve error handling in Rust API, should be able to return other status codes
 * Hyperparameter optimisation for created routes
   * Set up the API with a debug mode, return additional info about data used to create routes
@@ -75,12 +77,10 @@ These new features are listed in approximate order of priority
 
 ### Frontend
 
-* Set route creation callback to dynamically adjust max num. of candidates
-  * Current approach proves the concept, but isn't optimal
+* Improve UX when route generation fails
+  * Once different response codes implemented in the API, create toast messages explaining the issue
 * Bring back the progress bar!
   * Will require the ability to poll the API for progress, good development opportunity
-* Build out the route finding page of the webapp
-  * Page layout could stand to be improved, collapsible sidebars may help
 * Formally define the expected end state of the webapp
   * Set out all of the different features to be built out
   * Define a target layout for each feature

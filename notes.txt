@@ -1,15 +1,5 @@
 To Do
 
-Address any todos added in the code
-Continue tidying up page formatting
-Plots need wrapping up into components, get rid of generators.py
-Plots need jazzing up a bit
-Tidy up code (linting, comments, etc)
-Clear out any unused code (grid should be able to go)
-Put something on the homepage
-Consider adding a popup while routes are generating (or some sort of loading indicator)
-
-Improve handling of cycle paths, combine with the 'foot' tag to determine if shared usage is intended
-Run profiling for long route creation, seems to be a lot of single-cpu time
-If surface restrictions not satisfied, process without restriction and return the closest match?
-Move auto-tuning of max candidates into rust code
+Populate the homepage with some content
+Check that everything runs in standard mode (not debug)
+Merge, then move on to hyperparameter optimisation in Rust

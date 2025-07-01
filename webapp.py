@@ -2,11 +2,11 @@
 
 import os
 
-from fell_viewer.app import app, celery_app
+from fell_viewer.app import app
 
 DEBUG = os.environ["FF_DEBUG_MODE"] == "true"
 
-__all__ = ["app", "celery_app"]
+__all__ = ["app"]
 
 if __name__ == "__main__":
     app.run(debug=DEBUG)
