@@ -6,41 +6,7 @@ authors = [{ name = "Ross Piper", email = "rp-webservices@outlook.com" }]
 license = { text = "MIT License" }
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
-dependencies = [
-    "fell-viewer",
-    "fell-loader",
-    "hatchling>=1.27.0",
-]
-
-[tool.pytest.ini_options]
-testpaths = ["packages/fell_loader/tests", "packages/fell_viewer/tests"]
-addopts = ["--import-mode=importlib"]
-
-[tool.ruff]
-line-length = 79
-
-[tool.ruff.lint]
-select = ["E", "F", "W", "D1", "D41", "ANN001", "ANN2", "ERA"]
-ignore = ["D107", "D415"]
-
-[tool.ruff.lint.per-file-ignores]
-"./tests/*" = ["E501", "ANN201"]
-"__init__.py" = ["D104"]
-
-[tool.ruff.lint.pydocstyle]
-convention = "google"
-
-# [tool.uv]
-# concurrent-downloads = 1
-# concurrent-builds = 1
-# concurrent-installs = 1
-
-[tool.uv.sources]
-fell-loader = { workspace = true }
-fell-viewer = { workspace = true }
-
-[tool.uv.workspace]
-members = ["packages/fell_viewer", "packages/fell_loader"]
+dependencies = ["fell-viewer", "fell-loader", "hatchling>=1.27.0"]
 
 [dependency-groups]
 dev = [
@@ -53,9 +19,42 @@ dev = [
     "vulture>=2.14",
 ]
 
-[tool.setuptools.packages.find]
-where = ["packages"]
-include = ["fell_loader", "fell_viewer"]
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.sdist]
+include = ["packages/fell_loader", "packages/fell_viewer"]
+
+[tool.hatch.build.targets.wheel]
+include = ["packages/fell_loader", "packages/fell_viewer"]
+
+[tool.pytest.ini_options]
+testpaths = ["packages/fell_loader/tests", "packages/fell_viewer/tests"]
+addopts = ["--import-mode=importlib"]
+
+[tool.ruff]
+line-length = 79
+include = ["packages/fell_loader", "packages/fell_viewer"]
+exclude = ["vulture_allowlist.py"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "D1", "D41", "ANN001", "ANN2", "ERA"]
+ignore = ["D107", "D415"]
+
+[tool.ruff.lint.per-file-ignores]
+"./tests/*" = ["E501", "ANN201"]
+"__init__.py" = ["D104"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.uv.sources]
+fell-loader = { workspace = true }
+fell-viewer = { workspace = true }
+
+[tool.uv.workspace]
+members = ["packages/fell_viewer", "packages/fell_loader"]
 
 [tool.vulture]
 paths = [
@@ -63,4 +62,5 @@ paths = [
     "packages/fell_viewer/src",
     "webapp.py",
     "ingestion.py",
+    "vulture_allowlist.py"
 ]

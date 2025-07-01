@@ -40,20 +40,17 @@ class RouteCard(FVComponent):
         )
 
         # Generate a summary of distance/elevation
-        sdists_divs = [
-            html.Div(f"{surface}: {dist:,.1f}")
-            for surface, dist in self.route.metrics.s_dists.items()
-        ]
         card_text = html.Div(
             [
-                html.Div(f"Distance: {self.route.metrics.dist:,.0f}"),
-                html.Div(f"Elevation: {self.route.metrics.gain:,.0f}"),
-                *sdists_divs,
+                html.Div(
+                    f"Distance: {self.route.metrics.dist / 1000:,.1f} km"
+                ),
+                html.Div(f"Elevation: {self.route.metrics.gain:,.0f} m"),
             ],
             className="card-text fs-6",
         )
 
-        # TODO: Tidy up card formatting
+        # TODO: Jazz up card formatting, any more info to add?
 
         # Generate a button to view the route
         view_button_config = ButtonConfig(

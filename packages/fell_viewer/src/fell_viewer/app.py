@@ -7,6 +7,8 @@ import diskcache
 from celery import Celery
 from dash import CeleryManager, Dash, DiskcacheManager
 
+from fell_viewer.layout import layout
+
 ASSETS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
 
 if os.environ["FF_DEBUG_MODE"] == "true":
@@ -28,3 +30,5 @@ app = Dash(
     suppress_callback_exceptions=True,
     external_stylesheets=[dbc.themes.BOOTSTRAP],
 )
+
+app.layout = layout

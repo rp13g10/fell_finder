@@ -11,9 +11,9 @@ from dash import ALL, Input, Output, State, callback, ctx, no_update
 from dash._callback import NoUpdate  # type: ignore
 from plotly.graph_objects import Figure
 
-from fell_viewer.common.icons import MAP_PIN_PNG, ROUTE_START_PNG
 from fell_viewer.app import background_callback_manager
 from fell_viewer.common.containers import RouteConfig
+from fell_viewer.common.icons import MAP_PIN_PNG, ROUTE_START_PNG
 from fell_viewer.content.route_finder.components.cards import RouteCard
 from fell_viewer.content.route_finder.generators import (
     generate_elevation_plot,

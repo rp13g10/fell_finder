@@ -2,7 +2,7 @@
 
 import os
 
-from fell_viewer.index import app, celery_app
+from fell_viewer.app import app, celery_app
 
 DEBUG = os.environ["FF_DEBUG_MODE"] == "true"
 

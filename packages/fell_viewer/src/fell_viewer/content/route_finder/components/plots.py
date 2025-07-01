@@ -5,11 +5,14 @@ import dash_leaflet as dl
 from dash import dcc
 from plotly import graph_objects as go
 
-from fell_viewer.common.icons import ROUTE_START_PNG
 from fell_viewer.common._fv_component import FVComponent
+from fell_viewer.common.icons import ROUTE_START_PNG
 
 
 class RouteMap(FVComponent):
+    """Generates a blank map element using dash_leaflet which can be used to
+    render generated routes."""
+
     def __init__(self, id: str) -> None:
         self.id = id
 
@@ -39,16 +42,19 @@ class RouteMap(FVComponent):
         return blank_map
 
     def generate(self) -> dbc.Container:
+        """Produces a blank map element wrapped in a Container"""
         blank_map = self._gen_blank_map()
         wrapped = dbc.Container(
             blank_map,
-            # TODO: Set this to grow to fill remaining viewport
         )
 
         return wrapped
 
 
 class RouteProfile(FVComponent):
+    """Generates a blank route profile using plotly which can be used to
+    render the elevation profiles of generated routes"""
+
     def __init__(self, id: str) -> None:
         self.id = id
 
@@ -73,6 +79,7 @@ class RouteProfile(FVComponent):
         return blank_profile
 
     def generate(self) -> dbc.Container:
+        """Produces a blank elevation profile wrapped in a container. The"""
         blank_profile = self._gen_blank_profile()
         wrapped = dbc.Container(blank_profile, style={"height": "192px"})
         return wrapped

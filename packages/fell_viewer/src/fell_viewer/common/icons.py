@@ -1,8 +1,8 @@
 """Contains any icons which are used across the webapp, encoded into base64
 bytes"""
 
-import os
 import base64
+import os
 
 CUR_DIR = os.path.dirname(os.path.abspath(__file__))
 ASSETS_DIR = os.path.join(CUR_DIR, "../assets")
