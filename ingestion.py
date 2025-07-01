@@ -4,6 +4,7 @@ data, joins the two datasets together to create a single augmented graph."""
 # ruff: noqa: ERA001, F401, E501
 
 import os
+
 from fell_loader import (
     BelterLoader,
     GraphContractor,
@@ -27,8 +28,8 @@ if __name__ == "__main__":
     spark = (
         SparkSession.builder.appName("fell_finder")  # type: ignore
         .config("spark.master", "local[*]")
-        .config("spark.driver.memory", "32g")
-        .config("spark.driver.memoryOverhead", "8g")
+        .config("spark.driver.memory", "16g")
+        .config("spark.driver.memoryOverhead", "4g")
         .config("spark.sql.files.maxPartitionBytes", "67108864")
         .config("spark.sql.adaptive.enabled", "true")
         .config("spark.sql.adaptive.coalescePartitions.enabled", "true")
