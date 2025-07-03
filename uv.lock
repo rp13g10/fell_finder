@@ -712,6 +712,7 @@ name = "fell-viewer"
 version = "0.1.0"
 source = { editable = "packages/fell_viewer" }
 dependencies = [
+    { name = "celery", extra = ["redis"] },
     { name = "dash", extra = ["celery", "diskcache"] },
     { name = "dash-bootstrap-components" },
     { name = "dash-leaflet" },
@@ -728,6 +729,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "celery", extras = ["redis"] },
     { name = "dash", extras = ["celery", "diskcache"], specifier = ">=2.18.2" },
     { name = "dash-bootstrap-components", specifier = ">=2.0.3" },
     { name = "dash-leaflet", specifier = ">=1.0.15" },

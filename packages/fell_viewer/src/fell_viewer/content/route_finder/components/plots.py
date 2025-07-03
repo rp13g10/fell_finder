@@ -6,7 +6,9 @@ from dash import dcc
 from plotly import graph_objects as go
 
 from fell_viewer.common._fv_component import FVComponent
-from fell_viewer.common.icons import ROUTE_START_PNG
+from fell_viewer.utils.encoding import get_image_as_str
+
+ROUTE_START_PNG = get_image_as_str("route_start.png")
 
 
 class RouteMap(FVComponent):
@@ -17,8 +19,6 @@ class RouteMap(FVComponent):
         self.id = id
 
     def _gen_blank_map(self) -> dl.Map:
-        iconurl = f"data:/image/png;base64,{ROUTE_START_PNG.decode('utf8')}"
-
         blank_map = dl.Map(
             id=self.id,
             children=[
@@ -28,7 +28,7 @@ class RouteMap(FVComponent):
                     position=[50.9690528, -1.3832098],  # type: ignore
                     id=f"{self.id}-marker",
                     icon={
-                        "iconUrl": iconurl,
+                        "iconUrl": ROUTE_START_PNG,
                         "iconSize": [48, 48],
                         "iconAnchor": [24, 48],
                     },

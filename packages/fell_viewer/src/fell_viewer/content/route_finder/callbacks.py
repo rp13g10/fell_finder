@@ -13,7 +13,6 @@ from plotly.graph_objects import Figure
 
 from fell_viewer.common.app import background_callback_manager
 from fell_viewer.common.containers import RouteConfig
-from fell_viewer.common.icons import MAP_PIN_PNG, ROUTE_START_PNG
 from fell_viewer.content.route_finder.components.cards import RouteCard
 from fell_viewer.content.route_finder.generators import (
     generate_elevation_plot,
@@ -23,9 +22,12 @@ from fell_viewer.utils.caching import (
     load_routes_from_str,
     store_routes_to_str,
 )
+from fell_viewer.utils.encoding import get_image_as_str
 
 CUR_DIR = os.path.dirname(os.path.abspath(__file__))
 
+MAP_PIN_PNG = get_image_as_str("map_pin.png")
+ROUTE_START_PNG = get_image_as_str("route_start.png")
 
 with open(
     os.path.join(CUR_DIR, "highway_types.json"), "r", encoding="utf8"
@@ -70,12 +72,11 @@ def init_callbacks() -> None:
         lat = click_data["latlng"]["lat"]
         lon = click_data["latlng"]["lng"]
 
-        iconurl = f"data:/image/png;base64,{ROUTE_START_PNG.decode('utf8')}"
         new_marker = dl.Marker(
             position=[lat, lon],  # type: ignore
             id="route-plot-marker",
             icon={
-                "iconUrl": iconurl,
+                "iconUrl": ROUTE_START_PNG,
                 "iconSize": [48, 48],
                 "iconAnchor": [24, 48],
             },
@@ -298,8 +299,6 @@ def init_callbacks() -> None:
 
         """
 
-        # TODO: Switch this over to using partial updates if appropriate
-
         # Determine which route was clicked
         if not ctx.triggered_id:
             raise ValueError("Something went wrong updating the plot")
@@ -419,12 +418,11 @@ def init_callbacks() -> None:
 
         lat_lon = hover_data["points"][0]["customdata"]
 
-        iconurl = f"data:/image/png;base64,{MAP_PIN_PNG.decode('utf8')}"
         route_marker = dl.Marker(
             position=lat_lon,
             id="selected-point",
             icon={
-                "iconUrl": iconurl,
+                "iconUrl": MAP_PIN_PNG,
                 "iconSize": [48, 48],
                 "iconAnchor": [24, 48],
             },

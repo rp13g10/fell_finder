@@ -34,5 +34,5 @@ page_header = dbc.Navbar(
     color="secondary",
     fixed="top",
     sticky="top",
-    class_name="mb-2",
+    class_name="mb-3",
 )

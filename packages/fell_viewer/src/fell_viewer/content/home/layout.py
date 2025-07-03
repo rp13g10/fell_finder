@@ -1,10 +1,15 @@
 """Defines the layout of the webapp home page"""
 
-from dash import html
+import dash_bootstrap_components as dbc
 
-layout = html.Div(
-    className="row",
-    children=html.Div(
-        className="col-12", children="Welcome to the Home page!"
+from fell_viewer.content.home.components import home_image, home_text
+
+layout = dbc.Container(
+    dbc.Row(
+        [
+            dbc.Col(home_text.generate(), width=8),
+            dbc.Col(home_image.generate(), width=4),
+        ],
     ),
+    class_name="pt-3",
 )

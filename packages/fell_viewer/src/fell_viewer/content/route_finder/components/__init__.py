@@ -17,7 +17,7 @@ tab_style: dict[str, Any] = dict(
     style={
         # TODO: Height was determined empirically, see if there's a more
         #       robust way to do this
-        "height": "calc(100vh - 106px)",
+        "height": "calc(100vh - 114px)",
     },
     class_name="overflow-scroll",
 )

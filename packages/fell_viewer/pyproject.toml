@@ -19,6 +19,7 @@ dependencies = [
     "python-dotenv>=1.1.0",
     "pyyaml>=6.0.2",
     "tqdm>=4.67.1",
+    "celery[redis]",
 ]
 
 [tool.ruff]
