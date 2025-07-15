@@ -95,7 +95,7 @@ pub fn sort_routes(routes: &mut Vec<Route>, config: Arc<RouteConfig>) {
 /// Fetch the user preference for number of routes to display. Defaults to 10
 /// if the FF_MAX_CANDS environment variable has not been set
 fn get_num_routes_to_display() -> usize {
-    let maybe_usr_pref = env::var("FF_MAX_CANDS");
+    let maybe_usr_pref = env::var("FF_MAX_ROUTES");
 
     match maybe_usr_pref {
         Ok(str) => match str.parse() {

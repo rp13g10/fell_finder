@@ -248,7 +248,7 @@ class OsmLoader:
 
         return ways
 
-    def flag_explicit_footways(self, ways: DataFrame) -> DataFrame:
+    def flag_footways(self, ways: DataFrame) -> DataFrame:
         """Attempt to use tags to determine which ways have been explicitly
         marked as accessible by foot. This may indicate a public crossing over
         private land, or the presence of a footpath next to a busy road.
@@ -258,9 +258,14 @@ class OsmLoader:
 
         Returns:
             A copy of the input dataset with an additional boolean
-            `explicit_footway` column
+            `explicit_footway` column (road and footway represented by a single
+            edge), and an additional `separate_footway` column (road and
+            footway each have a unique edge)
 
         """
+
+        # TODO: Any route with a separate footway should be removed, regardless
+        #       of maxspeed, as the user will always want to be on the footway
 
         footway_tags = [
             "foot",
@@ -271,17 +276,23 @@ class OsmLoader:
         ]
 
         ways = ways.withColumn("explicit_footway", F.lit(False))
+        ways = ways.withColumn("separate_footway", F.lit(False))
         for tag in footway_tags:
             ways = self.get_tag_as_column(ways, tag)
             # NOTE: sidewalk = separate denotes a sidwalk which is mapped as
             #       a separate way. We don't want to send people down the road,
             #       as the sidewalk will also be pulled through as part of the
             #       graph.
+
+            explicit_mask = F.col(tag).isNotNull() & ~(
+                F.col(tag).isin("no", "separate")
+            )
+            separate_mask = F.col(tag).isNotNull() & (F.col(tag) == "separate")
+
             ways = ways.withColumn(
-                tag, ~F.col(tag).isin("no", "separate")
-            ).fillna(False)
-            ways = ways.withColumn(
-                "explicit_footway", F.col("explicit_footway") | F.col(tag)
+                "explicit_footway", F.col("explicit_footway") | explicit_mask
+            ).withColumn(
+                "separate_footway", F.col("separate_footway") | separate_mask
             )
             ways = ways.drop(tag)
 
@@ -332,6 +343,10 @@ class OsmLoader:
         not_motorway_mask = ~F.col("highway").contains(F.lit("motorway"))
         ways = ways.filter(not_motorway_mask)
 
+        # Drop any roads where the footway forms a separate edge
+        separate_mask = F.col("separate_footway")
+        ways = ways.filter(~separate_mask)
+
         # Get rid of roundabouts
         ways = self.get_tag_as_column(ways, "junction")
         not_roundabout_mask = F.col("junction") != "roundabout"
@@ -347,7 +362,7 @@ class OsmLoader:
             "maxspeed",
             F.regexp_extract(
                 F.col("maxspeed"), r"[A-Za-z\s]*(\d{1,3})[A-Za-z\s]*", 1
-            ),  # .cast(T.IntegerType()),
+            ),
         )
 
         # Keep records with max speed below 50, no known max speed, or have
@@ -620,7 +635,7 @@ class OsmLoader:
 
         ways = self.unpack_tags(ways)
         ways = self.get_roads_and_paths(ways)
-        ways = self.flag_explicit_footways(ways)
+        ways = self.flag_footways(ways)
         ways = self.remove_restricted_routes(ways)
         ways = self.remove_unsafe_routes(ways)
         ways = self.set_flat_flag(ways)

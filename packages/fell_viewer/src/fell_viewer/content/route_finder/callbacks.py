@@ -3,30 +3,31 @@ the route finder page"""
 
 import json
 import os
-from typing import Callable, Dict, List, Literal, Tuple, Union
+from typing import Dict, List, Literal, Tuple, Union
 
+import dash_bootstrap_components as dbc
 import dash_leaflet as dl
-from dash import Input, Output, State, callback, html, no_update
+from dash import ALL, Input, Output, State, callback, ctx, no_update
 from dash._callback import NoUpdate  # type: ignore
-from dash.development.base_component import Component
 from plotly.graph_objects import Figure
 
-from fell_viewer.app import background_callback_manager
-from fell_viewer.containers.config import RouteConfig
+from fell_viewer.common.app import background_callback_manager
+from fell_viewer.common.containers import RouteConfig
+from fell_viewer.content.route_finder.components.cards import RouteCard
 from fell_viewer.content.route_finder.generators import (
     generate_elevation_plot,
-    generate_route_card,
 )
 from fell_viewer.utils.api import get_user_requested_route
 from fell_viewer.utils.caching import (
     load_routes_from_str,
     store_routes_to_str,
 )
-from fell_viewer.utils.plotting import (
-    generate_polyline_from_route,
-)
+from fell_viewer.utils.encoding import get_image_as_str
 
 CUR_DIR = os.path.dirname(os.path.abspath(__file__))
+
+MAP_PIN_PNG = get_image_as_str("map_pin.png")
+ROUTE_START_PNG = get_image_as_str("route_start.png")
 
 with open(
     os.path.join(CUR_DIR, "highway_types.json"), "r", encoding="utf8"
@@ -71,7 +72,15 @@ def init_callbacks() -> None:
         lat = click_data["latlng"]["lat"]
         lon = click_data["latlng"]["lng"]
 
-        new_marker = dl.Marker(position=[lat, lon], id="route-plot-marker")
+        new_marker = dl.Marker(
+            position=[lat, lon],  # type: ignore
+            id="route-plot-marker",
+            icon={
+                "iconUrl": ROUTE_START_PNG,
+                "iconSize": [48, 48],
+                "iconAnchor": [24, 48],
+            },
+        )
 
         new_children = [
             child
@@ -92,9 +101,8 @@ def init_callbacks() -> None:
     @callback(
         [
             Output("route-store", "data", allow_duplicate=True),
-            Output("url", "search"),
         ],
-        Input("route-calculate", "n_clicks"),
+        Input("route-calculate-button", "n_clicks"),
         [
             State("route-plot", "children"),
             State("route-dist", "value"),
@@ -106,11 +114,9 @@ def init_callbacks() -> None:
         ],
         background=True,
         prevent_initial_call=True,
-        progress=Output("progress-bar", "children"),
         manager=background_callback_manager,
     )
     def calculate_and_store_routes(
-        set_progress: Callable,
         n_clicks: Union[int, None],
         current_children: List,
         route_dist: str,
@@ -118,15 +124,13 @@ def init_callbacks() -> None:
         route_highways: List[str],
         route_allowed_surfaces: List[str],
         route_restricted_surfaces: List[str],
-        route_restricted_perc: float,
-    ) -> Union[Tuple[List[str], str], Tuple[NoUpdate, NoUpdate]]:
+        route_restricted_perc: int,
+    ) -> List[str] | NoUpdate:
         """Based on the user's selection, generate a circular route which meets
         their requirements. Periodically update the progress bar to keep them
         informed.
 
         Args:
-            set_progress: Function provided by dash which can be used to update
-              the progress bar as the function executes
             n_clicks: The number of times the calculate button has been clicked
             current_children: The contents of the current route plot
             route_dist: The user requested distance
@@ -142,8 +146,11 @@ def init_callbacks() -> None:
             A circular route starting at the selected point
 
         """
+
+        # TODO: Bring back the progress bar
+
         if not n_clicks:
-            return no_update, no_update
+            return no_update
 
         current_marker = next(
             x
@@ -162,6 +169,10 @@ def init_callbacks() -> None:
         for surface_type in route_allowed_surfaces:
             surface_types += SURFACE_TYPES[surface_type]
 
+        restricted_surfaces = []
+        for surface_type in route_restricted_surfaces:
+            restricted_surfaces += SURFACE_TYPES[surface_type]
+
         config = RouteConfig(
             start_lat=lat,
             start_lon=lon,
@@ -170,38 +181,48 @@ def init_callbacks() -> None:
             max_candidates=max_candidates,
             highway_types=highway_types,
             surface_types=surface_types,
-            restricted_surfaces=route_restricted_surfaces,
-            restricted_surfaces_perc=route_restricted_perc,
+            restricted_surfaces=restricted_surfaces,
+            restricted_surfaces_perc=route_restricted_perc / 100.0,
         )
 
         routes = get_user_requested_route(config)
 
         routes_str = store_routes_to_str(routes)
 
-        route_id = routes[0].route_id
-        query_str = f"?route_id={route_id}"
+        return [routes_str]
 
-        return [routes_str], query_str
+    @callback(
+        [
+            Output("route-tabs", "active_tab"),
+            Output("route-cards", "children"),
+        ],
+        Input("route-store", "data"),
+        prevent_initial_call=True,
+    )
+    def select_view_tab_and_render_cards(
+        cached_routes: str,
+    ) -> tuple[NoUpdate, NoUpdate] | tuple[str, list[dbc.Card]]:
+        if not cached_routes:
+            return no_update, no_update
+
+        new_routes = load_routes_from_str(cached_routes)
+
+        cards = [RouteCard(route).generate() for route in new_routes]
+
+        return "route-tab-cards", cards
 
     @callback(
         [
             Output("route-plot", "children", allow_duplicate=True),
-            Output("route-plot", "viewport"),
-            Output("route-profile", "figure"),
+            Output("route-plot", "viewport", allow_duplicate=True),
+            Output("route-profile", "figure", allow_duplicate=True),
         ],
-        [Input("url", "search")],
-        [
-            State("route-store", "data"),
-            State("route-plot", "children"),
-            State("url", "pathname"),
-        ],
+        Input("route-store", "data"),
+        State("route-plot", "children"),
         prevent_initial_call=True,
     )
-    def update_primary_plot(
-        search_str: str,
-        cached_routes: str,
-        current_children: List,
-        current_page: str,
+    def update_primary_plot_on_calculation(
+        cached_routes: str, current_children: list
     ) -> Union[Tuple[NoUpdate, NoUpdate, NoUpdate], Tuple[List, Dict, Figure]]:
         """When the user selects a new route for display in the primary plot,
         fetch the relevant data and render it as a polyline
@@ -218,23 +239,14 @@ def init_callbacks() -> None:
 
         """
 
-        if current_page != "/route_finder":
-            return no_update, no_update, no_update
-
         if not cached_routes:
             return no_update, no_update, no_update
 
-        routes = load_routes_from_str(cached_routes[0])
+        new_routes = load_routes_from_str(cached_routes)
 
-        if not search_str:
-            # User hasn't clicked a route yet, display the first
-            route = routes[0]
-        else:
-            # Display the selected route
-            target_id = int(search_str.split("=")[-1])
-            route = next(x for x in routes if x.route_id == target_id)
+        route = new_routes[0]
 
-        polyline = generate_polyline_from_route(route)
+        polyline = route.to_polyline(id="route-plot-trace")
 
         viewport = route.geometry.bbox.to_viewport()
 
@@ -250,30 +262,36 @@ def init_callbacks() -> None:
         return new_children, viewport, profile_plot
 
     @callback(
-        Output("route-download", "data"),
-        Input("route-download-button", "n_clicks"),
         [
-            State("url", "search"),
+            Output("route-plot", "children", allow_duplicate=True),
+            Output("route-plot", "viewport", allow_duplicate=True),
+            Output("route-profile", "figure", allow_duplicate=True),
+        ],
+        Input({"type": "route-view-button", "route-id": ALL}, "n_clicks"),
+        [
+            State({"type": "route-view-button", "route-id": ALL}, "id"),
             State("route-store", "data"),
-            State("url", "pathname"),
+            State("route-plot", "children"),
         ],
         prevent_initial_call=True,
     )
-    def download_gpx(
-        n_clicks: int,
-        search_str: str,
+    def update_primary_plot_on_view_click(
+        all_n_clicks: list[int],
+        all_ids: list[dict],
         cached_routes: str,
-        current_page: str,
-    ) -> dict[str, str] | NoUpdate:
-        """When the download GPX button is clicked, generate a GPX file for
-        the selected route and trigger a download
+        current_children: list,
+    ) -> tuple[NoUpdate, NoUpdate, NoUpdate] | tuple[list, dict, Figure]:
+        """When the user selects a new route for display in the primary plot,
+        fetch the relevant data and render it as a polyline
 
         Args:
-            n_clicks: The number of button clicks, not accessed
-            search_str: The requested route ID
-            cached_routes: The cached route data
+            all_n_clicks: The number of clicks for all of the 'View' buttons
+                on route cards
+            all_ids: The IDs for all of the 'View' buttons on route
+                cards
+            cached_routes: The contents of the route cache, a JSON encoded
+                string containing the details of all generated routes
             current_children: The current contents of the primary plot
-            current_page: The currently selected page
 
         Returns:
             The updated contents of the primary plot, with any old polylines
@@ -281,57 +299,98 @@ def init_callbacks() -> None:
 
         """
 
-        if current_page != "/route_finder":
-            return no_update
+        # Determine which route was clicked
+        if not ctx.triggered_id:
+            raise ValueError("Something went wrong updating the plot")
+        target_id = ctx.triggered_id["route-id"]
 
-        if not cached_routes:
-            return no_update
+        # Get the number of clicks for the selected route
+        n_clicks = 0
+        for maybe_n_clicks, maybe_route_id in zip(all_n_clicks, all_ids):
+            if maybe_route_id["route-id"] == target_id:
+                n_clicks = maybe_n_clicks
+                break
 
-        if not search_str:
-            return no_update
+        if (not n_clicks) or (not cached_routes):
+            return no_update, no_update, no_update
 
-        routes = load_routes_from_str(cached_routes[0])
+        routes = load_routes_from_str(cached_routes)
 
         # Fetch the selected route
-        target_id = search_str.split("=")[-1]
-        route = next(x for x in routes if x.route_id == target_id)
+        route = next(x for x in routes if str(x.route_id) == target_id)
+
+        polyline = route.to_polyline(id="route-plot-trace")
+
+        viewport = route.geometry.bbox.to_viewport()
+
+        # Clear out the old polyline & markers, retain the tile layer
+        new_children = [
+            x
+            for x in current_children
+            if x["props"]["id"] not in {"route-plot-trace", "selected-point"}
+        ]
+        new_children.append(polyline)
+
+        profile_plot = generate_elevation_plot(route)
+
+        return new_children, viewport, profile_plot
+
+    @callback(
+        Output("route-download", "data"),
+        Input({"type": "route-dl-button", "route-id": ALL}, "n_clicks"),
+        [
+            State({"type": "route-dl-button", "route-id": ALL}, "id"),
+            State("route-store", "data"),
+        ],
+        prevent_initial_call=True,
+    )
+    def download_gpx_on_dl_click(
+        all_n_clicks: list[int], all_ids: list[dict], cached_routes: str
+    ) -> NoUpdate | dict[str, str]:
+        """When the user selects a new route for display in the primary plot,
+        fetch the relevant data and render it as a polyline
+
+        Args:
+            all_n_clicks: The number of clicks for all of the 'View' buttons
+                on route cards
+            all_ids: The IDs for all of the 'View' buttons on route
+                cards
+            cached_routes: The contents of the route cache, a JSON encoded
+                string containing the details of all generated routes
+
+        Returns:
+            The details of a GPX file to trigger a download for
+
+        """
+
+        # Determine which route was clicked
+        if not ctx.triggered_id:
+            raise ValueError("Something went wrong updating the plot")
+        target_id = ctx.triggered_id["route-id"]
+
+        # Get the number of clicks for the selected route
+        n_clicks = 0
+        for maybe_n_clicks, maybe_route_id in zip(all_n_clicks, all_ids):
+            if maybe_route_id["route-id"] == target_id:
+                n_clicks = maybe_n_clicks
+                break
+
+        if (not n_clicks) or (not cached_routes):
+            return no_update
+
+        routes = load_routes_from_str(cached_routes)
+
+        # Fetch the selected route
+        route = next(x for x in routes if str(x.route_id) == target_id)
 
         gpx_data = route.geometry.to_gpx()
 
-        dl_data = {"filename": "found_fell.gpx", "content": gpx_data}
+        dl_data = {
+            "filename": f"found-fell-{target_id}.gpx",
+            "content": gpx_data,
+        }
 
         return dl_data
-
-    @callback(
-        Output("route-cards", "children"),
-        Input("route-store", "data"),
-        prevent_initial_call=True,
-    )
-    def update_route_cards(
-        cached_routes: str,
-    ) -> Union[List[Component], html.Div]:
-        """When new map data is added to the store, render a small card for
-        each route which includes a mini-map and a link to view it in more
-        detail
-
-        Args:
-            cached_routes: The cached route data
-
-        Returns:
-            A list of route card elements
-
-        """
-        if not cached_routes:
-            return html.Div()
-
-        routes = load_routes_from_str(cached_routes[0])
-
-        route_cards = []
-        for route in routes:
-            route_card = generate_route_card(route)
-            route_cards.append(route_card)
-
-        return route_cards
 
     @callback(
         Output("route-plot", "children", allow_duplicate=True),
@@ -359,7 +418,15 @@ def init_callbacks() -> None:
 
         lat_lon = hover_data["points"][0]["customdata"]
 
-        route_marker = dl.Marker(position=lat_lon, id="selected-point")
+        route_marker = dl.Marker(
+            position=lat_lon,
+            id="selected-point",
+            icon={
+                "iconUrl": MAP_PIN_PNG,
+                "iconSize": [48, 48],
+                "iconAnchor": [24, 48],
+            },
+        )
 
         new_children = [
             x for x in current_children if x["props"]["id"] != "selected-point"
@@ -368,42 +435,3 @@ def init_callbacks() -> None:
         new_children.append(route_marker)
 
         return new_children
-
-    @callback(
-        Output("route-dist-display", "children"), Input("route-dist", "value")
-    )
-    def update_route_dist_display(selected_dist: str):
-        """When the user changes the selected distance, update the indicator to
-        reflect the new value.
-
-        Args:
-            selected_dist: The user selected distance
-
-        Returns:
-            A string representation of selected_dist
-
-        """
-
-        output = f"{selected_dist} km"
-
-        return output
-
-    @callback(
-        Output("route-restricted-perc-display", "children"),
-        Input("route-restricted-perc", "value"),
-    )
-    def update_restricted_perc_display(restricted_perc: str):
-        """When the user changes the selected % surface restriction, update
-        the indicator the reflect the new value.
-
-        Args:
-            restricted_perc: The user selected % restriction
-
-        Returns:
-            A string representation of restricted_perc
-
-        """
-        restricted_val = float(restricted_perc)
-        output = f"{restricted_val:,.2%}"
-
-        return output
