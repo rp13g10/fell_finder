@@ -102,3 +102,4 @@ These new features are listed in approximate order of priority. A number of smal
 * Further investigation is needed around surface types, some local footpaths seem to be showing as paved. This may be an issue with the underlying data.
 * Data is being combined into a limited number of partitions during the ingestion phase, causing higher memory usage than I would like
   * More in-depth analysis of the execution plan is required to debug this behaviour
+* While greatly improved, route generation does occasionally fail. Investigation is required to see if completion rates can be improved without drastically increasing run times.
