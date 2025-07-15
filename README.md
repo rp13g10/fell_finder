@@ -7,13 +7,13 @@ A personal project which aims to help you find the hilliest possible routes in y
 ## Objectives
 
 The aims of this project are twofold. Primarily, it is intended that the final product will be a webapp which can be used to generate superlative routes (the hilli**est**, the flatt**est**), as opposed to simply a 'hilly' route. Future builds are likely to include other features which make it easier for users to identify large hills to run up, and may go as far as to offer integrations with other popular services (Strava, Komoot) depending on which APIs are available.
-The secondary objective is to provide myself with a challenge, and an opportunity to try out some different technologies. Once the current phase is complete (getting a fully tested PoC running locally, with an architecture I'm satisfied with), the next step will be setting everything up to scale and deploying it to the cloud.
+The secondary objective is to provide myself with a challenge, and an opportunity to try out some different technologies.
 
 ## Current State
 
-This project is still in early development, with significant work still required before it's ready for general use. That said, with a little leg-work a viable PoC is now up and running. At present, the ingestion pipeline is largely up and running (although it's executed on-demand at the moment). A basic webapp is provided, which is able to plot routes on demand and display them to the user. Route creation has been sped up significantly following a rewrite in rust, although longer distances can still take a few seconds to generate.
+This project is still in early development, with significant work still required before it's ready for general use. That said, with a little leg-work a viable PoC is now up and running. At present, the ingestion pipeline is largely complete (although it's executed on-demand at the moment). A basic webapp is provided, which is able to plot routes on demand and display them to the user. Route creation has been sped up significantly following a rewrite in rust, although longer distances can still take a few seconds to generate.
 
-The rust portion of the code is currently in MVP state, and has a number of improvements which need to be made. My immediate next priority is configuring the project to work in Docker containers with either k8s or swarm. Once this has been achieved, I will continue working through remaining items in the backlog below.
+The rust portion of the code is currently in MVP state, and has a number of improvements which need to be made. The main priority is getting the webapp moved into containers and ready to scale, although this is likely to be a slow burner due to poor internet connectivity on the trains (where most of the dev work is done). While offline, I am continuing to work through the backlog below (in approximate priority order).
 
 
 ## Instructions for use
@@ -44,7 +44,7 @@ Proper documentation for these is pending (as the list of variables is not yet c
 
 ## Roadmap
 
-These new features are listed in approximate order of priority
+These new features are listed in approximate order of priority. A number of smaller tasks are also recorded as TODO comments inline with the code.
 
 ### Execution
 
@@ -55,18 +55,20 @@ These new features are listed in approximate order of priority
 ### Ingestion
 
 * Bring in data for all of the UK
-  * Some LIDAR files failed to parse, needs investigation
 * Identify ways to further improve the accuracy of calculated elevation gain/loss
   * Alter join between OSM and elevation, bring in a larger area for each point and average it out?
   * Other sources of elevation data to be evaluated, candidates are OS Terrain and SRTM
   * Post-processing may be a valid tactic, smoothing out the profile for each edge in the graph
   * Further checks on the tags present in the OSM data may also help (tunnels, bridges, etc)
+* See if a better way to handle shared cycle paths can be determined
+  * Consider using the foot tag to amend the highway tag?
 * Set up an airflow pipeline for ingestion
   * Spark profile may need tuning to handle increased volume
 
 ### API
 
 * Run profiling through again, check for any issues introduced by recent changes
+  * Longer routes seem to spend a lot of time running on a single core
 * Improve error handling in Rust API, should be able to return other status codes
 * Hyperparameter optimisation for created routes
   * Set up the API with a debug mode, return additional info about data used to create routes
@@ -75,12 +77,10 @@ These new features are listed in approximate order of priority
 
 ### Frontend
 
-* Set route creation callback to dynamically adjust max num. of candidates
-  * Current approach proves the concept, but isn't optimal
+* Improve UX when route generation fails
+  * Once different response codes implemented in the API, create toast messages explaining the issue
 * Bring back the progress bar!
   * Will require the ability to poll the API for progress, good development opportunity
-* Build out the route finding page of the webapp
-  * Page layout could stand to be improved, collapsible sidebars may help
 * Formally define the expected end state of the webapp
   * Set out all of the different features to be built out
   * Define a target layout for each feature
@@ -102,3 +102,4 @@ These new features are listed in approximate order of priority
 * Further investigation is needed around surface types, some local footpaths seem to be showing as paved. This may be an issue with the underlying data.
 * Data is being combined into a limited number of partitions during the ingestion phase, causing higher memory usage than I would like
   * More in-depth analysis of the execution plan is required to debug this behaviour
+* While greatly improved, route generation does occasionally fail. Investigation is required to see if completion rates can be improved without drastically increasing run times.

@@ -452,7 +452,7 @@ def test_get_roads_and_paths(test_session: SparkSession):
     assertDataFrameEqual(res_df, tgt_df)
 
 
-def test_flag_explicit_footways(test_session: SparkSession):
+def test_flag_footways(test_session: SparkSession):
     """Check that ways with explicit footways are being flagged correctly"""
     # Arrange #################################################################
 
@@ -473,7 +473,8 @@ def test_flag_explicit_footways(test_session: SparkSession):
         # No tag set
         [4 , {}],
         # Footpath mapped separately
-        [5 , {'sidewalk': 'separate'}]
+        [5 , {'sidewalk': 'separate'}],
+        [6 , {'foot': 'yes', 'sidewalk': 'separate'}]
     ]
     # fmt: on
 
@@ -490,21 +491,23 @@ def test_flag_explicit_footways(test_session: SparkSession):
 
     # ----- Target Data -----
     # fmt: off
-    #   inx, tags                             , explicit_footway
+    #   inx, tags                                   , explicit_footway, separate_footway
     tgt_data = [
         # Explicit yes
-        [0 , {'foot': 'yes'}                  , True],
-        [1 , {'sidewalk': 'yes'}              , True],
+        [0 , {'foot': 'yes'}                        , True            , False],
+        [1 , {'sidewalk': 'yes'}                    , True            , False],
         # Explicit no
-        [2 , {'foot': 'no'}                   , False],
+        [2 , {'foot': 'no'}                         , False           , False],
         # Multiple explicit yes
-        [3 , {'foot': 'yes', 'sidwalk': 'yes'}, True],
+        [3 , {'foot': 'yes', 'sidwalk': 'yes'}      , True            , False],
         # Mixed
-        [4 , {'foot': 'yes', 'sidewalk': 'no'}, True],
+        [4 , {'foot': 'yes', 'sidewalk': 'no'}      , True            , False],
         # No tag set
-        [4 , {}                               , False],
+        [4 , {}                                     , False           , False],
         # Footpath mapped separately
-        [5 , {'sidewalk': 'separate'}         , False]
+        [5 , {'sidewalk': 'separate'}               , False           , True],
+        [6 , {'foot': 'yes', 'sidewalk': 'separate'}, True            , True]
+
     ]
     # fmt: on
 
@@ -513,13 +516,14 @@ def test_flag_explicit_footways(test_session: SparkSession):
             StructField("inx", IntegerType()),
             StructField("tags", MapType(StringType(), StringType())),
             StructField("explicit_footway", BooleanType()),
+            StructField("separate_footway", BooleanType()),
         ]
     )
 
     tgt_df = test_session.createDataFrame(tgt_data, schema=tgt_schema)
 
     # Act #####################################################################
-    res_df = test_loader.flag_explicit_footways(test_df)
+    res_df = test_loader.flag_footways(test_df)
 
     # Assert ##################################################################
     assertDataFrameEqual(res_df, tgt_df)
@@ -592,22 +596,24 @@ def test_remove_unsafe_routes(test_session: SparkSession):
     # ----- Test Data -----
 
     # fmt: off
-    #   inx, tags                      , highway   , explicit_footway
+    #   inx, tags                      , highway   , explicit_footway, separate_footway
     test_data = [
         # Dropped, motorway
-        [0 , {}                        , 'motorway', False],
+        [0 , {}                        , 'motorway', False           , False],
         # Dropped, roundabout
-        [1 , {'junction': 'roundabout'}, 'other'   , False],
+        [1 , {'junction': 'roundabout'}, 'other'   , False           , False],
         # Dropped, 60 mph, no footway
-        [2 , {'maxspeed': '60 mph'}    , 'other'   , False],
+        [2 , {'maxspeed': '60 mph'}    , 'other'   , False           , False],
         # Dropped, 70 mph, no footway
-        [3 , {'maxspeed': '70 mph'}    , 'other'   , False],
+        [3 , {'maxspeed': '70 mph'}    , 'other'   , False           , False],
         # Retained, 60 mph, footway
-        [4 , {'maxspeed': '60 mph'}    , 'other'   , True],
+        [4 , {'maxspeed': '60 mph'}    , 'other'   , True            , False],
         # Retained, 30 mph, no (explicit) footway
-        [5 , {'maxspeed': '30 mph'}    , 'other'   , False],
+        [5 , {'maxspeed': '30 mph'}    , 'other'   , False           , False],
         # Dropped, motorway (with speed limit tag)
-        [6 , {'maxspeed': '70 mph'}    , 'motorway', False]
+        [6 , {'maxspeed': '70 mph'}    , 'motorway', False           , False],
+        # Dropped, 60 mph, separate footway
+        [7 , {'maxspeed': '60 mph'}    , 'other'   , False           , True]
     ]
     # fmt: on
 
@@ -617,6 +623,7 @@ def test_remove_unsafe_routes(test_session: SparkSession):
             StructField("tags", MapType(StringType(), StringType())),
             StructField("highway", StringType()),
             StructField("explicit_footway", BooleanType()),
+            StructField("separate_footway", BooleanType()),
         ]
     )
 
@@ -626,17 +633,18 @@ def test_remove_unsafe_routes(test_session: SparkSession):
 
     # ----- Target Data -----
     # fmt: off
-    #   inx, tags                      , highway   , explicit_footway
+    #   inx, tags                      , highway   , explicit_footway, separate_footway
     tgt_data = [
         # Dropped, motorway
         # Dropped, roundabout
         # Dropped, 60 mph, no footway
         # Dropped, 70 mph, no footway
         # Retained, 60 mph, footway
-        [4 , {'maxspeed': '60 mph'}    , 'other'   , True],
+        [4 , {'maxspeed': '60 mph'}    , 'other'   , True            , False],
         # Retained, 30 mph, no (explicit) footway
-        [5 , {'maxspeed': '30 mph'}    , 'other'   , False],
+        [5 , {'maxspeed': '30 mph'}    , 'other'   , False           , False],
         # Dropped, motorway (with speed limit tag)
+        # Dropped, 60 mph, separate footway
     ]
     # fmt: on
 
@@ -646,6 +654,7 @@ def test_remove_unsafe_routes(test_session: SparkSession):
             StructField("tags", MapType(StringType(), StringType())),
             StructField("highway", StringType()),
             StructField("explicit_footway", BooleanType()),
+            StructField("separate_footway", BooleanType()),
         ]
     )
 

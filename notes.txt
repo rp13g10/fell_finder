@@ -1,6 +1,0 @@
-To Do
-
-Current status:
-Looking into switching over to daft for ingestion
-FoI request is in for LIDAR data
-osm-parquetizer repo has been cloned, should be ready to use

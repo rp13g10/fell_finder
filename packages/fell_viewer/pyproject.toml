@@ -7,6 +7,7 @@ license = { text = "MIT License" }
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "dash-bootstrap-components>=2.0.3",
     "dash-leaflet>=1.0.15",
     "dash[celery,diskcache]>=2.18.2",
     "gpxpy>=1.6.2",
@@ -18,6 +19,7 @@ dependencies = [
     "python-dotenv>=1.1.0",
     "pyyaml>=6.0.2",
     "tqdm>=4.67.1",
+    "celery[redis]",
 ]
 
 [tool.ruff]
