@@ -1,5 +1,0 @@
-To Do
-
-Populate the homepage with some content
-Check that everything runs in standard mode (not debug)
-Merge, then move on to hyperparameter optimisation in Rust
