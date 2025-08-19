@@ -1,3 +1,6 @@
 [workspace]
 members = ["packages/fell_finder"]
 resolver = "3"
+
+[profile.release]
+opt-level = 3

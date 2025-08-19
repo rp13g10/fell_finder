@@ -39,7 +39,7 @@
     "Cycle Routes": [
         "cycleway",
         "lane",
-        "share_busway",
+        "shared_busway",
         "shared_lane"
     ],
     "Technical Paths*": [

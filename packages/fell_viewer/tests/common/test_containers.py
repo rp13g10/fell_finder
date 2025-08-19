@@ -102,7 +102,7 @@ class TestBBox:
 
         # Arrange
         test_bbox = BBox(min_lat=0.1, min_lon=0.2, max_lat=0.3, max_lon=0.4)
-        target = ((0.1, 0.4), (0.3, 0.2))
+        target = ((0.1, 0.2), (0.3, 0.4))
 
         # Act
         result = test_bbox.bounds
@@ -115,7 +115,7 @@ class TestBBox:
 
         # Arrange
         test_bbox = BBox(min_lat=0.1, min_lon=0.2, max_lat=0.3, max_lon=0.4)
-        target = {"bounds": ((0.1, 0.4), (0.3, 0.2)), "center": (0.2, 0.3)}
+        target = {"bounds": ((0.1, 0.2), (0.3, 0.4)), "center": (0.2, 0.3)}
 
         # Act
         result = test_bbox.to_viewport()

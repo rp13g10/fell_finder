@@ -247,6 +247,48 @@ pub struct Route {
     pub id: u64,
 }
 
+/// Container for metrics collected during runtime, used for debugging &
+/// optimisation
+#[derive(Debug, Serialize, Clone, Copy)]
+pub struct RoutegenMetrics {
+    pub n_nodes: usize,
+    pub n_edges: usize,
+    pub n_routes: usize,
+    pub max_cands: usize,
+    pub attempt: usize,
+    pub duration: f64,
+}
+
+impl RoutegenMetrics {
+    /// Create a new metrics container, this sets a duration of 0 initially,
+    /// as this will need to be set outside of the generate_routes function
+    pub fn new(
+        n_nodes: usize,
+        n_edges: usize,
+        n_routes: usize,
+        max_cands: usize,
+        attempt: usize,
+    ) -> RoutegenMetrics {
+        RoutegenMetrics {
+            n_nodes: n_nodes,
+            n_edges: n_edges,
+            n_routes: n_routes,
+            max_cands: max_cands,
+            attempt: attempt,
+            duration: 0.0,
+        }
+    }
+}
+
+/// Minimal container for the response to an API call. Contains details of the
+/// route which was requested, the routes which were generated, and other
+/// metrics collected during runtime.
+#[derive(Debug, Serialize)]
+pub struct RoutegenResponse {
+    pub routes: Vec<Route>,
+    pub metrics: RoutegenMetrics,
+}
+
 #[cfg(test)]
 mod tests {
 

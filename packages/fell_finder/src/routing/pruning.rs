@@ -4,12 +4,8 @@
 //! removed. Additional logic is implemented to ensure a good geographical
 //! spread of candidates in the output.
 
-use rustc_hash::FxHashMap;
-use std::cmp::{Ordering, min};
-use std::collections::hash_map::Entry::{Occupied, Vacant};
+use std::cmp::Ordering;
 use std::env;
-use std::io::{Error, ErrorKind};
-use std::iter::zip;
 use std::sync::Arc;
 
 use rayon::prelude::*;
@@ -17,107 +13,103 @@ use rayon::prelude::*;
 use crate::common::config::{RouteConfig, RouteMode};
 use crate::routing::common::Candidate;
 
-/// For a provided vector of floats, retrieve the minimum and maximum values
-/// and return them as a tuple. If an empty vector is provided, an Error will
-/// be returned
-fn get_min_max_vals(vals: &Vec<f64>) -> Result<(f64, f64), Error> {
-    let min_val: f64;
-    let max_val: f64;
-
-    if let Some(val) = vals.iter().min_by(|a, b| a.total_cmp(b)) {
-        min_val = *val;
-    } else {
-        return Err(Error::new(
-            ErrorKind::InvalidData,
-            "Unable to get minimum value, maybe the input vector is empty?",
-        ));
-    }
-
-    if let Some(val) = vals.iter().max_by(|a, b| a.total_cmp(b)) {
-        max_val = *val;
-    } else {
-        return Err(Error::new(
-            ErrorKind::InvalidData,
-            "Unable to get maximum value, maybe the input vector is empty?",
-        ));
-    }
-
-    Ok((min_val, max_val))
+#[derive(Eq, PartialEq, Debug)]
+struct BinDetails {
+    bin_size_x: usize,
+    bin_size_y: usize,
 }
 
-/// Calculate the bin for a provided point (latitude or longitude)
-///
-/// Args:
-/// min_val: The minimum value across all values being binned
-/// delta: The difference between the minimum and maximum across all values
-///        being binned
-/// steps: The total number of steps/bins to be created
-/// val: The value to be binned
-fn get_bin(min_val: f64, delta: f64, steps: u32, val: f64) -> u32 {
-    let step_size = delta / steps as f64;
-
-    let val_offset = val - min_val;
-
-    // Prevent floating point errors from creating a n+1th bin
-    min((val_offset / step_size) as u32, steps - 1)
-}
-
-#[derive(Eq, Hash, PartialEq, Debug)]
-struct Bin(u32, u32);
-
-///Assign all of the provided routes to bins based on their central
-///coordinates. Routes are binned across both lats and lons, analagous
-///to placing them into a 2d grid.
-fn bin_candidates(
-    candidates: Vec<Candidate>,
-) -> Result<FxHashMap<Bin, Vec<Candidate>>, Error> {
-    // Fetch target number of bins (for each dimension, total will be N**2)
-    let n_bins: u32 = match env::var("FF_NUM_BINS") {
+/// Based on the number of candidates expected to be in memory when route
+/// pruning takes place, determine the number of bins required in order for
+/// each bin to have the desired size
+fn get_bin_details(max_cands: &usize) -> BinDetails {
+    // Fetch target bin size
+    let bin_size: usize = match env::var("FF_BIN_SIZE") {
         Ok(val) => val
             .parse()
-            .expect("FF_NUM_BINS must be set to an integer value"),
-        Err(_) => 4, // Default behaviour, will apply during test runs
+            .expect("FF_BIN_SIZE must be set to an integer value"),
+        Err(_) => 64, // Default behaviour, will apply during test runs
     };
 
-    let mut binned: FxHashMap<Bin, Vec<Candidate>> = FxHashMap::default();
+    // Total number of bins which will be required
+    let num_bins = (max_cands.clone() as f64 / bin_size as f64).ceil();
 
-    let (lats, lons): (Vec<f64>, Vec<f64>) = candidates
-        .iter()
-        // TODO:  See if there's a faster way to get route centroids
-        .map(|cand| cand.geometry.get_pos())
-        .unzip();
+    // Set x bins based on square root of total, then determine number of y
+    // bins required to get to the desired total
+    let x_bins = (num_bins.sqrt()).ceil();
+    let y_bins = (num_bins / x_bins).ceil();
 
-    let (min_lat, max_lat) =
-        get_min_max_vals(&lats).expect("Error calculating min/max lat");
-    let (min_lon, max_lon) =
-        get_min_max_vals(&lons).expect("Error calculating min/max lon");
-
-    let delta_lat = max_lat - min_lat;
-    let delta_lon = max_lon - min_lon;
-
-    for ((lat, lon), candidate) in zip(zip(lats, lons), candidates) {
-        let lat_bin = get_bin(min_lat, delta_lat, n_bins, lat);
-        let lon_bin = get_bin(min_lon, delta_lon, n_bins, lon);
-
-        let bin = Bin(lat_bin, lon_bin);
-
-        match binned.entry(bin) {
-            Occupied(cands) => cands.into_mut().push(candidate),
-            Vacant(cands) => {
-                cands.insert(Vec::from([candidate]));
-            }
-        };
+    BinDetails {
+        // Each x bin will be subdivided into y bins before use
+        bin_size_x: bin_size * (y_bins as usize),
+        bin_size_y: bin_size,
     }
+}
 
-    Ok(binned)
+/// For 2 candidates, compare their current latitudes
+/// TODO: See if this and compare_lons can be merged, see if there's a way to
+///       factor in the whole route (or a few sample points) rather than just
+///       the current location. Faster way to get to avg, or take a sample?
+/// TODO: Remove get_pos from CandidateGeometry if it's unused
+fn compare_lats(c1: &Candidate, c2: &Candidate) -> Ordering {
+    let c1_lat = c1.geometry.lats.last().unwrap();
+    let c2_lat = c2.geometry.lats.last().unwrap();
+
+    if c1_lat < c2_lat {
+        Ordering::Less
+    } else if c1_lat > c2_lat {
+        Ordering::Greater
+    } else {
+        Ordering::Equal
+    }
+}
+
+/// For 2 candidates, compare their current longitudes
+fn compare_lons(c1: &Candidate, c2: &Candidate) -> Ordering {
+    let c1_lat = c1.geometry.lons.last().unwrap();
+    let c2_lat = c2.geometry.lons.last().unwrap();
+
+    if c1_lat < c2_lat {
+        Ordering::Less
+    } else if c1_lat > c2_lat {
+        Ordering::Greater
+    } else {
+        Ordering::Equal
+    }
+}
+
+/// Assign all of the provided routes to bins based on their central
+/// coordinates. Routes are binned across both lats and lons, analagous
+/// to placing them into a 2d grid.
+fn bin_candidates(
+    bin_details: BinDetails,
+    mut candidates: Vec<Candidate>,
+) -> Vec<Vec<Candidate>> {
+    candidates.par_sort_by(compare_lats);
+
+    let x_bins = candidates.par_chunks_mut(bin_details.bin_size_x);
+
+    let mut par_bins: Vec<Vec<Vec<Candidate>>> = Vec::new();
+
+    x_bins
+        .map(|x_bin| {
+            x_bin.sort_by(compare_lons);
+            let x_y_bins: Vec<Vec<Candidate>> = x_bin
+                .chunks(bin_details.bin_size_y)
+                .map(|x_y_bin| x_y_bin.to_vec())
+                .collect();
+            x_y_bins
+        })
+        .collect_into_vec(&mut par_bins);
+
+    par_bins.into_iter().flatten().collect()
 }
 
 /// Determine the level of similarity between two candidates based on the
 /// degree of crossover between the nodes in each
 fn get_similarity(c1: &Candidate, c2: &Candidate) -> f64 {
-    let union = c1.visited.union(&c2.visited).into_iter().count() as f64;
-    let intersection =
-        c1.visited.intersection(&c2.visited).into_iter().count() as f64;
+    let union = c1.visited.union(&c2.visited).count() as f64;
+    let intersection = c1.visited.intersection(&c2.visited).count() as f64;
     intersection / union
 }
 
@@ -148,8 +140,8 @@ fn get_cand_ordering(
     a_data.cmp(&b_data)
 }
 
-// Sort a vector of candidates according to the user preference, the
-// hilliest/flattest route will become the first item in the vector
+/// Sort a vector of candidates according to the user preference, the
+/// hilliest/flattest route will become the first item in the vector
 pub fn sort_candidates(
     candidates: &mut Vec<Candidate>,
     config: Arc<RouteConfig>,
@@ -165,7 +157,26 @@ fn check_if_candidate_is_dissimilar(
     selected: &Vec<Candidate>,
     threshold: &f64,
 ) -> bool {
+    // TODO: Check if using rayon across bins is making full use of available
+    //       compute
+
+    // https://www.sciencedirect.com/science/article/pii/S1319157817304512
+
+    let cand_points = candidate.visited.len() as f64;
+
     for selected_candidate in selected.iter() {
+        let sel_points = selected_candidate.visited.len() as f64;
+
+        // Only do detailed check if routes are of approximately the same
+        // length
+        let most_points = f64::max(cand_points, sel_points);
+        let least_points = f64::min(cand_points, sel_points);
+        if (least_points < most_points * threshold)
+            | (most_points > least_points * (2.0 - threshold))
+        {
+            return false;
+        };
+
         // Compare scores
         let similarity = &get_similarity(candidate, &selected_candidate);
         if similarity > threshold {
@@ -200,8 +211,8 @@ pub fn get_dissimilar_routes(
     let mut selected: Vec<Candidate> = split.0.into();
     let mut to_process: Vec<Candidate> = split.1.into();
 
-    // Start with similarity threshold of 0.5
-    let mut threshold = 0.5;
+    // Start with similarity threshold of 0.7
+    let mut threshold = 0.7;
 
     // Create a new vector to hold candidates not selected at current
     // threshold, just in case we need to increase it and try again
@@ -250,9 +261,10 @@ pub fn get_dissimilar_routes(
 /// later in the process
 pub fn prune_candidates(
     candidates: Vec<Candidate>,
+    max_cands: &usize,
     config: Arc<RouteConfig>,
 ) -> Vec<Candidate> {
-    if candidates.len() <= config.max_candidates {
+    if candidates.len() <= *max_cands {
         return candidates;
     }
 
@@ -266,18 +278,16 @@ pub fn prune_candidates(
 
     // TODO: Improve error handling here
 
-    let binned = match bin_candidates(candidates) {
-        Ok(cands) => cands,
-        Err(_) => panic!("Error while binning candidates"),
-    };
+    let bin_details = get_bin_details(max_cands);
+    let mut binned = bin_candidates(bin_details, candidates);
 
-    let mut vec_binned: Vec<Vec<Candidate>> =
-        binned.into_iter().map(|(_, cands)| cands).collect();
+    // let mut vec_binned: Vec<Vec<Candidate>> =
+    //     binned.into_iter().map(|(_, cands)| cands).collect();
     let mut vec_selected: Vec<Vec<Candidate>> = Vec::new();
 
-    let bin_target: usize = config.max_candidates / vec_binned.len();
+    let bin_target: usize = *max_cands / binned.len();
 
-    vec_binned
+    binned
         .par_iter_mut()
         .map(|bin_cands| {
             get_dissimilar_routes(
@@ -292,19 +302,21 @@ pub fn prune_candidates(
     vec_selected.into_iter().flatten().collect()
 }
 
+// MARK: Tests
+
 #[cfg(test)]
 mod tests {
 
     use std::collections::HashSet;
 
     use petgraph::graph::NodeIndex;
-    use rustc_hash::FxHashMap;
 
     use crate::routing::common::geometry::CandidateGeometry;
     use crate::routing::common::metrics::CandidateMetrics;
 
     use super::*;
 
+    /// Quickly generate a valid RouteConfig option with some dummy data
     fn get_test_config() -> RouteConfig {
         RouteConfig {
             centre: (0.0, 0.0).into(),
@@ -318,6 +330,7 @@ mod tests {
         }
     }
 
+    /// Quickly generate a valid Candidate with some dummy data
     fn get_test_candidate() -> Candidate {
         Candidate {
             points: Vec::new(),
@@ -328,120 +341,224 @@ mod tests {
             cur_inx: NodeIndex::new(0),
         }
     }
+
     #[cfg(test)]
-    mod test_get_min_max_vals {
+    mod test_get_bin_details {
         use super::*;
 
         #[test]
-        fn test_error() {
-            let test_vals = Vec::<f64>::new();
+        fn test_square_number() {
+            let max_cands = 1024; // 64 * 4 * 4
 
-            match get_min_max_vals(&test_vals) {
-                Ok(_) => panic!("This shouldn't have happened!"),
-                Err(_) => (),
-            }
+            let target = BinDetails {
+                bin_size_x: 256,
+                bin_size_y: 64,
+            };
+
+            let result = get_bin_details(&max_cands);
+
+            assert_eq!(result, target);
         }
 
         #[test]
-        fn test_success() {
-            let test_vals = vec![1.0, 0.0, 10.0, 5.0];
+        fn test_no_leftovers() {
+            let max_cands = 1280; // 64 * 5 * 4
 
-            let (tgt_min, tgt_max) = (0.0, 10.0);
+            // --> num_bins = 20
+            // --> x_bins = 5, y_bins = 4
 
-            let (res_min, res_max) = match get_min_max_vals(&test_vals) {
-                Ok((min, max)) => (min, max),
-                Err(_) => panic!("This shouldn't have happened"),
+            let target = BinDetails {
+                bin_size_x: 256,
+                bin_size_y: 64,
             };
 
-            assert_eq!(res_min, tgt_min);
-            assert_eq!(res_max, tgt_max);
+            let result = get_bin_details(&max_cands);
+
+            assert_eq!(result, target);
+        }
+
+        #[test]
+        fn test_leftovers() {
+            let max_cands = 5432;
+
+            // --> num_bins = 85 (5432 / 64 = 84.875)
+            // --> x_bins = 10 (sqrt(85) = 9.22)
+            // --> y_bins = 9 (85 / 10 = 8.5)
+
+            let target = BinDetails {
+                bin_size_x: 576,
+                bin_size_y: 64,
+            };
+
+            let result = get_bin_details(&max_cands);
+
+            assert_eq!(result, target);
         }
     }
 
     #[cfg(test)]
-    mod test_get_bin {
-
+    mod test_compare_coords {
         use super::*;
 
         #[test]
-        fn start_of_range() {
-            let test_min_val = 10.0;
-            let test_delta = 25.0;
-            let test_steps: u32 = 5;
-            let test_val = 10.0;
+        fn test_less() {
+            let mut test_candidate_1 = get_test_candidate();
+            let mut test_candidate_2 = get_test_candidate();
 
-            let target = 0;
+            test_candidate_1.geometry.lats.push(0.0);
+            test_candidate_1.geometry.lons.push(0.0);
 
-            let result =
-                get_bin(test_min_val, test_delta, test_steps, test_val);
+            test_candidate_2.geometry.lats.push(1.0);
+            test_candidate_2.geometry.lons.push(1.0);
 
-            assert_eq!(result, target);
+            let target = Ordering::Less;
+
+            let result_lat =
+                compare_lats(&test_candidate_1, &test_candidate_2);
+            let result_lon =
+                compare_lons(&test_candidate_1, &test_candidate_2);
+
+            assert_eq!(result_lat, target);
+            assert_eq!(result_lon, target);
         }
 
         #[test]
-        fn middle_of_range() {
-            let test_min_val = 10.0;
-            let test_delta = 25.0;
-            let test_steps: u32 = 5;
-            let test_val = 22.5;
+        fn test_greater() {
+            let mut test_candidate_1 = get_test_candidate();
+            let mut test_candidate_2 = get_test_candidate();
 
-            let target = 2;
+            test_candidate_1.geometry.lats.push(1.0);
+            test_candidate_1.geometry.lons.push(1.0);
 
-            let result =
-                get_bin(test_min_val, test_delta, test_steps, test_val);
+            test_candidate_2.geometry.lats.push(0.0);
+            test_candidate_2.geometry.lons.push(0.0);
 
-            assert_eq!(result, target);
+            let target = Ordering::Greater;
+
+            let result_lat =
+                compare_lats(&test_candidate_1, &test_candidate_2);
+            let result_lon =
+                compare_lons(&test_candidate_1, &test_candidate_2);
+
+            assert_eq!(result_lat, target);
+            assert_eq!(result_lon, target);
         }
 
         #[test]
-        fn end_of_range() {
-            let test_min_val = 10.0;
-            let test_delta = 25.0;
-            let test_steps: u32 = 5;
-            let test_val = 35.0;
+        fn test_equal() {
+            let mut test_candidate_1 = get_test_candidate();
+            let mut test_candidate_2 = get_test_candidate();
 
-            let target = 4;
+            test_candidate_1.geometry.lats.push(0.0);
+            test_candidate_1.geometry.lons.push(0.0);
 
-            let result =
-                get_bin(test_min_val, test_delta, test_steps, test_val);
+            test_candidate_2.geometry.lats.push(0.0);
+            test_candidate_2.geometry.lons.push(0.0);
 
-            assert_eq!(result, target);
+            let target = Ordering::Equal;
+
+            let result_lat =
+                compare_lats(&test_candidate_1, &test_candidate_2);
+            let result_lon =
+                compare_lons(&test_candidate_1, &test_candidate_2);
+
+            assert_eq!(result_lat, target);
+            assert_eq!(result_lon, target);
         }
+    }
+
+    /// Within a single bin, get the min & max coordinate. For tests lat and
+    /// lon are always set to the same value, so we can safely combine them
+    /// into a single list
+    fn get_bin_min_max(bin_cands: &Vec<Candidate>) -> (f64, f64) {
+        let mut all_points: Vec<f64> = Vec::new();
+        for cand in bin_cands {
+            all_points.extend(cand.geometry.lats.clone());
+            all_points.extend(cand.geometry.lons.clone());
+        }
+
+        let bin_min = all_points
+            .clone()
+            .into_iter()
+            .reduce(|x, y| f64::min(x, y))
+            .unwrap();
+        let bin_max = all_points
+            .into_iter()
+            .reduce(|x, y| f64::max(x, y))
+            .unwrap();
+        (bin_min, bin_max)
     }
 
     #[test]
     fn test_bin_candidates() {
-        let mut test_cand_1 = get_test_candidate();
-        let mut test_cand_2 = get_test_candidate();
-        let mut test_cand_3 = get_test_candidate();
-
-        test_cand_1.geometry.lats = vec![0.0];
-        test_cand_1.geometry.lons = vec![0.0];
-
-        test_cand_2.geometry.lats = vec![10.0];
-        test_cand_2.geometry.lons = vec![10.0];
-
-        test_cand_3.geometry.lats = vec![25.0];
-        test_cand_3.geometry.lons = vec![25.0];
-
-        let test_candidates = vec![
-            test_cand_1.clone(),
-            test_cand_2.clone(),
-            test_cand_3.clone(),
-        ];
-
-        let mut target = FxHashMap::<Bin, Vec<Candidate>>::default();
-
-        target.insert(Bin(0, 0), vec![test_cand_1.clone()]);
-        target.insert(Bin(1, 1), vec![test_cand_2.clone()]);
-        target.insert(Bin(3, 3), vec![test_cand_3.clone()]);
-
-        let result = match bin_candidates(test_candidates) {
-            Ok(candidates) => candidates,
-            Err(_) => panic!("Error while binning test data"),
+        // Target: 512 candidates, 16 bins (4x4) of 32 candidates each
+        let test_bin_details = BinDetails {
+            bin_size_x: 128, // 4 x 32
+            bin_size_y: 32,
         };
 
-        assert_eq!(result, target);
+        // Generate 512 candidates, evenly spread over an 8x8 grid
+        let mut test_candidates: Vec<Candidate> = Vec::new();
+        for lat in 0..8 {
+            for lon in 0..8 {
+                for _ in 0..8 {
+                    let mut point_cand = get_test_candidate();
+                    point_cand.geometry.lats = vec![lat as f64];
+                    point_cand.geometry.lons = vec![lon as f64];
+                    test_candidates.push(point_cand)
+                }
+            }
+        }
+
+        // Set up target properties
+        let target_n_bins = 16;
+        let target_bin_size = 32;
+
+        let target_first_bin_min = 0.0; // eq
+        let target_first_bin_max = 2.0; // lt
+        let target_last_bin_min = 6.0; // eq
+        let target_last_bin_max = 8.0; // lt
+
+        // Act
+        let result = bin_candidates(test_bin_details, test_candidates);
+
+        // Correct number of bins generated
+        assert!(result.len() == target_n_bins);
+
+        // Check contents of bins
+        let mut n_bins_matching_first = 0;
+        let mut n_bins_matching_last = 0;
+        for bin in result {
+            // All bins are of the expected size
+            assert!(bin.len() == target_bin_size);
+
+            // Only one bin matches the range of values expected for the first
+            // and last bins. i.e. the bins do not overlap, and have the
+            // expected values
+            let (bin_min, bin_max) = get_bin_min_max(&bin);
+
+            let in_first = (bin_min >= target_first_bin_min)
+                & (bin_min < target_first_bin_max)
+                & (bin_max >= target_first_bin_min)
+                & (bin_max < target_first_bin_max);
+            let in_last = (bin_min >= target_last_bin_min)
+                & (bin_min < target_last_bin_max)
+                & (bin_max >= target_last_bin_min)
+                & (bin_max < target_last_bin_max);
+
+            match in_first {
+                true => n_bins_matching_first += 1,
+                false => {}
+            }
+
+            match in_last {
+                true => n_bins_matching_last += 1,
+                false => {}
+            }
+        }
+
+        assert_eq!(n_bins_matching_first, 1);
+        assert_eq!(n_bins_matching_last, 1);
     }
 
     #[cfg(test)]
@@ -772,19 +889,25 @@ mod tests {
         let mut test_candidate_4 = get_test_candidate();
         let mut test_candidate_5 = get_test_candidate();
 
+        // TODO: Fix this test, degree of overlap needs adjusting to
+        //       reflect updated 70% similarity threshold (or set 0.5 as
+        //       default and control via an environment variable)
+        //       SET BOTH MIN AND MAX AS ARGS, PROVIDE AS ENV VARS!
+
         // Candidate 5 is the longest, and will be selected first
-        for point in [0, 1, 2, 3].into_iter() {
+        for point in 0..10 {
             test_candidate_5.visited.insert(point);
         }
         test_candidate_5.metrics.common.dist = 11000.0;
         test_candidate_5.metrics.common.gain = 500.0;
 
         // Candidates 2 and 3 are very similar, 2 selected first due to gain
-        for point in [4, 5, 6, 7, 8].into_iter() {
+        // but 3 discarded
+        for point in 10..20 {
             test_candidate_2.visited.insert(point.clone());
             test_candidate_3.visited.insert(point);
         }
-        test_candidate_2.visited.insert(9);
+        test_candidate_2.visited.insert(20);
 
         test_candidate_2.metrics.common.dist = 10000.0;
         test_candidate_3.metrics.common.dist = 10000.0;
@@ -793,12 +916,12 @@ mod tests {
 
         // Candidates 1 and 4 are different, 1 selected first due to gain
         // Over 50% similarity, but picked up on later iterations
-        for point in [6, 7, 8].into_iter() {
+        for point in 2..12 {
             test_candidate_1.visited.insert(point.clone());
             test_candidate_4.visited.insert(point);
         }
-        test_candidate_1.visited.insert(10);
-        test_candidate_4.visited.insert(11);
+        test_candidate_1.visited.insert(13);
+        test_candidate_4.visited.insert(14);
 
         test_candidate_1.metrics.common.dist = 10000.0;
         test_candidate_4.metrics.common.dist = 10000.0;

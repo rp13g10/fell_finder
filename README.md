@@ -54,6 +54,7 @@ These new features are listed in approximate order of priority. A number of smal
 
 ### Ingestion
 
+* Decouple remaining tests from environment variables!
 * Bring in data for all of the UK
 * Identify ways to further improve the accuracy of calculated elevation gain/loss
   * Alter join between OSM and elevation, bring in a larger area for each point and average it out?
@@ -67,11 +68,9 @@ These new features are listed in approximate order of priority. A number of smal
 
 ### API
 
-* Run profiling through again, check for any issues introduced by recent changes
-  * Longer routes seem to spend a lot of time running on a single core
 * Improve error handling in Rust API, should be able to return other status codes
+* Collect environment variables up-front, provide option to run with default settings
 * Hyperparameter optimisation for created routes
-  * Set up the API with a debug mode, return additional info about data used to create routes
   * Use regression model to set params?
 
 
@@ -96,6 +95,7 @@ These new features are listed in approximate order of priority. A number of smal
 ## Issues / Limitations
 
 * Estimated gain/loss is typically ~30% higher than it should be, this needs to be investigated further
+  * This is not a unique problem! Estimates do seem to be in-line with some other services (notably, Garmin)
   * Part of the issue seems to be with the LIDAR data itself being a few metres out at times (vs. Strava)
   * Other issues include bridges/tunnels where the path stays level but the ground does not. Some mitigations are in place for this, but making better use of the OSM tags may be able to improve the situation further.
   * High accuracy of the LIDAR system also leads to some false-positive elevation changes. A flat road with a large tree, might appear to have a small hill on it in the data.

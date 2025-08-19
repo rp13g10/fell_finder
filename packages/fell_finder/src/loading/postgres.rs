@@ -6,6 +6,7 @@ use crate::common::graph_data::{EdgeData, NodeData};
 use aho_corasick::AhoCorasick;
 use sqlx;
 use sqlx::PgPool;
+use std::sync::Arc;
 
 /// Container for the raw output of the nodes SQL query
 #[derive(sqlx::FromRow, Debug, Clone, Copy)]
@@ -68,7 +69,7 @@ impl Into<EdgeData> for EdgeRow {
 /// Generate a SQL query to read in the nodes for a route based on the
 /// provided user configuration
 /// /// TODO: Swap over to using aho-corasick, all subs in single iteration
-pub fn generate_nodes_query(config: &RouteConfig) -> String {
+pub fn generate_nodes_query(config: Arc<RouteConfig>) -> String {
     let bbox = config.get_bounding_box();
 
     let ptn_list = bbox.get_partition_list();
@@ -102,7 +103,7 @@ pub fn generate_nodes_query(config: &RouteConfig) -> String {
 
 /// Generate a SQL query to read in the edges for a route based on the
 /// provided user configuration
-pub fn generate_edges_query(config: &RouteConfig) -> String {
+pub fn generate_edges_query(config: Arc<RouteConfig>) -> String {
     let bbox = config.get_bounding_box();
 
     let ptn_list = bbox.get_partition_list();
@@ -141,7 +142,10 @@ pub fn generate_edges_query(config: &RouteConfig) -> String {
 }
 
 /// Executes the nodes SQL query and returns a vector of NodeRow
-pub async fn load_nodes(pool: &PgPool, config: &RouteConfig) -> Vec<NodeRow> {
+pub async fn load_nodes(
+    pool: &PgPool,
+    config: Arc<RouteConfig>,
+) -> Vec<NodeRow> {
     let query = generate_nodes_query(config);
     let rows: Vec<NodeRow> =
         sqlx::query_as(&query).fetch_all(pool).await.unwrap();
@@ -149,7 +153,10 @@ pub async fn load_nodes(pool: &PgPool, config: &RouteConfig) -> Vec<NodeRow> {
 }
 
 /// Executes the edges SQL query and returns a vector of NodeRow
-pub async fn load_edges(pool: &PgPool, config: &RouteConfig) -> Vec<EdgeRow> {
+pub async fn load_edges(
+    pool: &PgPool,
+    config: Arc<RouteConfig>,
+) -> Vec<EdgeRow> {
     let query = generate_edges_query(config);
     let rows: Vec<EdgeRow> =
         sqlx::query_as(&query).fetch_all(pool).await.unwrap();
@@ -231,10 +238,11 @@ mod tests {
             surfaces: vec!["surface_1".to_string(), "surface_2".to_string()],
             surface_restriction: None,
         };
+        let test_config = Arc::new(test_config);
 
         let target = include_str!("test_data/nodes.sql");
 
-        let result = generate_nodes_query(&test_config);
+        let result = generate_nodes_query(test_config);
         assert_eq!(result, target);
     }
 
@@ -250,10 +258,11 @@ mod tests {
             surfaces: vec!["surface_1".to_string(), "surface_2".to_string()],
             surface_restriction: None,
         };
+        let test_config = Arc::new(test_config);
 
         let target = include_str!("test_data/edges.sql");
 
-        let result = generate_edges_query(&test_config);
+        let result = generate_edges_query(test_config);
         assert_eq!(result, target);
     }
 }

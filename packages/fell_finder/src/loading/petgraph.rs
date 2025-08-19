@@ -8,6 +8,7 @@ use petgraph::graph::NodeIndex;
 use petgraph::visit::IntoNodeReferences;
 use petgraph::{Directed, Graph};
 use rustc_hash::{FxHashMap, FxHashSet};
+use std::sync::Arc;
 
 /// Nodes in the graph need to have associated lat/lon data. To achieve this,
 /// we create a mapping for source IDs as they appear in the OSM data to
@@ -82,7 +83,7 @@ pub fn create_graph(
 /// node to it. While the index of this node is not fixed, the is_start
 /// attribute will also be set to true for easier detection
 pub fn tag_start_node(
-    config: &RouteConfig,
+    config: Arc<RouteConfig>,
     mut graph: Graph<NodeData, EdgeData, Directed, u32>,
 ) -> (NodeIndex<u32>, Graph<NodeData, EdgeData, Directed, u32>) {
     // Set variables to keep track of the current closest node
@@ -146,7 +147,10 @@ pub fn tag_dists_to_start(
 /// based on whether a valid path back to the start point exists, and whether
 /// the distance of the shortest path is within the bounds of the requested
 /// route
-fn node_map(node_data: &NodeData, config: &RouteConfig) -> Option<NodeData> {
+fn node_map(
+    node_data: &NodeData,
+    config: Arc<RouteConfig>,
+) -> Option<NodeData> {
     match node_data.dist_to_start {
         Some(dist) => {
             if dist <= config.max_distance / 2.0 {
@@ -205,10 +209,10 @@ pub fn get_start_and_end_nodes(
 /// must be redetermined after this operation.
 pub fn drop_unreachable_nodes(
     graph: Graph<NodeData, EdgeData, Directed, u32>,
-    config: &RouteConfig,
+    config: Arc<RouteConfig>,
 ) -> (NodeIndex, Graph<NodeData, EdgeData, Directed, u32>) {
     let new_graph = graph.filter_map(
-        |_, node_data| node_map(node_data, config),
+        |_, node_data| node_map(node_data, Arc::clone(&config)),
         |_, edge_data| Some(edge_data.clone()),
     );
 

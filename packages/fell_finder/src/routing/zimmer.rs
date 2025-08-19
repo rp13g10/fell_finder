@@ -1,13 +1,14 @@
-use std::cmp::Ordering;
+use indicatif::ProgressBar;
+use rayon::prelude::*;
+use std::cmp::{Ordering, min};
 use std::env;
 use std::sync::Arc;
 
-use indicatif::ProgressBar;
-use rayon::prelude::*;
-
 use crate::common::config::RouteConfig;
 use crate::common::graph_data::{EdgeData, NodeData};
-use crate::routing::common::{Candidate, Route, StepResult};
+use crate::routing::common::{
+    Candidate, Route, RoutegenMetrics, RoutegenResponse, StepResult,
+};
 use petgraph::graph::{EdgeReference, NodeIndex};
 use petgraph::visit::EdgeRef;
 use petgraph::{Directed, Graph};
@@ -93,7 +94,7 @@ pub fn sort_routes(routes: &mut Vec<Route>, config: Arc<RouteConfig>) {
 }
 
 /// Fetch the user preference for number of routes to display. Defaults to 10
-/// if the FF_MAX_CANDS environment variable has not been set
+/// if the FF_MAX_ROUTES environment variable has not been set
 fn get_num_routes_to_display() -> usize {
     let maybe_usr_pref = env::var("FF_MAX_ROUTES");
 
@@ -106,6 +107,8 @@ fn get_num_routes_to_display() -> usize {
     }
 }
 
+/// Fetch the desired similarity score to be used when selecting routes for
+/// display in the webapp
 fn get_max_similarity_for_display() -> f64 {
     let maybe_usr_pref = env::var("FF_DISPLAY_THRESHOLD");
 
@@ -118,23 +121,48 @@ fn get_max_similarity_for_display() -> f64 {
     }
 }
 
+/// Sets the desired maximum number of candidate routes for the current
+/// iteration. For now, this is simply set to the number of edges in the
+/// graph data, multiplied by the attempt number. Future builds may look to
+/// refine this with a simple linear regression.
+pub fn get_max_cands(
+    graph: &Graph<NodeData, EdgeData, Directed, u32>,
+    attempt: &u16,
+    config: Arc<RouteConfig>,
+) -> (usize, usize, usize) {
+    let n_nodes = graph.node_count();
+    let n_edges = graph.edge_count();
+    let attempt = *attempt as usize;
+
+    let max_cands = n_edges.clone() * attempt;
+
+    // Apply global maximum
+    let max_cands = min(max_cands, config.max_candidates);
+
+    (n_nodes, n_edges, max_cands)
+}
+
 /// Recursive algorithm which crawls the provided graph for routes, starting at
 /// the provided start_inx. This will attempt to return routes which meet all
 /// of the criteria provided by the user
 pub fn generate_routes(
     graph: Graph<NodeData, EdgeData, Directed, u32>,
-    config: RouteConfig,
+    config: Arc<RouteConfig>,
     start_inx: NodeIndex,
-) -> Vec<Route> {
-    // Config needs to be shared across all candidates
-    let shared_config = Arc::new(config);
+    attempt: u16,
+) -> RoutegenResponse {
+    // Determine and set optimal number of candidates
+    // TODO: Ensure max_cands propagates through to route creation
+    let (n_nodes, n_edges, max_cands) =
+        get_max_cands(&graph, &attempt, Arc::clone(&config));
 
     // Create 'seed' candidate
     let mut candidates: Vec<Candidate> = Vec::new();
-    let seed = Candidate::new(&graph, Arc::clone(&shared_config), &start_inx);
+    let seed = Candidate::new(&graph, Arc::clone(&config), &start_inx);
     candidates.push(seed);
 
-    let bar = ProgressBar::new(shared_config.max_distance as u64);
+    // Attempt route generation
+    let bar = ProgressBar::new(config.max_distance as u64);
 
     let mut completed: Vec<Candidate> = Vec::new();
     let mut completed_buf: Vec<Candidate>;
@@ -142,7 +170,8 @@ pub fn generate_routes(
         (candidates, completed_buf) =
             process_candidates_threads(&graph, candidates);
         completed.extend(completed_buf.into_iter());
-        candidates = prune_candidates(candidates, Arc::clone(&shared_config));
+        candidates =
+            prune_candidates(candidates, &max_cands, Arc::clone(&config));
 
         let tot_dist = candidates
             .iter()
@@ -153,19 +182,41 @@ pub fn generate_routes(
 
     bar.finish_and_clear();
 
+    // If no routes generated, try again with higher max candidates
+    let no_cands = candidates.into_iter().count() == 0;
+    let attempts_remaining = attempt < 3;
+    let not_at_global_max = max_cands < config.max_candidates;
+    if no_cands & attempts_remaining & not_at_global_max {
+        return generate_routes(graph, config, start_inx, attempt + 1);
+    }
+
     let to_display = get_num_routes_to_display();
     let max_similarity = get_max_similarity_for_display();
     completed = get_dissimilar_routes(
         &mut completed,
         to_display,
-        Arc::clone(&shared_config),
+        Arc::clone(&config),
         max_similarity,
     );
 
     let mut routes: Vec<Route> =
         completed.into_iter().map(|cand| cand.finalize()).collect();
 
-    sort_routes(&mut routes, Arc::clone(&shared_config));
+    sort_routes(&mut routes, Arc::clone(&config));
 
-    routes
+    // Log other stats
+    let n_routes = routes.iter().count(); // Post-filter, shows if requested N was met
+
+    let routegen_metrics = RoutegenMetrics::new(
+        n_nodes,
+        n_edges,
+        n_routes,
+        max_cands.try_into().unwrap(),
+        attempt.into(),
+    );
+
+    RoutegenResponse {
+        routes: routes,
+        metrics: routegen_metrics,
+    }
 }

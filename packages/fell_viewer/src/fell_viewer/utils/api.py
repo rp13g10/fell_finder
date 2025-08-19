@@ -47,7 +47,9 @@ def _get_max_candidates(config: RouteConfig) -> int:
     return cands
 
 
-def get_user_requested_route(config: RouteConfig) -> list[Route]:
+def get_user_requested_route(
+    config: RouteConfig,
+) -> list[Route]:
     """Based on the user-provided configuration, generate routes which match
     their requirements and return them for use in the webapp.
 
@@ -72,7 +74,8 @@ def get_user_requested_route(config: RouteConfig) -> list[Route]:
             url, headers={"Content-Type": "application/json"}
         )
 
-        raw_routes = json.loads(response.content)
+        raw_response = json.loads(response.content)
+        raw_routes = raw_response["routes"]
 
         for route in raw_routes:
             generated.append(Route.from_api_response(route))
@@ -83,3 +86,33 @@ def get_user_requested_route(config: RouteConfig) -> list[Route]:
         max_candidates = min(abs_max_candidates, max_candidates * 2)
 
     return generated
+
+
+def get_route_without_adjustments(
+    config: RouteConfig,
+) -> tuple[list[Route], dict[str, int]]:
+    """Simply request routes using the provided config, without making any
+    automatic adjustments to improve completion rates. As this is most likely
+    to be called during debugging/optimisation, this also returns some extra
+    metrics about the route generation process.
+
+    Args:
+        config: The user-provided configuration for route creation
+
+    Returns:
+        A tuple containing a list of generated routes, and a dict containing
+        additional metrics.
+
+    """
+    url = _gen_query_url(config)
+
+    response = requests.get(url, headers={"Content-Type": "application/json"})
+    raw_response = json.loads(response.content)
+    raw_routes = raw_response["routes"]
+    raw_metrics = raw_response["metrics"]
+
+    generated = []
+    for route in raw_routes:
+        generated.append(Route.from_api_response(route))
+
+    return generated, raw_metrics
