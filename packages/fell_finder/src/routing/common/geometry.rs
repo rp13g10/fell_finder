@@ -4,7 +4,11 @@ use serde::Serialize;
 use std::iter::zip;
 
 use crate::common::bbox::BBox;
+use crate::common::exceptions::RoutingError;
 use crate::common::graph_data::EdgeData;
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Pos(f64, f64);
 
 /// Stores the geometry of each candidate in an unprocessed form
 #[derive(Clone, Debug, PartialEq)]
@@ -40,56 +44,73 @@ impl CandidateGeometry {
 
     /// Determine the current centre point of the candidate route as a tuple
     /// containing the latitude and longitude
-    pub fn get_centre(&self) -> (f64, f64) {
+    pub fn get_centre(&self) -> Pos {
         let num = self.lats.len() as f64;
         let lasum: f64 = self.lats.iter().sum();
         let losum: f64 = self.lons.iter().sum();
         let lat = lasum / num;
         let lon = losum / num;
 
-        (lat, lon)
+        Pos(lat, lon)
     }
 
     /// Determine the current position of the candidate route as a tuple
     /// containing the latitude and longitude
-    pub fn get_pos(&self) -> (f64, f64) {
-        let lat = self.lats.last().unwrap().clone();
-        let lon = self.lons.last().unwrap().clone();
+    pub fn get_pos(&self) -> Option<Pos> {
+        let maybe_lat = self.lats.last();
+        let maybe_lon = self.lons.last();
 
-        (lat, lon)
+        match maybe_lat {
+            Some(lat) => match maybe_lon {
+                Some(lon) => Some(Pos(*lat, *lon)),
+                None => None,
+            },
+            None => None,
+        }
     }
 
-    fn get_bbox(&self) -> BBox {
-        // TODO: Find a faster way of doing this, sorting each list twice must
-        //       be avoidable
+    // TODO: Combine these two implementations with a macro
 
-        let min_lat = self
-            .lats
-            .iter()
-            .min_by(|a, b| a.partial_cmp(b).expect("NaN in lats!"))
-            .unwrap();
-        let min_lon = self
-            .lons
-            .iter()
-            .min_by(|a, b| a.partial_cmp(b).expect("NaN in lons!"))
-            .unwrap();
-        let max_lat = self
-            .lats
-            .iter()
-            .max_by(|a, b| a.partial_cmp(b).expect("NaN in lats!"))
-            .unwrap();
-        let max_lon = self
-            .lons
-            .iter()
-            .max_by(|a, b| a.partial_cmp(b).expect("NaN in lons!"))
-            .unwrap();
+    /// Attempts to retrieve the minimum lat, lon for a candidate
+    fn get_min_pos(&self) -> Result<Pos, RoutingError> {
+        let maybe_min_lat = self.lats.iter().min_by(|a, b| a.total_cmp(b));
+        let maybe_min_lon = self.lons.iter().min_by(|a, b| a.total_cmp(b));
 
-        BBox {
-            min_lat: min_lat.clone(),
-            min_lon: min_lon.clone(),
-            max_lat: max_lat.clone(),
-            max_lon: max_lon.clone(),
+        match maybe_min_lat {
+            Some(min_lat) => match maybe_min_lon {
+                Some(min_lon) => Ok(Pos(*min_lat, *min_lon)),
+                None => Err(RoutingError::GeometryError),
+            },
+            None => Err(RoutingError::GeometryError),
         }
+    }
+
+    /// Attempts to retrieve the maximum lat, lon for a candidate
+    fn get_max_pos(&self) -> Result<Pos, RoutingError> {
+        let maybe_max_lat = self.lats.iter().max_by(|a, b| a.total_cmp(b));
+        let maybe_max_lon = self.lons.iter().max_by(|a, b| a.total_cmp(b));
+
+        match maybe_max_lat {
+            Some(max_lat) => match maybe_max_lon {
+                Some(max_lon) => Ok(Pos(*max_lat, *max_lon)),
+                None => Err(RoutingError::GeometryError),
+            },
+            None => Err(RoutingError::GeometryError),
+        }
+    }
+
+    /// Attempts to retrieve the bounding box for a candidate. If the candidate
+    /// contains no data, a RoutingError will be returned
+    fn get_bbox(&self) -> Result<BBox, RoutingError> {
+        let min_pos = self.get_min_pos()?;
+        let max_pos = self.get_max_pos()?;
+
+        Ok(BBox {
+            min_lat: min_pos.0,
+            min_lon: min_pos.1,
+            max_lat: max_pos.0,
+            max_lon: max_pos.1,
+        })
     }
 
     fn zip_coords(&self) -> Vec<(f64, f64)> {
@@ -97,13 +118,15 @@ impl CandidateGeometry {
         zipped.collect()
     }
 
-    pub fn finalize(&self) -> RouteGeometry {
-        RouteGeometry {
+    pub fn finalize(&self) -> Result<RouteGeometry, RoutingError> {
+        let bbox = self.get_bbox()?;
+
+        Ok(RouteGeometry {
             coords: self.zip_coords(),
             dists: self.dists.clone(),
             eles: self.eles.clone(),
-            bbox: self.get_bbox(),
-        }
+            bbox: bbox,
+        })
     }
 }
 
@@ -177,7 +200,7 @@ mod tests {
             eles: vec![11.0, 12.0, 22.0, 23.0],
         };
 
-        let target = (11.0, 13.0);
+        let target = Pos(11.0, 13.0);
 
         let result = test_candidate.get_centre();
 
@@ -194,9 +217,9 @@ mod tests {
             eles: vec![11.0, 12.0, 22.0, 23.0],
         };
 
-        let target = (17.0, 19.0);
+        let target = Pos(17.0, 19.0);
 
-        let result = test_candidate.get_pos();
+        let result = test_candidate.get_pos().unwrap();
 
         assert_eq!(result, target);
     }
@@ -218,7 +241,7 @@ mod tests {
             max_lon: 19.0,
         };
 
-        let result = test_candidate.get_bbox();
+        let result = test_candidate.get_bbox().unwrap();
 
         assert_eq!(result, target);
     }
@@ -266,7 +289,7 @@ mod tests {
             bbox: target_bbox,
         };
 
-        let result = test_candidate.finalize();
+        let result = test_candidate.finalize().unwrap();
 
         assert_eq!(result, target);
     }

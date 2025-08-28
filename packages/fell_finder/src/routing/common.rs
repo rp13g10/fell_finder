@@ -13,8 +13,11 @@ use serde::Serialize;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::Arc;
 
-use crate::common::config::RouteConfig;
+use crate::common::config::{BackendConfig, RouteConfig};
+use crate::common::exceptions::RoutingError;
 use crate::common::graph_data::{EdgeData, NodeData};
+
+// MARK: Candidates
 
 /// Container for a single candidate route
 #[derive(Clone, Debug, PartialEq)]
@@ -25,7 +28,8 @@ pub struct Candidate {
     pub visited: FxHashSet<i64>,
     pub geometry: CandidateGeometry,
     pub metrics: CandidateMetrics,
-    pub config: Arc<RouteConfig>,
+    pub route_config: Arc<RouteConfig>,
+    pub backend_config: Arc<BackendConfig>,
     pub cur_inx: NodeIndex,
 }
 
@@ -44,7 +48,8 @@ impl Candidate {
     /// be provided so that the ID of the corresponding node can be stored
     pub fn new(
         graph: &Graph<NodeData, EdgeData, Directed, u32>,
-        config: Arc<RouteConfig>,
+        route_config: Arc<RouteConfig>,
+        backend_config: Arc<BackendConfig>,
         start_inx: &NodeIndex,
     ) -> Candidate {
         let start_id = graph
@@ -60,7 +65,8 @@ impl Candidate {
             visited: visited,
             geometry: CandidateGeometry::new(),
             metrics: CandidateMetrics::new(),
-            config: config,
+            route_config: route_config,
+            backend_config: backend_config,
             cur_inx: start_inx.clone(),
         }
     }
@@ -68,16 +74,16 @@ impl Candidate {
     /// Once a candidate has formed a circular route, it can be finalized. This
     /// returns a Route object, which drops any data which is only required
     /// during the route finding process
-    pub fn finalize(self) -> Route {
+    pub fn finalize(self) -> Result<Route, RoutingError> {
         let mut hasher = DefaultHasher::new();
         self.points.hash(&mut hasher);
         let id = hasher.finish();
 
-        Route {
-            geometry: self.geometry.finalize(),
+        Ok(Route {
+            geometry: self.geometry.finalize()?,
             metrics: self.metrics.finalize(),
             id: id,
-        }
+        })
     }
 
     /// Check whether stepping along the provided edge reference would result
@@ -85,48 +91,49 @@ impl Candidate {
     /// finding the nearest hill and going up/down it repeatedly, this check
     /// is required. Exceptions are made when the route is nearly completed,
     /// as this improves the overall completion rate
-    fn check_for_overlap(&self, eref: &EdgeReference<EdgeData>) -> bool {
-        // TODO: Enable configuration of max no. overlaps
+    fn check_for_overlap(
+        &self,
+        eref: &EdgeReference<EdgeData>,
+    ) -> Result<bool, RoutingError> {
         // TODO: Set up error propagation so that this can factor in to the
         //       returned error code
 
         let edata = eref.weight();
+        let n = self.backend_config.finishing_overlaps;
 
         // Completion of a route is always allowed
         match self.points.get(0) {
             Some(start) => {
                 if &edata.dst == start {
-                    return false;
+                    return Ok(false);
                 } else {
                     ();
                 }
             }
             // If there is no 0th point, the candidate has not been set up
             // properly
-            None => panic!(
-                "Trying to take a step, but this candidate has no points"
-            ),
+            None => return Err(RoutingError::InvalidCandidateError),
         }
 
-        // Route is almost finished. Trying to get to one of first 3 nodes, has
-        // not visited that node in the last 3 loops
+        // Route is almost finished. Trying to get to one of first n nodes, has
+        // not visited that node in the last n loops
         let mut nearly_loop = false;
         let almost_finished =
-            self.metrics.common.dist >= self.config.min_distance;
-        if (self.points.len() >= 3) & almost_finished {
-            let first_three = self.points[..3].to_vec();
-            let last_three = self.points[self.points.len() - 3..].to_vec();
+            self.metrics.common.dist >= self.route_config.min_distance;
+        if (self.points.len() >= n) & almost_finished {
+            let first_n = self.points[..n].to_vec();
+            let last_n = self.points[self.points.len() - n..].to_vec();
 
-            let close_to_start = first_three.contains(&edata.dst);
-            let not_backtracking = !last_three.contains(&edata.dst);
+            let close_to_start = first_n.contains(&edata.dst);
+            let not_backtracking = !last_n.contains(&edata.dst);
 
             nearly_loop = close_to_start & not_backtracking;
         }
 
         if !nearly_loop {
-            self.visited.contains(&edata.dst)
+            Ok(self.visited.contains(&edata.dst))
         } else {
-            false
+            Ok(false)
         }
     }
 
@@ -146,12 +153,12 @@ impl Candidate {
     }
 
     fn validate_against_surface_reqs(&self) -> bool {
-        match &self.config.surface_restriction {
+        match &self.route_config.surface_restriction {
             Some(restriction) => {
                 let s_dist = self
                     .sum_surfaces_distance(&restriction.restricted_surfaces);
                 let max_s_dist = restriction.restricted_surfaces_perc
-                    * self.config.max_distance;
+                    * self.route_config.max_distance;
                 if s_dist > max_s_dist { false } else { true }
             }
             None => true,
@@ -166,8 +173,9 @@ impl Candidate {
 
         match rest_pass {
             true => {
-                (self.metrics.common.dist <= self.config.max_distance)
-                    & (self.metrics.common.dist >= self.config.min_distance)
+                (self.metrics.common.dist <= self.route_config.max_distance)
+                    & (self.metrics.common.dist
+                        >= self.route_config.min_distance)
             }
             false => false,
         }
@@ -185,8 +193,12 @@ impl Candidate {
 
         // Pre-validation -----------------------------------------------------
         // Check if node has already been visited
-        if self.check_for_overlap(eref) {
-            return StepResult::Invalid;
+        match self.check_for_overlap(eref) {
+            Ok(overlap) => match overlap {
+                true => return StepResult::Invalid,
+                _ => (),
+            },
+            Err(_) => return StepResult::Invalid,
         }
 
         // Determine the minimum possible distance of a completed route after
@@ -209,7 +221,7 @@ impl Candidate {
         // path on a filtered view of the graph, but it has been determined
         // that the performance impact is too high for the limited improvement
         // in completion rates it provides
-        if min_complete_dist > self.config.max_distance {
+        if min_complete_dist > self.route_config.max_distance {
             return StepResult::Invalid;
         }
 
@@ -237,6 +249,8 @@ impl Candidate {
         }
     }
 }
+
+// MARK: Routes
 
 /// Minimal container for a completed route. This holds only the information
 /// required by the webapp in order to render it.
@@ -289,6 +303,8 @@ pub struct RoutegenResponse {
     pub metrics: RoutegenMetrics,
 }
 
+// MARK: Tests
+
 #[cfg(test)]
 mod tests {
 
@@ -302,7 +318,6 @@ mod tests {
         RouteConfig {
             centre: (0.0, 0.0).into(),
             route_mode: RouteMode::Hilly,
-            max_candidates: 1,
             min_distance: 2.0,
             max_distance: 3.0,
             highways: vec!["highway".to_string()],
@@ -320,15 +335,21 @@ mod tests {
             test_visited.insert(point.clone());
         }
 
-        let test_config = match config {
+        let test_route_config = match config {
             Some(usrconf) => Arc::new(usrconf),
             None => Arc::new(get_test_config()),
         };
 
+        let test_backend_config = Arc::new(BackendConfig::default(
+            "dummy".to_string(),
+            "dummy".to_string(),
+        ));
+
         Candidate {
             points: test_points,
             visited: test_visited,
-            config: test_config,
+            route_config: test_route_config,
+            backend_config: test_backend_config,
             geometry: CandidateGeometry::new(),
             metrics: CandidateMetrics::new(),
             cur_inx: NodeIndex::new(0),
@@ -428,7 +449,11 @@ mod tests {
         let test_index = test_graph.add_node(test_ndata1);
         let _ = test_graph.add_node(test_ndata2);
 
-        let test_config = Arc::new(get_test_config());
+        let test_route_config = Arc::new(get_test_config());
+        let test_backend_config = Arc::new(BackendConfig::default(
+            "dummy".to_string(),
+            "dummy".to_string(),
+        ));
 
         // Target data
 
@@ -440,13 +465,18 @@ mod tests {
             visited: target_visited,
             geometry: CandidateGeometry::new(),
             metrics: CandidateMetrics::new(),
-            config: test_config.clone(),
+            route_config: Arc::clone(&test_route_config),
+            backend_config: Arc::clone(&test_backend_config),
             cur_inx: test_index.clone(),
         };
 
         // Act
-        let result =
-            Candidate::new(&test_graph, test_config.clone(), &test_index);
+        let result = Candidate::new(
+            &test_graph,
+            Arc::clone(&test_route_config),
+            Arc::clone(&test_backend_config),
+            &test_index,
+        );
 
         // Assert
         assert_eq!(result, target);
@@ -458,16 +488,20 @@ mod tests {
         use super::*;
 
         /// Check that attempting to check for overlapping points on an empty
-        /// candidate causes the programme to panic. In future this will be
-        /// updated to return a descriptive error to the API endpoint.
+        /// candidate returns an error.
         #[test]
-        #[should_panic(expected = "this candidate has no points")]
         fn test_panic() {
-            let test_config = Arc::new(get_test_config());
+            let test_route_config = Arc::new(get_test_config());
+            let test_backend_config = Arc::new(BackendConfig::default(
+                "dummy".to_string(),
+                "dummy".to_string(),
+            ));
+
             let test_candidate = Candidate {
                 points: Vec::<i64>::new(),
                 visited: FxHashSet::<i64>::default(),
-                config: test_config,
+                route_config: test_route_config,
+                backend_config: test_backend_config,
                 geometry: CandidateGeometry::new(),
                 metrics: CandidateMetrics::new(),
                 cur_inx: NodeIndex::new(0),
@@ -481,7 +515,10 @@ mod tests {
                 graph.edges(src).collect();
             let eref = erefs.get(0).unwrap();
 
-            let _ = test_candidate.check_for_overlap(eref);
+            match test_candidate.check_for_overlap(eref) {
+                Ok(_) => panic!("That shouldn't have worked"),
+                Err(_) => (),
+            };
         }
 
         /// Check that attempting to step back to a previously visited node
@@ -500,7 +537,7 @@ mod tests {
                 graph.edges(src).collect();
             let eref = erefs.get(0).unwrap();
 
-            assert!(test_candidate.check_for_overlap(eref))
+            assert!(test_candidate.check_for_overlap(eref).unwrap())
         }
 
         /// Check that attempting to step to an unvisited node does not trip
@@ -519,7 +556,7 @@ mod tests {
                 graph.edges(src).collect();
             let eref = erefs.get(0).unwrap();
 
-            assert!(!test_candidate.check_for_overlap(eref))
+            assert!(!test_candidate.check_for_overlap(eref).unwrap())
         }
 
         /// Check that attempting to step back to a visited node, which is
@@ -542,7 +579,7 @@ mod tests {
                 graph.edges(src).collect();
             let eref = erefs.get(0).unwrap();
 
-            assert!(!test_candidate.check_for_overlap(eref))
+            assert!(!test_candidate.check_for_overlap(eref).unwrap())
         }
 
         /// Check that stepping back to the start node does not trip the
@@ -561,7 +598,7 @@ mod tests {
                 graph.edges(src).collect();
             let eref = erefs.get(0).unwrap();
 
-            assert!(!test_candidate.check_for_overlap(eref))
+            assert!(!test_candidate.check_for_overlap(eref).unwrap())
         }
     }
 

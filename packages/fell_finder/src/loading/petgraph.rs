@@ -1,5 +1,6 @@
 use crate::common::config::RouteConfig;
-use crate::common::graph_data::{EdgeData, NodeData};
+use crate::common::exceptions::RoutingError;
+use crate::common::graph_data::{EdgeData, NodeData, TaggedGraph};
 use crate::loading::postgres::{EdgeRow, NodeRow};
 use core::f64;
 use geo::{Distance, Haversine, Point};
@@ -85,7 +86,7 @@ pub fn create_graph(
 pub fn tag_start_node(
     config: Arc<RouteConfig>,
     mut graph: Graph<NodeData, EdgeData, Directed, u32>,
-) -> (NodeIndex<u32>, Graph<NodeData, EdgeData, Directed, u32>) {
+) -> Result<TaggedGraph, RoutingError> {
     // Set variables to keep track of the current closest node
     let mut smallest_dist = f64::MAX;
     let mut closest_inx: Option<NodeIndex<u32>> = None;
@@ -105,42 +106,43 @@ pub fn tag_start_node(
         }
     }
 
-    // Either return the closest node, or panic
-    // TODO: Propagate Option return type for cleaner error handling
+    // Either return the closest node, or an error
     match closest_inx {
         Some(inx) => match graph.node_weight_mut(inx) {
             Some(weight) => {
                 weight.is_start = true;
-                return (inx, graph);
+                Ok(TaggedGraph {
+                    start_inx: inx,
+                    graph: graph,
+                })
             }
-            None => panic!("Unable to find the start node!"),
+            None => Err(RoutingError::NoMapDataError),
         },
-        None => panic!("Never updated closest_inx!"),
+        None => Err(RoutingError::NoMapDataError),
     }
 }
 
 /// Use Dijkstra's algorithm on reversed graph to calculate distance of each
 /// node from the start point
-pub fn tag_dists_to_start(
-    start_node: &NodeIndex<u32>,
-    mut graph: Graph<NodeData, EdgeData, Directed, u32>,
-) -> Graph<NodeData, EdgeData, Directed, u32> {
-    graph.reverse();
+pub fn tag_dists_to_start(mut tagged_graph: TaggedGraph) -> TaggedGraph {
+    tagged_graph.graph.reverse();
 
     let dists =
-        dijkstra(&graph, *start_node, None, |edge| edge.weight().distance);
+        dijkstra(&tagged_graph.graph, tagged_graph.start_inx, None, |edge| {
+            edge.weight().distance
+        });
 
-    graph.reverse();
+    tagged_graph.graph.reverse();
 
     for (node_inx, dist) in dists.iter() {
-        if let Some(weight) = graph.node_weight_mut(*node_inx) {
+        if let Some(weight) = tagged_graph.graph.node_weight_mut(*node_inx) {
             weight.dist_to_start = Some(*dist);
         } else {
             ()
         }
     }
 
-    graph
+    tagged_graph
 }
 
 /// Determine whether a node should be mapped across to the new graph. This is
@@ -208,16 +210,21 @@ pub fn get_start_and_end_nodes(
 /// reached by any valid route. As node indices are not static, the start node
 /// must be redetermined after this operation.
 pub fn drop_unreachable_nodes(
-    graph: Graph<NodeData, EdgeData, Directed, u32>,
+    tagged_graph: TaggedGraph,
     config: Arc<RouteConfig>,
-) -> (NodeIndex, Graph<NodeData, EdgeData, Directed, u32>) {
-    let new_graph = graph.filter_map(
+) -> Result<TaggedGraph, RoutingError> {
+    let new_graph = tagged_graph.graph.filter_map(
         |_, node_data| node_map(node_data, Arc::clone(&config)),
         |_, edge_data| Some(edge_data.clone()),
     );
 
-    let new_start = get_start_node(&new_graph)
-        .expect("The start node was marked as unreachable!");
+    let new_start = match get_start_node(&new_graph) {
+        Some(node_inx) => node_inx,
+        None => return Err(RoutingError::NoMapDataError),
+    };
 
-    (new_start, new_graph)
+    Ok(TaggedGraph {
+        start_inx: new_start,
+        graph: new_graph,
+    })
 }

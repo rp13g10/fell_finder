@@ -7,7 +7,11 @@ use axum::response::IntoResponse;
 use axum::routing::get;
 use axum::serve;
 use axum::{Json, Router};
-use fell_finder::common::config::{RouteConfig, UserRouteConfig};
+use fell_finder::common::config::{
+    BackendConfig, RouteConfig, UserRouteConfig,
+};
+use fell_finder::common::exceptions::{ConfigError, RoutingError};
+use fell_finder::common::graph_data::TaggedGraph;
 use fell_finder::loading::petgraph::{
     create_graph, drop_unreachable_nodes, tag_dists_to_start, tag_start_node,
 };
@@ -15,18 +19,33 @@ use fell_finder::loading::postgres::{load_edges, load_nodes};
 use fell_finder::routing::zimmer::generate_routes;
 use serde_json::json;
 use sqlx::postgres::{PgPool, PgPoolOptions};
+use sqlx::{Pool, Postgres};
 use std::sync::Arc;
-use std::time::Instant;
 
 /// Allow passing of the database connection pool into request handlers
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct AppState {
     db: PgPool,
+    cfg: BackendConfig,
 }
 
-// TODO: Allow configuration of backend systems via API params, pull from env
-//       vars if not provided. Easier for experimentation.
+async fn get_tagged_graph_for_routing(
+    db: Pool<Postgres>,
+    route_config: Arc<RouteConfig>,
+) -> Result<TaggedGraph, RoutingError> {
+    let nodes = load_nodes(&db, Arc::clone(&route_config)).await?;
+    let edges = load_edges(&db, Arc::clone(&route_config)).await?;
 
+    let graph = create_graph(nodes, edges);
+
+    let mut tagged_graph = tag_start_node(Arc::clone(&route_config), graph)?;
+
+    tagged_graph = tag_dists_to_start(tagged_graph);
+
+    tagged_graph =
+        drop_unreachable_nodes(tagged_graph, Arc::clone(&route_config))?;
+    Ok(tagged_graph)
+}
 /// Based on the user provided configuration options, attempt to generate
 /// routes which satisfy the requirements. Currently only success status codes
 /// are returned. More graceful error handling is planned for a future
@@ -35,33 +54,42 @@ async fn get_routes(
     State(state): State<AppState>,
     Query(query): Query<UserRouteConfig>,
 ) -> impl IntoResponse {
-    // Capture stats for param optimisation
-    let start_time = Instant::now();
+    // Attempt to parse user provided route config
+    let maybe_route_config: Result<RouteConfig, ConfigError> =
+        query.try_into();
+    let route_config = match maybe_route_config {
+        Ok(config) => config,
+        Err(err) => {
+            return (axum::http::StatusCode::BAD_REQUEST, format!("{}", err))
+                .into_response();
+        }
+    };
+    let route_config = Arc::new(route_config);
+    let backend_config = Arc::new(state.cfg);
+    let db = state.db;
 
-    // Config needs to be shared across all candidates
-    let route_config: RouteConfig = query.into();
-    let shared_config = Arc::new(route_config);
+    // Attempt to fetch data for route generation
+    let maybe_tagged_graph =
+        get_tagged_graph_for_routing(db, Arc::clone(&route_config)).await;
+    let tagged_graph = match maybe_tagged_graph {
+        Ok(tagged_graph) => tagged_graph,
+        Err(err) => {
+            return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, Json(err))
+                .into_response();
+        }
+    };
 
-    let nodes = load_nodes(&state.db, Arc::clone(&shared_config)).await;
-    let edges = load_edges(&state.db, Arc::clone(&shared_config)).await;
+    // Attempt to create the route
+    let maybe_routes =
+        generate_routes(tagged_graph, route_config, backend_config, 1);
 
-    let graph = create_graph(nodes, edges);
-
-    let (mut start_inx, mut graph) =
-        tag_start_node(Arc::clone(&shared_config), graph);
-    graph = tag_dists_to_start(&start_inx, graph);
-
-    (start_inx, graph) =
-        drop_unreachable_nodes(graph, Arc::clone(&shared_config));
-
-    let mut routes = generate_routes(graph, shared_config, start_inx, 1);
-
-    // Log completion time
-    // TODO: Figure out why mutating metrics directly doesn't seem to stick
-    let duration = start_time.elapsed().as_secs_f64();
-    routes.metrics.duration = duration.try_into().unwrap();
-
-    (axum::http::StatusCode::OK, Json(routes)).into_response()
+    match maybe_routes {
+        Ok(routes) => {
+            (axum::http::StatusCode::OK, Json(routes)).into_response()
+        }
+        Err(err) => (axum::http::StatusCode::INTERNAL_SERVER_ERROR, Json(err))
+            .into_response(),
+    }
 }
 
 /// Very basic health checker, verify that the app is running and reachable
@@ -79,13 +107,22 @@ async fn health_check() -> impl IntoResponse {
 /// Entry point for the fell_finder API
 #[tokio::main]
 async fn main() {
+    let backend_config = BackendConfig::new()
+        .expect("Critical error retrieving backend config!");
+
     let pool = PgPoolOptions::new()
         .max_connections(5)
-        .connect("postgres://postgres:postgres@localhost:5432/fell_finder")
+        .connect(&format!(
+            "postgres://{}:{}@localhost:5432/fell_finder",
+            backend_config.db_user, backend_config.db_pass
+        ))
         .await
         .expect("Error connecting to postgres!");
 
-    let state = AppState { db: pool };
+    let state = AppState {
+        db: pool,
+        cfg: backend_config,
+    };
 
     let router = Router::new()
         .route("/healthcheck", get(health_check))

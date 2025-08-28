@@ -2,14 +2,17 @@
 
 * Look into improving error propagation so that toast messages can be displayed to the user if generation fails
   * Main thread should never panic in response to a user action!
+  * Update handler(s) to return axum::http::StatusCode, other errors will need to propagate through to handler
+  * Use mapping/and_then to daisy-chain fns which may error out, avoids deeply nested match statements
+* Apply global timeout for route creation
 * Split out API calls into
-  * Request route (existing call)
+  * Request route (existing call) - routes/request
     * Receive route config
     * Return request ID
-  * Get request status
+  * Get request status - routes/status
     * Receive request ID
     * Return status details (iteration, current dist, avg dist, percentage)
-  * Retrieve route
+  * Retrieve route - routes/retrieve
     * Receive request ID
     * Return routes (existing output)
 

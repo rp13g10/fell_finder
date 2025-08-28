@@ -5,12 +5,11 @@
 //! spread of candidates in the output.
 
 use std::cmp::Ordering;
-use std::env;
 use std::sync::Arc;
 
 use rayon::prelude::*;
 
-use crate::common::config::{RouteConfig, RouteMode};
+use crate::common::config::{BackendConfig, RouteConfig, RouteMode};
 use crate::routing::common::Candidate;
 
 #[derive(Eq, PartialEq, Debug)]
@@ -22,14 +21,12 @@ struct BinDetails {
 /// Based on the number of candidates expected to be in memory when route
 /// pruning takes place, determine the number of bins required in order for
 /// each bin to have the desired size
-fn get_bin_details(max_cands: &usize) -> BinDetails {
+fn get_bin_details(
+    max_cands: &usize,
+    backend_config: Arc<BackendConfig>,
+) -> BinDetails {
     // Fetch target bin size
-    let bin_size: usize = match env::var("FF_BIN_SIZE") {
-        Ok(val) => val
-            .parse()
-            .expect("FF_BIN_SIZE must be set to an integer value"),
-        Err(_) => 64, // Default behaviour, will apply during test runs
-    };
+    let bin_size: usize = backend_config.bin_size;
 
     // Total number of bins which will be required
     let num_bins = (max_cands.clone() as f64 / bin_size as f64).ceil();
@@ -46,15 +43,24 @@ fn get_bin_details(max_cands: &usize) -> BinDetails {
     }
 }
 
-/// For 2 candidates, compare their current latitudes
-/// TODO: See if this and compare_lons can be merged, see if there's a way to
-///       factor in the whole route (or a few sample points) rather than just
-///       the current location. Faster way to get to avg, or take a sample?
-/// TODO: Remove get_pos from CandidateGeometry if it's unused
-fn compare_lats(c1: &Candidate, c2: &Candidate) -> Ordering {
-    let c1_lat = c1.geometry.lats.last().unwrap();
-    let c2_lat = c2.geometry.lats.last().unwrap();
+// TODO: Use a macro to combine functionality of these two functions, if
+//       you're feeling brave enough
 
+/// For 2 candidates, compare their current latitudes
+fn compare_lats(c1: &Candidate, c2: &Candidate) -> Ordering {
+    let maybe_c1 = c1.geometry.lats.last();
+    let maybe_c2 = c2.geometry.lats.last();
+
+    // Define behaviour if one value is missing
+    let (c1_lat, c2_lat) = match maybe_c1 {
+        Some(c1_lat) => match maybe_c2 {
+            Some(c2_lat) => (c1_lat, c2_lat),
+            None => return Ordering::Greater,
+        },
+        None => return Ordering::Equal,
+    };
+
+    // Standard comparison
     if c1_lat < c2_lat {
         Ordering::Less
     } else if c1_lat > c2_lat {
@@ -66,9 +72,19 @@ fn compare_lats(c1: &Candidate, c2: &Candidate) -> Ordering {
 
 /// For 2 candidates, compare their current longitudes
 fn compare_lons(c1: &Candidate, c2: &Candidate) -> Ordering {
-    let c1_lat = c1.geometry.lons.last().unwrap();
-    let c2_lat = c2.geometry.lons.last().unwrap();
+    let maybe_c1 = c1.geometry.lons.last();
+    let maybe_c2 = c2.geometry.lons.last();
 
+    // Define behaviour if one value is missing
+    let (c1_lat, c2_lat) = match maybe_c1 {
+        Some(c1_lat) => match maybe_c2 {
+            Some(c2_lat) => (c1_lat, c2_lat),
+            None => return Ordering::Greater,
+        },
+        None => return Ordering::Equal,
+    };
+
+    // Standard comparison
     if c1_lat < c2_lat {
         Ordering::Less
     } else if c1_lat > c2_lat {
@@ -85,12 +101,12 @@ fn bin_candidates(
     bin_details: BinDetails,
     mut candidates: Vec<Candidate>,
 ) -> Vec<Vec<Candidate>> {
+    // First, bin by latitude
     candidates.par_sort_by(compare_lats);
-
     let x_bins = candidates.par_chunks_mut(bin_details.bin_size_x);
 
+    // Then, bin each of those bins by longitude
     let mut par_bins: Vec<Vec<Vec<Candidate>>> = Vec::new();
-
     x_bins
         .map(|x_bin| {
             x_bin.sort_by(compare_lons);
@@ -157,9 +173,6 @@ fn check_if_candidate_is_dissimilar(
     selected: &Vec<Candidate>,
     threshold: &f64,
 ) -> bool {
-    // TODO: Check if using rayon across bins is making full use of available
-    //       compute
-
     // https://www.sciencedirect.com/science/article/pii/S1319157817304512
 
     let cand_points = candidate.visited.len() as f64;
@@ -192,19 +205,16 @@ fn check_if_candidate_is_dissimilar(
 pub fn get_dissimilar_routes(
     candidates: &mut Vec<Candidate>,
     target_count: usize,
-    config: Arc<RouteConfig>,
+    route_config: Arc<RouteConfig>,
     max_similarity: f64,
 ) -> Vec<Candidate> {
-    // TODO: Run profiler and check if there are any bottlenecks here
-    // TODO: Add support for max_similarity here using FF_MAX_SIMILARITY evar
-
     // Nothing to do if count is already below target
     if candidates.len() <= target_count {
         return candidates.to_owned();
     }
 
     // Otherwise, sort candidates and prepare to select
-    sort_candidates(candidates, Arc::clone(&config));
+    sort_candidates(candidates, Arc::clone(&route_config));
 
     // Take the first entry and use it as a seed for the output vector
     let split = candidates.split_at_mut(1);
@@ -262,39 +272,34 @@ pub fn get_dissimilar_routes(
 pub fn prune_candidates(
     candidates: Vec<Candidate>,
     max_cands: &usize,
-    config: Arc<RouteConfig>,
+    route_config: Arc<RouteConfig>,
+    backend_config: Arc<BackendConfig>,
 ) -> Vec<Candidate> {
+    // Nothing to do if already below target count
     if candidates.len() <= *max_cands {
         return candidates;
     }
 
-    // Set max similarity between candidates
-    let threshold: f64 = match env::var("FF_PRUNING_THRESHOLD") {
-        Ok(val) => val
-            .parse()
-            .expect("FF_PRUNING_THRESHOLD must be set to a float value"),
-        Err(_) => 0.95, // Default behaviour, will apply during test runs
-    };
-
-    // TODO: Improve error handling here
-
-    let bin_details = get_bin_details(max_cands);
+    // Create equal size bins along lat & lon, creating a grid over the problem
+    // space
+    let bin_details = get_bin_details(max_cands, Arc::clone(&backend_config));
     let mut binned = bin_candidates(bin_details, candidates);
 
-    // let mut vec_binned: Vec<Vec<Candidate>> =
-    //     binned.into_iter().map(|(_, cands)| cands).collect();
+    // Create container for selected candidates, set target number of cands
+    // to retain per bin
     let mut vec_selected: Vec<Vec<Candidate>> = Vec::new();
-
     let bin_target: usize = *max_cands / binned.len();
 
+    // Sort according to user preference (hilliest/flattest), dropping
+    // near-duplicates to ensure a good distribution
     binned
         .par_iter_mut()
         .map(|bin_cands| {
             get_dissimilar_routes(
                 bin_cands,
                 bin_target,
-                Arc::clone(&config),
-                threshold,
+                Arc::clone(&route_config),
+                backend_config.pruning_threshold,
             )
         })
         .collect_into_vec(&mut vec_selected);
@@ -317,11 +322,10 @@ mod tests {
     use super::*;
 
     /// Quickly generate a valid RouteConfig option with some dummy data
-    fn get_test_config() -> RouteConfig {
+    fn get_test_route_config() -> RouteConfig {
         RouteConfig {
             centre: (0.0, 0.0).into(),
             route_mode: RouteMode::Hilly,
-            max_candidates: 1,
             min_distance: 9000.0,
             max_distance: 10000.0,
             highways: vec!["highway_1".to_string()],
@@ -337,7 +341,11 @@ mod tests {
             visited: HashSet::default(),
             geometry: CandidateGeometry::new(),
             metrics: CandidateMetrics::new(),
-            config: Arc::new(get_test_config()),
+            route_config: Arc::new(get_test_route_config()),
+            backend_config: Arc::new(BackendConfig::default(
+                "dummy".to_string(),
+                "dummy".to_string(),
+            )),
             cur_inx: NodeIndex::new(0),
         }
     }
@@ -349,13 +357,17 @@ mod tests {
         #[test]
         fn test_square_number() {
             let max_cands = 1024; // 64 * 4 * 4
+            let cfg = Arc::new(BackendConfig::default(
+                "dummy".to_string(),
+                "dummy".to_string(),
+            ));
 
             let target = BinDetails {
                 bin_size_x: 256,
                 bin_size_y: 64,
             };
 
-            let result = get_bin_details(&max_cands);
+            let result = get_bin_details(&max_cands, cfg);
 
             assert_eq!(result, target);
         }
@@ -363,6 +375,10 @@ mod tests {
         #[test]
         fn test_no_leftovers() {
             let max_cands = 1280; // 64 * 5 * 4
+            let cfg = Arc::new(BackendConfig::default(
+                "dummy".to_string(),
+                "dummy".to_string(),
+            ));
 
             // --> num_bins = 20
             // --> x_bins = 5, y_bins = 4
@@ -372,7 +388,7 @@ mod tests {
                 bin_size_y: 64,
             };
 
-            let result = get_bin_details(&max_cands);
+            let result = get_bin_details(&max_cands, cfg);
 
             assert_eq!(result, target);
         }
@@ -380,6 +396,10 @@ mod tests {
         #[test]
         fn test_leftovers() {
             let max_cands = 5432;
+            let cfg = Arc::new(BackendConfig::default(
+                "dummy".to_string(),
+                "dummy".to_string(),
+            ));
 
             // --> num_bins = 85 (5432 / 64 = 84.875)
             // --> x_bins = 10 (sqrt(85) = 9.22)
@@ -390,7 +410,7 @@ mod tests {
                 bin_size_y: 64,
             };
 
-            let result = get_bin_details(&max_cands);
+            let result = get_bin_details(&max_cands, cfg);
 
             assert_eq!(result, target);
         }
@@ -860,7 +880,7 @@ mod tests {
         let mut c3 = get_test_candidate();
 
         // Test config has RouteType::Hilly
-        let test_config = Arc::new(get_test_config());
+        let test_config = Arc::new(get_test_route_config());
 
         // 1 == 2 < 3
         c1.metrics.common.dist = 10543.2;
@@ -928,7 +948,7 @@ mod tests {
         test_candidate_1.metrics.common.gain = 300.0;
         test_candidate_4.metrics.common.gain = 200.0;
 
-        let test_config = Arc::new(get_test_config());
+        let test_config = Arc::new(get_test_route_config());
         let test_target_count: usize = 3;
         let test_threshold: f64 = 0.95;
 
@@ -951,7 +971,6 @@ mod tests {
         );
 
         assert_eq!(result, target);
-        // panic!("Panic!")
     }
 
     #[test]

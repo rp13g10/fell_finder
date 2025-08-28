@@ -6,7 +6,12 @@ use crate::common::bbox::BBox;
 use geo::Point;
 use geo::{Destination, Haversine};
 use serde::Deserialize;
+use std::env;
 use std::str::FromStr;
+
+use crate::common::exceptions::{BackendError, ConfigError};
+
+// MARK: Route Config
 
 /// Sets the type of route being created (optimise for max elevation
 /// gain if Hilly, min elevation gain if Flat)
@@ -17,13 +22,13 @@ pub enum RouteMode {
 }
 
 impl FromStr for RouteMode {
-    type Err = ();
+    type Err = ConfigError;
 
     fn from_str(input: &str) -> Result<RouteMode, Self::Err> {
         match input {
             "hilly" => Ok(RouteMode::Hilly),
             "flat" => Ok(RouteMode::Flat),
-            _ => Err(()),
+            _ => Err(ConfigError::InvalidParamError("route_mode".to_string())),
         }
     }
 }
@@ -72,7 +77,6 @@ pub struct UserRouteConfig {
     pub start_lat: f64,
     pub start_lon: f64,
     pub route_mode: String,
-    pub max_candidates: usize,
     pub target_distance: f64,
     pub highway_types: String,
     pub surface_types: String,
@@ -81,8 +85,10 @@ pub struct UserRouteConfig {
     pub distance_tolerance: f64,
 }
 
-impl Into<RouteConfig> for UserRouteConfig {
-    fn into(self) -> RouteConfig {
+impl TryInto<RouteConfig> for UserRouteConfig {
+    type Error = ConfigError;
+
+    fn try_into(self) -> Result<RouteConfig, ConfigError> {
         let centre = Point::new(self.start_lon, self.start_lat);
 
         let surface_restriction = SurfaceRestriction::new(
@@ -95,10 +101,7 @@ impl Into<RouteConfig> for UserRouteConfig {
         let min_distance = &self.target_distance / tol_mult;
         let max_distance = &self.target_distance * tol_mult;
 
-        // TODO: Set up panic message to include error contents, set error
-        //       contents to contain details of invalid string
-        let route_mode = RouteMode::from_str(&self.route_mode)
-            .expect("Received an invalid route mode");
+        let route_mode = RouteMode::from_str(&self.route_mode)?;
 
         let highways: Vec<String> = self
             .highway_types
@@ -114,16 +117,15 @@ impl Into<RouteConfig> for UserRouteConfig {
             .map(|item| String::from(item))
             .collect();
 
-        RouteConfig {
+        Ok(RouteConfig {
             centre: centre,
             route_mode: route_mode,
-            max_candidates: self.max_candidates,
             min_distance: min_distance,
             max_distance: max_distance,
             highways: highways,
             surfaces: surfaces,
             surface_restriction: surface_restriction,
-        }
+        })
     }
 }
 
@@ -135,16 +137,12 @@ impl Into<RouteConfig> for UserRouteConfig {
 pub struct RouteConfig {
     pub centre: Point,
     pub route_mode: RouteMode,
-    pub max_candidates: usize,
     pub min_distance: f64,
     pub max_distance: f64,
     pub highways: Vec<String>,
     pub surfaces: Vec<String>,
     pub surface_restriction: Option<SurfaceRestriction>,
 }
-
-// TODO: Set max_candidates to be determined according to user requested
-//       distance (or size of graph, if you're feeling fancy)
 
 impl RouteConfig {
     /// Generate a bounding box which contains the entire area which can be
@@ -183,6 +181,100 @@ impl RouteConfig {
     }
 }
 
+// MARK: Backend Config
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct BackendConfig {
+    pub max_candidates: usize,
+    pub max_routes: usize,
+    pub pruning_threshold: f64,
+    pub display_threshold: f64,
+    pub bin_size: usize,
+    pub db_user: String,
+    pub db_pass: String,
+    pub finishing_overlaps: usize,
+}
+
+impl BackendConfig {
+    fn get_evar_as_int(evar: String) -> Result<usize, BackendError> {
+        let maybe_usr_pref = env::var(&evar);
+        match maybe_usr_pref {
+            Ok(str) => match str.parse() {
+                Ok(int) => Ok(int),
+                Err(_) => Err(BackendError::InvalidEvarError(evar)),
+            },
+            Err(_) => Err(BackendError::MissingEvarError(evar)),
+        }
+    }
+
+    fn get_evar_as_float(evar: String) -> Result<f64, BackendError> {
+        let maybe_usr_pref = env::var(&evar);
+        match maybe_usr_pref {
+            Ok(str) => match str.parse() {
+                Ok(float) => Ok(float),
+                Err(_) => Err(BackendError::InvalidEvarError(evar)),
+            },
+            Err(_) => Err(BackendError::MissingEvarError(evar)),
+        }
+    }
+
+    fn get_evar_as_str(evar: String) -> Result<String, BackendError> {
+        let maybe_usr_pref = env::var(&evar);
+        match maybe_usr_pref {
+            Ok(str) => Ok(str),
+            Err(_) => Err(BackendError::MissingEvarError(evar)),
+        }
+    }
+
+    // fn multiply(first_number_str: &str, second_number_str: &str) -> AliasedResult<i32> {
+    //     first_number_str.parse::<i32>().and_then(|first_number| {
+    //         second_number_str.parse::<i32>().map(|second_number| first_number * second_number)
+    //     })
+    // }
+
+    /// Create a new BackendConfig object, pulling all of the required
+    /// information from environment variables. If any variables cannot
+    /// be read/parsed, the programme will panic
+    pub fn new() -> Result<BackendConfig, BackendError> {
+        Ok(BackendConfig {
+            max_candidates: BackendConfig::get_evar_as_int(
+                "FF_MAX_CANDS".to_string(),
+            )?,
+            max_routes: BackendConfig::get_evar_as_int(
+                "FF_MAX_ROUTES".to_string(),
+            )?,
+            bin_size: BackendConfig::get_evar_as_int(
+                "FF_BIN_SIZE".to_string(),
+            )?,
+            pruning_threshold: BackendConfig::get_evar_as_float(
+                "FF_PRUNING_THRESHOLD".to_string(),
+            )?,
+            display_threshold: BackendConfig::get_evar_as_float(
+                "FF_DISPLAY_THRESHOLD".to_string(),
+            )?,
+            db_user: BackendConfig::get_evar_as_str("FF_DB_USER".to_string())?,
+            db_pass: BackendConfig::get_evar_as_str("FF_DB_PASS".to_string())?,
+            finishing_overlaps: BackendConfig::get_evar_as_int(
+                "FF_FINISHING_OVERLAPS".to_string(),
+            )?,
+        })
+    }
+
+    pub fn default(db_user: String, db_pass: String) -> BackendConfig {
+        BackendConfig {
+            max_candidates: 1024,
+            max_routes: 32,
+            bin_size: 64,
+            pruning_threshold: 0.95,
+            display_threshold: 0.9,
+            db_user: db_user,
+            db_pass: db_pass,
+            finishing_overlaps: 3,
+        }
+    }
+}
+
+// MARK: Tests
 #[cfg(test)]
 mod tests {
 
@@ -258,12 +350,11 @@ mod tests {
     /// Check conversion from UserRouteConfig to RouteConfig retains all of
     /// the necessary information
     #[test]
-    fn test_user_config_to_route_config() {
+    fn test_user_config_to_route_config_ok() {
         let test_user_config = UserRouteConfig {
             start_lat: 0.1,
             start_lon: 0.2,
             route_mode: "hilly".to_string(),
-            max_candidates: 4,
             target_distance: 0.5,
             highway_types: "highway_1,highway_2".to_string(),
             surface_types: "surface_1,surface_2".to_string(),
@@ -275,7 +366,6 @@ mod tests {
         let target = RouteConfig {
             centre: (0.2, 0.1).into(),
             route_mode: RouteMode::Hilly,
-            max_candidates: 4,
             min_distance: 0.5 / 1.05,
             max_distance: 0.5 * 1.05,
             highways: vec!["highway_1".to_string(), "highway_2".to_string()],
@@ -286,9 +376,39 @@ mod tests {
             }),
         };
 
-        let result: RouteConfig = test_user_config.into();
+        let result: RouteConfig = test_user_config.try_into().unwrap();
 
         assert_eq!(result, target)
+    }
+
+    #[test]
+    fn test_user_config_to_route_config_err() {
+        let test_user_config = UserRouteConfig {
+            start_lat: 0.1,
+            start_lon: 0.2,
+            route_mode: "other".to_string(),
+            target_distance: 0.5,
+            highway_types: "highway_1,highway_2".to_string(),
+            surface_types: "surface_1,surface_2".to_string(),
+            restricted_surfaces: Some("restriction".to_string()),
+            restricted_surfaces_perc: Some(0.6),
+            distance_tolerance: 0.05,
+        };
+
+        let target = "route_mode".to_string();
+
+        let result_wrapped: Result<RouteConfig, ConfigError> =
+            test_user_config.try_into();
+
+        match result_wrapped {
+            Ok(_) => panic!("That shouldn't have worked!"),
+            Err(err) => match err {
+                ConfigError::InvalidParamError(str) => {
+                    assert_eq!(str, target)
+                }
+                _ => panic!("Got the wrong error type!"),
+            },
+        }
     }
 
     /// Check that the generated bounding box covers the expected area
@@ -297,7 +417,6 @@ mod tests {
         let test_config = RouteConfig {
             centre: (0.0, 0.0).into(),
             route_mode: RouteMode::Hilly,
-            max_candidates: 1,
             min_distance: 9000.0,
             max_distance: 10000.0,
             highways: vec!["highway_1".to_string()],
@@ -330,7 +449,6 @@ mod tests {
         let test_config = RouteConfig {
             centre: (0.0, 0.0).into(),
             route_mode: RouteMode::Hilly,
-            max_candidates: 1,
             min_distance: 9000.0,
             max_distance: 10000.0,
             highways: vec!["highway_1".to_string(), "highway_2".to_string()],
@@ -351,7 +469,6 @@ mod tests {
         let test_config = RouteConfig {
             centre: (0.0, 0.0).into(),
             route_mode: RouteMode::Hilly,
-            max_candidates: 1,
             min_distance: 9000.0,
             max_distance: 10000.0,
             highways: vec!["highway_1".to_string()],

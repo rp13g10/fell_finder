@@ -2,7 +2,6 @@
 fell_finder"""
 
 import json
-import os
 from dataclasses import fields
 
 import requests
@@ -28,25 +27,6 @@ def _gen_query_url(config: RouteConfig) -> str:
     return url
 
 
-def _get_max_candidates(config: RouteConfig) -> int:
-    # TODO: Move this into rust code, set based on graph size rather than
-    #       requested distance
-
-    usr_dist_km = config.target_distance // 1000
-
-    min_cands = 128
-    max_cands = int(os.environ.get("FF_MAX_CANDS", "8192")) // 2
-    increment = 128
-
-    cands = int(usr_dist_km * increment)
-
-    if cands < min_cands:
-        return min_cands
-    if cands > max_cands:
-        return max_cands
-    return cands
-
-
 def get_user_requested_route(
     config: RouteConfig,
 ) -> list[Route]:
@@ -61,29 +41,20 @@ def get_user_requested_route(
 
     """
 
-    max_candidates = _get_max_candidates(config)
-    abs_max_candidates = int(os.environ.get("FF_MAX_CANDS", "8192"))
+    url = _gen_query_url(config)
+
+    response = requests.get(url, headers={"Content-Type": "application/json"})
+
+    # TODO: Set other codes to display toast popups when progress bar is
+    #       reinstated
+    if response.status_code != 200:
+        return []
+
+    raw_routes = json.loads(response.content)
 
     generated = []
-    while not generated:
-        config.max_candidates = max_candidates
-
-        url = _gen_query_url(config)
-
-        response = requests.get(
-            url, headers={"Content-Type": "application/json"}
-        )
-
-        raw_response = json.loads(response.content)
-        raw_routes = raw_response["routes"]
-
-        for route in raw_routes:
-            generated.append(Route.from_api_response(route))
-
-        if max_candidates >= abs_max_candidates:
-            break
-
-        max_candidates = min(abs_max_candidates, max_candidates * 2)
+    for route in raw_routes:
+        generated.append(Route.from_api_response(route))
 
     return generated
 

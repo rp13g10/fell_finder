@@ -159,8 +159,6 @@ def init_callbacks() -> None:
         )
         lat, lon = current_marker["props"]["position"]
 
-        max_candidates = int(os.environ["FF_MAX_CANDS"])
-
         highway_types = []
         for highway_type in route_highways:
             highway_types += HIGHWAY_TYPES[highway_type]
@@ -178,7 +176,6 @@ def init_callbacks() -> None:
             start_lon=lon,
             target_distance=int(route_dist) * 1000,
             route_mode=route_mode,
-            max_candidates=max_candidates,
             highway_types=highway_types,
             surface_types=surface_types,
             restricted_surfaces=restricted_surfaces,
