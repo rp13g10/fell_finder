@@ -1,4 +1,4 @@
-//! This crate contains structs which represent the route configuraiton options
+//! This crate contains structs which represent the route configuration options
 //! selected by the end user. In particular, the RouteConfig struct is used
 //! widely across this package to inform the route creation process.
 
@@ -107,6 +107,8 @@ impl TryInto<RouteConfig> for UserRouteConfig {
 
         let surfaces: Vec<String> =
             self.surface_types.split(',').map(String::from).collect();
+
+        let job_id = Uuid::new_v4().to_string();
 
         let job_id = Uuid::new_v4().to_string();
 
