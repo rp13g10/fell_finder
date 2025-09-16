@@ -265,6 +265,7 @@ mod tests {
             highways: vec!["highway_1".to_string()],
             surfaces: vec!["surface_1".to_string(), "surface_2".to_string()],
             surface_restriction: None,
+            job_id: "42".to_string(),
         };
         let test_config = Arc::new(test_config);
 
@@ -284,6 +285,7 @@ mod tests {
             highways: vec!["highway_1".to_string()],
             surfaces: vec!["surface_1".to_string(), "surface_2".to_string()],
             surface_restriction: None,
+            job_id: "42".to_string(),
         };
         let test_config = Arc::new(test_config);
 

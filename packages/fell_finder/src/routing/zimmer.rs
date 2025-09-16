@@ -1,15 +1,17 @@
-use indicatif::ProgressBar;
 use rayon::prelude::*;
 use std::cmp::{Ordering, min};
 use std::sync::Arc;
+use std::time::Instant;
 
 use crate::common::config::{BackendConfig, RouteConfig, RouteMode};
 use crate::common::exceptions::RoutingError;
 use crate::common::graph_data::{EdgeData, NodeData, TaggedGraph};
+use crate::common::messages::{JobProgress, JobStatus, content_to_redis};
 use crate::routing::common::{Candidate, Route, StepResult};
 use petgraph::graph::EdgeReference;
 use petgraph::visit::EdgeRef;
 use petgraph::{Directed, Graph};
+use redis::aio::MultiplexedConnection;
 
 use crate::routing::pruning::{get_dissimilar_routes, prune_candidates};
 
@@ -120,12 +122,29 @@ pub fn get_max_cands(
 /// Recursive algorithm which crawls the provided graph for routes, starting at
 /// the provided start_inx. This will attempt to return routes which meet all
 /// of the criteria provided by the user
-pub fn generate_routes(
+pub async fn generate_routes(
     tagged_graph: TaggedGraph,
     route_config: Arc<RouteConfig>,
     backend_config: Arc<BackendConfig>,
     attempt: usize,
+    conn: &mut MultiplexedConnection,
 ) -> Result<Vec<Route>, RoutingError> {
+    // TODO: Split this up a bit
+
+    // Track job duration
+    let start_time = Instant::now();
+    let mut last_updated = Instant::now();
+
+    // Mark job as started
+    let mut progress = JobProgress::new(&route_config.max_distance, &attempt);
+    content_to_redis(
+        &route_config.job_id,
+        "status",
+        JobStatus::Calculating(progress.clone()),
+        conn,
+    )
+    .await;
+
     // Determine and set optimal number of candidates
     let max_cands = get_max_cands(
         &tagged_graph.graph,
@@ -144,8 +163,6 @@ pub fn generate_routes(
     candidates.push(seed);
 
     // Attempt route generation
-    let bar = ProgressBar::new(route_config.max_distance as u64);
-
     let mut completed: Vec<Candidate> = Vec::new();
     let mut completed_buf: Vec<Candidate>;
     while !(candidates.is_empty()) {
@@ -162,23 +179,51 @@ pub fn generate_routes(
         let tot_dist = candidates
             .iter()
             .fold(0.0, |a, b| a + b.metrics.common.dist);
-        let avg_dist = (tot_dist / candidates.len() as f64) as u64;
-        bar.set_position(avg_dist);
-    }
+        let avg_dist = tot_dist / candidates.len() as f64;
 
-    bar.finish_and_clear();
+        // Update progress periodically
+
+        let update_secs = last_updated.elapsed().as_secs_f64();
+        let duration = start_time.elapsed().as_secs_f64();
+
+        if duration > backend_config.max_job_seconds {
+            content_to_redis(
+                &route_config.job_id,
+                "status",
+                JobStatus::Error(RoutingError::TimeoutError),
+                conn,
+            )
+            .await;
+            return Err(RoutingError::TimeoutError);
+        }
+
+        if update_secs > backend_config.progress_update_seconds {
+            progress.update_progress(avg_dist, duration);
+            content_to_redis(
+                &route_config.job_id,
+                "status",
+                JobStatus::Calculating(progress.clone()),
+                conn,
+            )
+            .await;
+            last_updated = Instant::now();
+        }
+    }
 
     // If no completed candidates, try again with higher max candidates
     let no_cands = candidates.into_iter().count() == 0;
     let attempts_remaining = attempt < 3;
     let not_at_global_max = max_cands < backend_config.max_candidates;
     if no_cands & attempts_remaining & not_at_global_max {
-        return generate_routes(
+        // Box::pin required for recursive async function calls
+        return Box::pin(generate_routes(
             tagged_graph,
             route_config,
             backend_config,
             attempt + 1,
-        );
+            conn,
+        ))
+        .await;
     }
 
     completed = get_dissimilar_routes(
@@ -201,15 +246,21 @@ pub fn generate_routes(
     // If no completed routes, try again with higher max candidates
     let no_routes = routes.iter().count() == 0;
     if no_routes & attempts_remaining & not_at_global_max {
-        return generate_routes(
+        return Box::pin(generate_routes(
             tagged_graph,
             route_config,
             backend_config,
             attempt + 1,
-        );
+            conn,
+        ))
+        .await;
     } else if no_routes {
         return Err(RoutingError::NoRoutesError);
     }
+
+    progress.finalize();
+    content_to_redis(&route_config.job_id, "status", JobStatus::Success, conn)
+        .await;
 
     Ok(routes)
 }

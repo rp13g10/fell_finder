@@ -8,6 +8,7 @@ use geo::{Destination, Haversine};
 use serde::Deserialize;
 use std::env;
 use std::str::FromStr;
+use uuid::Uuid;
 
 use crate::common::exceptions::{BackendError, ConfigError};
 
@@ -117,6 +118,8 @@ impl TryInto<RouteConfig> for UserRouteConfig {
             .map(|item| String::from(item))
             .collect();
 
+        let job_id = Uuid::new_v4().to_string();
+
         Ok(RouteConfig {
             centre: centre,
             route_mode: route_mode,
@@ -125,6 +128,7 @@ impl TryInto<RouteConfig> for UserRouteConfig {
             highways: highways,
             surfaces: surfaces,
             surface_restriction: surface_restriction,
+            job_id: job_id,
         })
     }
 }
@@ -142,6 +146,7 @@ pub struct RouteConfig {
     pub highways: Vec<String>,
     pub surfaces: Vec<String>,
     pub surface_restriction: Option<SurfaceRestriction>,
+    pub job_id: String,
 }
 
 impl RouteConfig {
@@ -193,69 +198,69 @@ pub struct BackendConfig {
     pub db_user: String,
     pub db_pass: String,
     pub finishing_overlaps: usize,
+    pub max_job_seconds: f64,
+    pub progress_update_seconds: f64,
 }
 
 impl BackendConfig {
-    fn get_evar_as_int(evar: String) -> Result<usize, BackendError> {
+    fn get_evar_as_int(evar: &str) -> Result<usize, BackendError> {
         let maybe_usr_pref = env::var(&evar);
         match maybe_usr_pref {
             Ok(str) => match str.parse() {
                 Ok(int) => Ok(int),
-                Err(_) => Err(BackendError::InvalidEvarError(evar)),
+                Err(_) => {
+                    Err(BackendError::InvalidEvarError(evar.to_string()))
+                }
             },
-            Err(_) => Err(BackendError::MissingEvarError(evar)),
+            Err(_) => Err(BackendError::MissingEvarError(evar.to_string())),
         }
     }
 
-    fn get_evar_as_float(evar: String) -> Result<f64, BackendError> {
+    fn get_evar_as_float(evar: &str) -> Result<f64, BackendError> {
         let maybe_usr_pref = env::var(&evar);
         match maybe_usr_pref {
             Ok(str) => match str.parse() {
                 Ok(float) => Ok(float),
-                Err(_) => Err(BackendError::InvalidEvarError(evar)),
+                Err(_) => {
+                    Err(BackendError::InvalidEvarError(evar.to_string()))
+                }
             },
-            Err(_) => Err(BackendError::MissingEvarError(evar)),
+            Err(_) => Err(BackendError::MissingEvarError(evar.to_string())),
         }
     }
 
-    fn get_evar_as_str(evar: String) -> Result<String, BackendError> {
+    fn get_evar_as_str(evar: &str) -> Result<String, BackendError> {
         let maybe_usr_pref = env::var(&evar);
         match maybe_usr_pref {
             Ok(str) => Ok(str),
-            Err(_) => Err(BackendError::MissingEvarError(evar)),
+            Err(_) => Err(BackendError::MissingEvarError(evar.to_string())),
         }
     }
-
-    // fn multiply(first_number_str: &str, second_number_str: &str) -> AliasedResult<i32> {
-    //     first_number_str.parse::<i32>().and_then(|first_number| {
-    //         second_number_str.parse::<i32>().map(|second_number| first_number * second_number)
-    //     })
-    // }
 
     /// Create a new BackendConfig object, pulling all of the required
     /// information from environment variables. If any variables cannot
     /// be read/parsed, the programme will panic
     pub fn new() -> Result<BackendConfig, BackendError> {
         Ok(BackendConfig {
-            max_candidates: BackendConfig::get_evar_as_int(
-                "FF_MAX_CANDS".to_string(),
-            )?,
-            max_routes: BackendConfig::get_evar_as_int(
-                "FF_MAX_ROUTES".to_string(),
-            )?,
-            bin_size: BackendConfig::get_evar_as_int(
-                "FF_BIN_SIZE".to_string(),
-            )?,
+            max_candidates: BackendConfig::get_evar_as_int("FF_MAX_CANDS")?,
+            max_routes: BackendConfig::get_evar_as_int("FF_MAX_ROUTES")?,
+            bin_size: BackendConfig::get_evar_as_int("FF_BIN_SIZE")?,
             pruning_threshold: BackendConfig::get_evar_as_float(
-                "FF_PRUNING_THRESHOLD".to_string(),
+                "FF_PRUNING_THRESHOLD",
             )?,
             display_threshold: BackendConfig::get_evar_as_float(
-                "FF_DISPLAY_THRESHOLD".to_string(),
+                "FF_DISPLAY_THRESHOLD",
             )?,
-            db_user: BackendConfig::get_evar_as_str("FF_DB_USER".to_string())?,
-            db_pass: BackendConfig::get_evar_as_str("FF_DB_PASS".to_string())?,
+            db_user: BackendConfig::get_evar_as_str("FF_DB_USER")?,
+            db_pass: BackendConfig::get_evar_as_str("FF_DB_PASS")?,
             finishing_overlaps: BackendConfig::get_evar_as_int(
-                "FF_FINISHING_OVERLAPS".to_string(),
+                "FF_FINISHING_OVERLAPS",
+            )?,
+            max_job_seconds: BackendConfig::get_evar_as_float(
+                "FF_MAX_JOB_SECONDS",
+            )?,
+            progress_update_seconds: BackendConfig::get_evar_as_float(
+                "FF_UPDATE_FREQUENCY",
             )?,
         })
     }
@@ -270,6 +275,8 @@ impl BackendConfig {
             db_user: db_user,
             db_pass: db_pass,
             finishing_overlaps: 3,
+            max_job_seconds: 300.0,
+            progress_update_seconds: 1.0,
         }
     }
 }
@@ -374,9 +381,11 @@ mod tests {
                 restricted_surfaces: vec!["restriction".to_string()],
                 restricted_surfaces_perc: 0.6,
             }),
+            job_id: "42".to_string(),
         };
 
-        let result: RouteConfig = test_user_config.try_into().unwrap();
+        let mut result: RouteConfig = test_user_config.try_into().unwrap();
+        result.job_id = "42".to_string();
 
         assert_eq!(result, target)
     }
@@ -422,6 +431,7 @@ mod tests {
             highways: vec!["highway_1".to_string()],
             surfaces: vec!["surface_1".to_string()],
             surface_restriction: None,
+            job_id: "42".to_string(),
         };
 
         // Verified using online calculators at c. 7k from origin
@@ -454,6 +464,7 @@ mod tests {
             highways: vec!["highway_1".to_string(), "highway_2".to_string()],
             surfaces: vec!["surface_1".to_string()],
             surface_restriction: None,
+            job_id: "42".to_string(),
         };
 
         let target = "'highway_1', 'highway_2'".to_string();
@@ -474,6 +485,7 @@ mod tests {
             highways: vec!["highway_1".to_string()],
             surfaces: vec!["surface_1".to_string(), "surface_2".to_string()],
             surface_restriction: None,
+            job_id: "42".to_string(),
         };
 
         let target = "'surface_1', 'surface_2'".to_string();

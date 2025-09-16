@@ -14,3 +14,4 @@ download_gpx_on_dl_click  # unused function (packages/fell_viewer/src/fell_viewe
 update_map_based_on_profile  # unused function (packages/fell_viewer/src/fell_viewer/content/route_finder/callbacks.py:396)
 toggle_navbar_collapse  # unused function (packages/fell_viewer/src/fell_viewer/content/static/callbacks.py:13)
 get_route_without_adjustments # unused function (packages/fell_viewer/src/fell_viewer/utils/api.py:91)
+target_distance # unused variable (packages/fell_viewer/src/fell_viewer/common/containers.py:39)

@@ -4,7 +4,7 @@
 use serde::Serialize;
 use std::fmt;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub enum BackendError {
     MissingEvarError(String),
     InvalidEvarError(String),
@@ -24,7 +24,7 @@ impl fmt::Display for BackendError {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub enum ConfigError {
     MissingParamError(String),
     InvalidParamError(String),
@@ -37,7 +37,7 @@ impl fmt::Display for ConfigError {
                 format!("Missing parameter {}", param)
             }
             ConfigError::InvalidParamError(param) => {
-                format!("Invalidparameter {}", param)
+                format!("Invalid parameter {}", param)
             }
         };
         write!(f, "Error parsing route config: {}", msg)
@@ -48,9 +48,13 @@ impl fmt::Display for ConfigError {
 pub enum RoutingError {
     NoMapDataError,
     DatabaseError(String),
+    RedisError(String),
+    UserError(String),
     DeveloperError(String),
     BinningError,
     GeometryError,
     NoRoutesError,
     InvalidCandidateError,
+    ConfigError(ConfigError),
+    TimeoutError,
 }
