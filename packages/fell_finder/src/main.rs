@@ -25,10 +25,6 @@ use sqlx::postgres::{PgPool, PgPoolOptions};
 use sqlx::{Pool, Postgres};
 use std::sync::Arc;
 
-// NOTE: Need to knock out any remaining compiler issues, then test that
-//       it's possible to track route creating progress using python. If it
-//       works, update webapp.
-
 /// Allow passing of the database connection pool into request handlers
 #[derive(Debug, Clone)]
 struct AppState {
