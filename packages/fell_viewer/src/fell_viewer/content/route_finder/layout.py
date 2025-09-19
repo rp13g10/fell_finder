@@ -6,11 +6,12 @@ from dash import dcc
 from fell_viewer.content.route_finder.components import (
     blank_map,
     blank_profile,
+    error_toast,
     progress_bar,
     sidebar_contents,
 )
 
-sidebar = dbc.Col(width=3, children=sidebar_contents)
+sidebar = dbc.Col(width=3, children=sidebar_contents, class_name="z-2")
 
 
 plots = dbc.Col(
@@ -24,7 +25,7 @@ plots = dbc.Col(
         dbc.Row(blank_map, style={"height": "calc(100vh - 284px)"}),
         dbc.Row(blank_profile),
     ],
-    class_name="d-flex flex-column",
+    class_name="d-flex flex-column z-2",
 )
 
-layout = dbc.Row(children=[sidebar, plots])
+layout = dbc.Row(children=[sidebar, plots, error_toast])

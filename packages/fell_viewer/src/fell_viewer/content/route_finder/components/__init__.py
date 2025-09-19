@@ -42,3 +42,13 @@ progress_bar = dbc.Col(
     id="route-progress-container",
     class_name="mb-1",
 )
+
+error_toast = dbc.Toast(
+    "Any errors will be displayed here",
+    header="error",
+    id="route-error-toast",
+    is_open=False,
+    icon="danger",
+    dismissable=True,
+    class_name="z-3 position-absolute top-50 start-50 translate-middle",
+)

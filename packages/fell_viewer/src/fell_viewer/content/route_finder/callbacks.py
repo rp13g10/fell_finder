@@ -334,7 +334,11 @@ def init_callbacks() -> None:
         return [json.dumps(status)]
 
     @callback(
-        [Output("route-store", "data")],
+        [
+            Output("route-store", "data"),
+            Output("route-error-toast", "children"),
+            Output("route-error-toast", "is_open"),
+        ],
         Input("route-last-job-status", "data"),
         prevent_initial_call=True,
     )
@@ -355,6 +359,10 @@ def init_callbacks() -> None:
 
         status = json.loads(status_str)
 
+        if status["status"] == "error":
+            error_dtl = status["detail"]
+            return ([], error_dtl, True)
+
         # TODO: Handle error status, set up toast popups
 
         # TODO: Make sure API returns an error type if no routes were generated
@@ -364,7 +372,7 @@ def init_callbacks() -> None:
 
         routes_str = store_routes_to_str(routes)
 
-        return [routes_str]
+        return (routes_str, "success", False)
 
     @callback(
         [
