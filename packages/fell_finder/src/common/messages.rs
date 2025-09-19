@@ -7,7 +7,7 @@ use crate::common::exceptions::RoutingError;
 use redis;
 use redis::RedisError;
 use redis::aio::MultiplexedConnection;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, ser::SerializeMap};
 use serde_json::json;
 
 // MARK: Jobs
@@ -46,13 +46,49 @@ impl JobProgress {
     }
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Debug)]
 pub enum JobStatus {
     Queued,
     Started,
     Calculating(JobProgress),
     Success,
     Error(RoutingError),
+}
+
+impl Serialize for JobStatus {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut state = serializer.serialize_map(None)?;
+
+        // TODO: For progress & err, values are currently being quoted. need to
+        //       prevent this, or cut off the first & last chars
+
+        match self {
+            Self::Queued => {
+                state.serialize_entry("status", "queued")?;
+                state.serialize_entry("detail", "")?;
+            }
+            Self::Started => {
+                state.serialize_entry("status", "started")?;
+                state.serialize_entry("detail", "")?;
+            }
+            Self::Calculating(progress) => {
+                state.serialize_entry("status", "calculating")?;
+                state.serialize_entry("detail", progress)?;
+            }
+            Self::Success => {
+                state.serialize_entry("status", "success")?;
+                state.serialize_entry("detail", "")?;
+            }
+            Self::Error(err) => {
+                state.serialize_entry("status", "error")?;
+                state.serialize_entry("detail", err)?;
+            }
+        };
+        state.end()
+    }
 }
 
 #[derive(Serialize, Debug)]

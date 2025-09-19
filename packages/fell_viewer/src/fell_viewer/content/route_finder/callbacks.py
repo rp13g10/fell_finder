@@ -3,6 +3,8 @@ the route finder page"""
 
 import json
 import os
+import time
+from collections.abc import Callable
 from typing import Dict, List, Literal, Tuple, Union
 
 import dash_bootstrap_components as dbc
@@ -17,7 +19,11 @@ from fell_viewer.content.route_finder.components.cards import RouteCard
 from fell_viewer.content.route_finder.generators import (
     generate_elevation_plot,
 )
-from fell_viewer.utils.api import get_user_requested_route
+from fell_viewer.utils.api import (
+    get_job_results,
+    get_job_status,
+    request_new_route,
+)
 from fell_viewer.utils.caching import (
     load_routes_from_str,
     store_routes_to_str,
@@ -28,6 +34,8 @@ CUR_DIR = os.path.dirname(os.path.abspath(__file__))
 
 MAP_PIN_PNG = get_image_as_str("map_pin.png")
 ROUTE_START_PNG = get_image_as_str("route_start.png")
+
+MAX_JOB_DURATION = int(os.environ.get("FF_MAX_JOB_SECONDS", "600"))
 
 with open(
     os.path.join(CUR_DIR, "highway_types.json"), "r", encoding="utf8"
@@ -98,10 +106,17 @@ def init_callbacks() -> None:
     def update_restriction_options(route_allowed_surfaces: List[str]):
         return route_allowed_surfaces
 
+    # Required Callbacks (new setup)
+    # Request route (success/fail)
+    #  - Send request, store job ID internally
+    # Poll for updates
+    #  - Trigger when internal job ID is updated
+    #  - Update progress bar once per second
+    # Retrieve routes
+    #  -
+
     @callback(
-        [
-            Output("route-store", "data", allow_duplicate=True),
-        ],
+        [Output("route-current-job", "data")],
         Input("route-calculate-button", "n_clicks"),
         [
             State("route-plot", "children"),
@@ -112,11 +127,9 @@ def init_callbacks() -> None:
             State("route-restricted-surfaces", "value"),
             State("route-restricted-perc", "value"),
         ],
-        background=True,
         prevent_initial_call=True,
-        manager=background_callback_manager,
     )
-    def calculate_and_store_routes(
+    def request_new_route_from_input(
         n_clicks: Union[int, None],
         current_children: List,
         route_dist: str,
@@ -125,10 +138,11 @@ def init_callbacks() -> None:
         route_allowed_surfaces: List[str],
         route_restricted_surfaces: List[str],
         route_restricted_perc: int,
-    ) -> List[str] | NoUpdate:
-        """Based on the user's selection, generate a circular route which meets
-        their requirements. Periodically update the progress bar to keep them
-        informed.
+    ):
+        """Trigger the creation of a new route. This will spawn a background
+        job in the fell_finder backend and return a job ID. This job ID can
+        be used to poll for updates on the current job, and retrieve the
+        results once completed
 
         Args:
             n_clicks: The number of times the calculate button has been clicked
@@ -143,14 +157,14 @@ def init_callbacks() -> None:
               distance which can be travelled on the restricted surfaces
 
         Returns:
-            A circular route starting at the selected point
+            An ID for for the route creation job which has been spawned
 
         """
 
-        # TODO: Bring back the progress bar
-
         if not n_clicks:
             return no_update
+
+        print("Route has been requested")
 
         current_marker = next(
             x
@@ -182,7 +196,150 @@ def init_callbacks() -> None:
             restricted_surfaces_perc=route_restricted_perc / 100.0,
         )
 
-        routes = get_user_requested_route(config)
+        job_id = request_new_route(config)
+
+        print(f"Job ID is {job_id}")
+
+        return [job_id]
+
+    def _generate_bar_for_status(
+        status: dict[str, str],
+    ) -> dbc.Progress:
+        match status["status"]:
+            case "Queued":
+                value = 0
+                colour = "secondary"
+            case "Error":
+                value = 1
+                colour = "danger"
+            case _:
+                value = 1
+                colour = "success"
+
+        new_bar = dbc.Progress(
+            id="route-progress", min=0, max=1, value=value, color=colour
+        )
+        return new_bar
+
+    def _generate_bar_for_calculation(
+        detail: dict[str, int | float],
+    ) -> dbc.Progress:
+        # TODO: Tidy this up, use partial updates to reduce traffic
+
+        print(f"Got detail: {detail} ({type(detail)})")
+
+        match detail["attempt"]:
+            case 1:
+                colour = "primary"
+            case 2:
+                colour = "warning"
+            case _:
+                colour = "danger"
+
+        new_bar = dbc.Progress(
+            id="route-progress",
+            min=0,
+            max=detail["target"],
+            value=detail["current"],
+            color=colour,
+        )
+        return new_bar
+
+    @callback(
+        [Output("route-last-job-status", "data")],
+        Input("route-current-job", "data"),
+        progress=Output("route-progress-row", "children"),
+        background=True,
+        prevent_initial_call=True,
+        manager=background_callback_manager,
+    )
+    def poll_until_job_completion(update_progress: Callable, job_id: str):
+        """Continuously poll the fell_finder API for the status of the latest
+        job. Periodically update the progress bar to keep the user informed
+        as routes are generated.
+
+        Args:
+            update_progress: A handle which can be used to update the progress
+                bar
+            job_id: The ID for the current job
+
+        Raises:
+            ValueError: If the API returns an unrecognised response, an
+                exception will be raised
+
+        Returns:
+            A json encoded dict, which contains 'status', 'detail' and 'job_id'
+            keys
+
+        """
+
+        print(f"Starting to poll for updates for job {job_id}")
+
+        status = {"status": "queued", "detail": ""}
+        last_status = {"status": None, "detail": None}
+
+        update_progress(_generate_bar_for_status(status))
+
+        while status["status"] not in ("success", "error"):
+            last_status = status
+            status = get_job_status(job_id)
+
+            print(f"Status is {status} ({type(status)})")
+
+            code = status["status"]
+            dtl = status["detail"]
+
+            if code in {"started", "error", "success"}:
+                pass
+
+            elif code == "queued":
+                time.sleep(1)
+
+            elif code == "calculating":
+                if status != last_status:
+                    new_bar = _generate_bar_for_calculation(dtl)
+                    update_progress(new_bar)
+                time.sleep(1)
+
+            else:
+                raise ValueError("Unhandled job status")
+
+        update_progress(_generate_bar_for_status(status))
+
+        status["job_id"] = job_id
+
+        print(f"Returning {json.dumps(status)}")
+        return [json.dumps(status)]
+
+    @callback(
+        [Output("route-store", "data")],
+        Input("route-last-job-status", "data"),
+        prevent_initial_call=True,
+    )
+    def retrieve_and_store_routes(status_str: str):
+        """Once a job has completed, check the status. If an error was
+        encountered, display a popup to the user showing details of what went
+        wrong. If routes were generated successfully, store them in memory
+        ready to be displayed by downstream callbacks.
+
+        Args:
+            status_str: A json-encoded dict containing the result of the last
+                job
+
+        Returns:
+            A json-encoded string containing details of any generated routes
+
+        """
+
+        print(f"Fetching routes based on status {status_str}")
+        status = json.loads(status_str)
+
+        # TODO: Handle error status, set up toast popups
+
+        # TODO: Make sure API returns an error type if no routes were generated
+        #       after the last attempt
+
+        routes = get_job_results(status["job_id"])
 
         routes_str = store_routes_to_str(routes)
 

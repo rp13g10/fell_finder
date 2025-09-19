@@ -111,7 +111,7 @@ pub fn get_max_cands(
     let n_edges = graph.edge_count();
     let attempt = *attempt as usize;
 
-    let max_cands = n_edges.clone() * attempt;
+    let max_cands = n_edges.clone() * attempt.pow(2);
 
     // Apply global maximum
     let max_cands = min(max_cands, config.max_candidates);

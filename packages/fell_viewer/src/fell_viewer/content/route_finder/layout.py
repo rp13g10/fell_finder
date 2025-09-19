@@ -6,6 +6,7 @@ from dash import dcc
 from fell_viewer.content.route_finder.components import (
     blank_map,
     blank_profile,
+    progress_bar,
     sidebar_contents,
 )
 
@@ -16,7 +17,10 @@ plots = dbc.Col(
     width=9,
     children=[
         dcc.Store(id="route-store", storage_type="memory"),
+        dcc.Store(id="route-current-job", storage_type="memory"),
+        dcc.Store(id="route-last-job-status", storage_type="memory"),
         dcc.Download(id="route-download"),
+        dbc.Row(progress_bar, id="route-progress-row"),
         dbc.Row(blank_map, style={"height": "calc(100vh - 264px)"}),
         dbc.Row(blank_profile),
     ],
