@@ -508,7 +508,7 @@ class GraphContractor:
             os.path.join(self.data_dir, "optimised", target),
             compression=None,
             sep="\t",
-            encoding="utf8",
+            encoding="utf-8",
             header=False,
         )
 
