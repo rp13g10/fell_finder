@@ -58,8 +58,6 @@ def request_new_route(
 
     response = requests.get(url, headers={"Content-Type": "application/json"})
 
-    print(f"Response is {response}")
-
     # TODO: Set other codes to display toast popups when progress bar is
     #       reinstated
     if response.status_code != 202:

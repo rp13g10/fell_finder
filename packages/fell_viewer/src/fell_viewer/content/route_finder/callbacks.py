@@ -5,11 +5,11 @@ import json
 import os
 import time
 from collections.abc import Callable
-from typing import Dict, List, Literal, Tuple, Union
+from typing import Any, Dict, List, Literal, Tuple, Union
 
 import dash_bootstrap_components as dbc
 import dash_leaflet as dl
-from dash import ALL, Input, Output, State, callback, ctx, no_update
+from dash import ALL, Input, Output, Patch, State, callback, ctx, no_update
 from dash._callback import NoUpdate  # type: ignore
 from plotly.graph_objects import Figure
 
@@ -164,8 +164,6 @@ def init_callbacks() -> None:
         if not n_clicks:
             return no_update
 
-        print("Route has been requested")
-
         current_marker = next(
             x
             for x in current_children
@@ -198,57 +196,84 @@ def init_callbacks() -> None:
 
         job_id = request_new_route(config)
 
-        print(f"Job ID is {job_id}")
-
         return [job_id]
 
     def _generate_bar_for_status(
         status: dict[str, str],
     ) -> dbc.Progress:
         match status["status"]:
-            case "Queued":
+            case ("queued", "started"):
                 value = 0
                 colour = "secondary"
-            case "Error":
+            case "error":
                 value = 1
                 colour = "danger"
-            case _:
+            case "success":
                 value = 1
                 colour = "success"
+            case _:  # This should never happen
+                value = 1
+                colour = "secondary"
 
         new_bar = dbc.Progress(
-            id="route-progress", min=0, max=1, value=value, color=colour
+            id="route-progress",
+            min=0,
+            max=1,
+            value=value,
+            color=colour,
+            striped=True,
+            animated=False,
         )
         return new_bar
 
     def _generate_bar_for_calculation(
         detail: dict[str, int | float],
-    ) -> dbc.Progress:
-        # TODO: Tidy this up, use partial updates to reduce traffic
-
-        print(f"Got detail: {detail} ({type(detail)})")
+    ) -> dbc.Progress | Patch:
+        # TODO: Get this working with partial updates to reduce traffic
 
         match detail["attempt"]:
             case 1:
-                colour = "primary"
+                colour = "blue"
             case 2:
-                colour = "warning"
+                colour = "indigo"
             case _:
-                colour = "danger"
+                colour = "purple"
 
-        new_bar = dbc.Progress(
+        return dbc.Progress(
             id="route-progress",
             min=0,
             max=detail["target"],
             value=detail["current"],
             color=colour,
+            striped=True,
+            animated=True,
         )
-        return new_bar
+
+    def _check_if_update_required(
+        status: dict, last_status: dict
+    ) -> Literal["full", "partial", "none"]:
+        cur_stat = status["status"]
+        cur_dtl = status["detail"]
+        last_stat = status["status"]
+        last_dtl = last_status["detail"]
+
+        if cur_stat != last_stat:
+            return "full"
+
+        if cur_dtl == last_dtl:
+            return "none"
+
+        if isinstance(cur_dtl, dict) and isinstance(last_dtl, dict):
+            # Detail only populated during calculation, so this will only occur
+            # midway through a calculation
+            return "partial"
+
+        return "full"
 
     @callback(
         [Output("route-last-job-status", "data")],
         Input("route-current-job", "data"),
-        progress=Output("route-progress-row", "children"),
+        progress=Output("route-progress-container", "children"),
         background=True,
         prevent_initial_call=True,
         manager=background_callback_manager,
@@ -273,10 +298,8 @@ def init_callbacks() -> None:
 
         """
 
-        print(f"Starting to poll for updates for job {job_id}")
-
-        status = {"status": "queued", "detail": ""}
-        last_status = {"status": None, "detail": None}
+        status: dict[str, Any] = {"status": "queued", "detail": None}
+        last_status: dict[str, Any] = {"status": None, "detail": None}
 
         update_progress(_generate_bar_for_status(status))
 
@@ -284,21 +307,21 @@ def init_callbacks() -> None:
             last_status = status
             status = get_job_status(job_id)
 
-            print(f"Status is {status} ({type(status)})")
-
             code = status["status"]
             dtl = status["detail"]
 
-            if code in {"started", "error", "success"}:
-                pass
-
-            elif code == "queued":
+            if code in {"started", "error", "success", "queued"}:
                 time.sleep(1)
 
             elif code == "calculating":
-                if status != last_status:
-                    new_bar = _generate_bar_for_calculation(dtl)
-                    update_progress(new_bar)
+                match _check_if_update_required(status, last_status):
+                    case "none":
+                        pass
+                    case "full":
+                        update_progress(_generate_bar_for_calculation(dtl))
+                    case "partial":
+                        update_progress(_generate_bar_for_calculation(dtl))
+
                 time.sleep(1)
 
             else:
@@ -308,7 +331,6 @@ def init_callbacks() -> None:
 
         status["job_id"] = job_id
 
-        print(f"Returning {json.dumps(status)}")
         return [json.dumps(status)]
 
     @callback(
@@ -331,7 +353,6 @@ def init_callbacks() -> None:
 
         """
 
-        print(f"Fetching routes based on status {status_str}")
         status = json.loads(status_str)
 
         # TODO: Handle error status, set up toast popups

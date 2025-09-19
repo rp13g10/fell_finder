@@ -36,4 +36,9 @@ sidebar_contents = dbc.Tabs(
     id="route-tabs",
 )
 
-progress_bar = dbc.Progress(id="route-progress")
+progress_bar = dbc.Col(
+    dbc.Progress(id="route-progress"),
+    width=12,
+    id="route-progress-container",
+    class_name="mb-1",
+)
