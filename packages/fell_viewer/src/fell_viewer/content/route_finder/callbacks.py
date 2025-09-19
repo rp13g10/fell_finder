@@ -164,8 +164,6 @@ def init_callbacks() -> None:
         if not n_clicks:
             return no_update
 
-        print("Route has been requested")
-
         current_marker = next(
             x
             for x in current_children
