@@ -5,6 +5,8 @@ use crate::common::graph_data::EdgeData;
 use rustc_hash::FxHashMap;
 use serde::Serialize;
 
+// MARK: Metrics
+
 /// Container for the metrics which are relevant to both candidates and routes
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct CommonMetrics {
@@ -47,6 +49,12 @@ impl CommonMetrics {
 #[derive(Clone, PartialEq, Debug)]
 pub struct CandidateMetrics {
     pub common: CommonMetrics,
+}
+
+impl Default for CandidateMetrics {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl CandidateMetrics {
@@ -94,6 +102,7 @@ impl CandidateMetrics {
     }
 }
 
+// MARK: Tests
 #[cfg(test)]
 mod tests {
 

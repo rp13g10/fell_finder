@@ -2,6 +2,7 @@
 //! nodes and edges required to represent a map of the area the user has
 //! selected for route creation
 use crate::common::config::RouteConfig;
+use crate::common::exceptions::RoutingError;
 use crate::common::graph_data::{EdgeData, NodeData};
 use aho_corasick::AhoCorasick;
 use sqlx;
@@ -17,13 +18,13 @@ pub struct NodeRow {
     elevation: f64,
 }
 
-impl Into<NodeData> for NodeRow {
-    fn into(self) -> NodeData {
+impl From<NodeRow> for NodeData {
+    fn from(val: NodeRow) -> Self {
         NodeData {
-            id: self.id,
-            lat: self.lat,
-            lon: self.lon,
-            elevation: self.elevation,
+            id: val.id,
+            lat: val.lat,
+            lon: val.lon,
+            elevation: val.elevation,
             is_start: false, // default, will be overwritten``
             dist_to_start: None, // default, will be overwritten
         }
@@ -46,30 +47,31 @@ pub struct EdgeRow {
     dists: Vec<f64>,
 }
 
-impl Into<EdgeData> for EdgeRow {
+impl From<EdgeRow> for EdgeData {
     /// Unpack the raw edge data into a format which can be loaded into the
     /// graph
-    fn into(self) -> EdgeData {
+    fn from(val: EdgeRow) -> Self {
         EdgeData {
-            src: self.src,
-            dst: self.dst,
-            highway: self.highway,
-            surface: self.surface,
-            elevation_gain: self.elevation_gain,
-            elevation_loss: self.elevation_loss,
-            distance: self.distance,
-            lats: self.lats,
-            lons: self.lons,
-            eles: self.eles,
-            dists: self.dists,
+            src: val.src,
+            dst: val.dst,
+            highway: val.highway,
+            surface: val.surface,
+            elevation_gain: val.elevation_gain,
+            elevation_loss: val.elevation_loss,
+            distance: val.distance,
+            lats: val.lats,
+            lons: val.lons,
+            eles: val.eles,
+            dists: val.dists,
         }
     }
 }
 
 /// Generate a SQL query to read in the nodes for a route based on the
 /// provided user configuration
-/// /// TODO: Swap over to using aho-corasick, all subs in single iteration
-pub fn generate_nodes_query(config: Arc<RouteConfig>) -> String {
+pub fn generate_nodes_query(
+    config: Arc<RouteConfig>,
+) -> Result<String, RoutingError> {
     let bbox = config.get_bounding_box();
 
     let ptn_list = bbox.get_partition_list();
@@ -93,17 +95,26 @@ pub fn generate_nodes_query(config: Arc<RouteConfig>) -> String {
         bbox.max_lon.to_string(),
     ];
 
-    let ac = AhoCorasick::new(patterns)
-        .expect("Something went wrong while setting up aho-corasick");
+    let ac = match AhoCorasick::new(patterns) {
+        Ok(ac) => ac,
+        Err(_) => {
+            return Err(RoutingError::DeveloperError(
+                "Something went wrong while setting up aho-corasick"
+                    .to_string(),
+            ));
+        }
+    };
 
     let nodes_query = ac.replace_all(nodes_base, &replace_with);
 
-    nodes_query
+    Ok(nodes_query)
 }
 
 /// Generate a SQL query to read in the edges for a route based on the
 /// provided user configuration
-pub fn generate_edges_query(config: Arc<RouteConfig>) -> String {
+pub fn generate_edges_query(
+    config: Arc<RouteConfig>,
+) -> Result<String, RoutingError> {
     let bbox = config.get_bounding_box();
 
     let ptn_list = bbox.get_partition_list();
@@ -133,34 +144,52 @@ pub fn generate_edges_query(config: Arc<RouteConfig>) -> String {
         bbox.max_lon.to_string(),
     ];
 
-    let ac = AhoCorasick::new(patterns)
-        .expect("Something went wrong while setting up aho-corasick");
-
+    let ac = match AhoCorasick::new(patterns) {
+        Ok(ac) => ac,
+        Err(_) => {
+            return Err(RoutingError::DeveloperError(
+                "Something went wrong while setting up aho-corasick"
+                    .to_string(),
+            ));
+        }
+    };
     let edges_query = ac.replace_all(edges_base, &replace_with);
 
-    edges_query
+    Ok(edges_query)
 }
+
+// TODO: Combine node/edge loaders with args or as a macro
 
 /// Executes the nodes SQL query and returns a vector of NodeRow
 pub async fn load_nodes(
     pool: &PgPool,
     config: Arc<RouteConfig>,
-) -> Vec<NodeRow> {
+) -> Result<Vec<NodeRow>, RoutingError> {
     let query = generate_nodes_query(config);
-    let rows: Vec<NodeRow> =
-        sqlx::query_as(&query).fetch_all(pool).await.unwrap();
-    rows
+    let maybe_rows: Result<Vec<NodeRow>, sqlx::Error> =
+        sqlx::query_as(&query?).fetch_all(pool).await;
+    match maybe_rows {
+        Ok(rows) => Ok(rows),
+        Err(_) => Err(RoutingError::DatabaseError(
+            "Error while fetching nodes".to_string(),
+        )),
+    }
 }
 
 /// Executes the edges SQL query and returns a vector of NodeRow
 pub async fn load_edges(
     pool: &PgPool,
     config: Arc<RouteConfig>,
-) -> Vec<EdgeRow> {
+) -> Result<Vec<EdgeRow>, RoutingError> {
     let query = generate_edges_query(config);
-    let rows: Vec<EdgeRow> =
-        sqlx::query_as(&query).fetch_all(pool).await.unwrap();
-    rows
+    let maybe_rows: Result<Vec<EdgeRow>, sqlx::Error> =
+        sqlx::query_as(&query?).fetch_all(pool).await;
+    match maybe_rows {
+        Ok(rows) => Ok(rows),
+        Err(_) => Err(RoutingError::DatabaseError(
+            "Error while fetching edges".to_string(),
+        )),
+    }
 }
 
 #[cfg(test)]
@@ -231,18 +260,18 @@ mod tests {
         let test_config = RouteConfig {
             centre: (0.0, 0.0).into(),
             route_mode: RouteMode::Hilly,
-            max_candidates: 1,
             min_distance: 9000.0,
             max_distance: 10000.0,
             highways: vec!["highway_1".to_string()],
             surfaces: vec!["surface_1".to_string(), "surface_2".to_string()],
             surface_restriction: None,
+            job_id: "42".to_string(),
         };
         let test_config = Arc::new(test_config);
 
         let target = include_str!("test_data/nodes.sql");
 
-        let result = generate_nodes_query(test_config);
+        let result = generate_nodes_query(test_config).unwrap();
         assert_eq!(result, target);
     }
 
@@ -251,18 +280,18 @@ mod tests {
         let test_config = RouteConfig {
             centre: (0.0, 0.0).into(),
             route_mode: RouteMode::Hilly,
-            max_candidates: 1,
             min_distance: 9000.0,
             max_distance: 10000.0,
             highways: vec!["highway_1".to_string()],
             surfaces: vec!["surface_1".to_string(), "surface_2".to_string()],
             surface_restriction: None,
+            job_id: "42".to_string(),
         };
         let test_config = Arc::new(test_config);
 
         let target = include_str!("test_data/edges.sql");
 
-        let result = generate_edges_query(test_config);
+        let result = generate_edges_query(test_config).unwrap();
         assert_eq!(result, target);
     }
 }

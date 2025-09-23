@@ -7,92 +7,251 @@ use axum::response::IntoResponse;
 use axum::routing::get;
 use axum::serve;
 use axum::{Json, Router};
-use fell_finder::common::config::{RouteConfig, UserRouteConfig};
+use fell_finder::common::config::{
+    BackendConfig, RouteConfig, UserRouteConfig,
+};
+use fell_finder::common::exceptions::{ConfigError, RoutingError};
+use fell_finder::common::graph_data::TaggedGraph;
+use fell_finder::common::messages::{
+    JobId, JobStatus, content_from_redis, content_to_redis,
+};
 use fell_finder::loading::petgraph::{
     create_graph, drop_unreachable_nodes, tag_dists_to_start, tag_start_node,
 };
 use fell_finder::loading::postgres::{load_edges, load_nodes};
 use fell_finder::routing::zimmer::generate_routes;
-use serde_json::json;
+use redis::aio::MultiplexedConnection;
 use sqlx::postgres::{PgPool, PgPoolOptions};
+use sqlx::{Pool, Postgres};
 use std::sync::Arc;
-use std::time::Instant;
 
 /// Allow passing of the database connection pool into request handlers
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct AppState {
     db: PgPool,
+    redis: MultiplexedConnection,
+    cfg: BackendConfig,
 }
 
-// TODO: Allow configuration of backend systems via API params, pull from env
-//       vars if not provided. Easier for experimentation.
+/// Verify that the user provided query can be processed into a valid route
+/// configuration
+fn parse_user_params_and_set_job_id(
+    query: UserRouteConfig,
+) -> Result<RouteConfig, RoutingError> {
+    // Attempt to parse user provided route config
+    let maybe_route_config: Result<RouteConfig, ConfigError> =
+        query.try_into();
+    let route_config = match maybe_route_config {
+        Ok(config) => config,
+        Err(err) => return Err(RoutingError::ConfigError(err)),
+    };
 
-/// Based on the user provided configuration options, attempt to generate
-/// routes which satisfy the requirements. Currently only success status codes
-/// are returned. More graceful error handling is planned for a future
-/// release.
-async fn get_routes(
-    State(state): State<AppState>,
-    Query(query): Query<UserRouteConfig>,
-) -> impl IntoResponse {
-    // Capture stats for param optimisation
-    let start_time = Instant::now();
+    Ok(route_config)
+}
 
-    // Config needs to be shared across all candidates
-    let route_config: RouteConfig = query.into();
-    let shared_config = Arc::new(route_config);
-
-    let nodes = load_nodes(&state.db, Arc::clone(&shared_config)).await;
-    let edges = load_edges(&state.db, Arc::clone(&shared_config)).await;
+/// Based on the provided user config, fetch all corresponding nodes and edges
+/// for the route area. Load these into petgraph.
+async fn get_tagged_graph_for_routing(
+    db: Pool<Postgres>,
+    route_config: Arc<RouteConfig>,
+) -> Result<TaggedGraph, RoutingError> {
+    let nodes = load_nodes(&db, Arc::clone(&route_config)).await?;
+    let edges = load_edges(&db, Arc::clone(&route_config)).await?;
 
     let graph = create_graph(nodes, edges);
 
-    let (mut start_inx, mut graph) =
-        tag_start_node(Arc::clone(&shared_config), graph);
-    graph = tag_dists_to_start(&start_inx, graph);
+    let mut tagged_graph = tag_start_node(Arc::clone(&route_config), graph)?;
 
-    (start_inx, graph) =
-        drop_unreachable_nodes(graph, Arc::clone(&shared_config));
+    tagged_graph = tag_dists_to_start(tagged_graph);
 
-    let mut routes = generate_routes(graph, shared_config, start_inx, 1);
+    tagged_graph =
+        drop_unreachable_nodes(tagged_graph, Arc::clone(&route_config))?;
+    Ok(tagged_graph)
+}
 
-    // Log completion time
-    // TODO: Figure out why mutating metrics directly doesn't seem to stick
-    let duration = start_time.elapsed().as_secs_f64();
-    routes.metrics.duration = duration.try_into().unwrap();
+/// Based on the user provided configuration options, attempt to generate
+/// routes which satisfy the requirements.
+async fn generate_request_future(state: AppState, route_config: RouteConfig) {
+    let mut redis_conn = state.redis;
+    let job_id = route_config.job_id.clone();
 
-    (axum::http::StatusCode::OK, Json(routes)).into_response()
+    content_to_redis(&job_id, "status", JobStatus::Started, &mut redis_conn)
+        .await;
+
+    // Create shareable references to configs
+    let route_config = Arc::new(route_config);
+    let backend_config = Arc::new(state.cfg);
+    let db = state.db;
+
+    // Attempt to fetch data for route generation
+    let maybe_tagged_graph =
+        get_tagged_graph_for_routing(db, Arc::clone(&route_config)).await;
+    let tagged_graph = match maybe_tagged_graph {
+        Ok(tagged_graph) => tagged_graph,
+        Err(err) => {
+            content_to_redis(
+                &job_id,
+                "status",
+                JobStatus::Error(err),
+                &mut redis_conn,
+            )
+            .await;
+            return;
+        }
+    };
+
+    // Attempt to create the route
+    let maybe_routes = generate_routes(
+        tagged_graph,
+        route_config,
+        backend_config,
+        1,
+        &mut redis_conn,
+    )
+    .await;
+
+    match maybe_routes {
+        Ok(routes) => {
+            content_to_redis(&job_id, "result", routes, &mut redis_conn).await;
+        }
+        Err(err) => {
+            content_to_redis(
+                &job_id,
+                "status",
+                JobStatus::Error(err),
+                &mut redis_conn,
+            )
+            .await;
+        }
+    };
+}
+
+/// Triggers route creation as a background task, returns a job ID to the user
+/// which can be used to poll for status updates & retrieve completed routes
+#[axum::debug_handler]
+async fn route_request(
+    State(state): State<AppState>,
+    Query(query): Query<UserRouteConfig>,
+) -> impl IntoResponse {
+    let mut redis_conn = state.redis.clone();
+
+    // Make sure user has provided a valid configuration
+    let route_config = match parse_user_params_and_set_job_id(query) {
+        Ok(config) => config,
+        Err(err) => {
+            return (axum::http::StatusCode::BAD_REQUEST, Json(err))
+                .into_response();
+        }
+    };
+
+    // Prepare route response
+    let job_id = route_config.job_id.clone();
+    let response_contents = JobId {
+        job_id: route_config.job_id.clone(),
+    };
+
+    // Trigger route generation as background task
+    let request_future = generate_request_future(state, route_config);
+    content_to_redis(&job_id, "status", JobStatus::Queued, &mut redis_conn)
+        .await;
+    tokio::spawn(request_future);
+
+    (axum::http::StatusCode::ACCEPTED, Json(response_contents)).into_response()
+}
+
+/// Allows a user to check the status of a job
+async fn route_status(
+    State(state): State<AppState>,
+    Query(job): Query<JobId>,
+) -> impl IntoResponse {
+    let mut redis_conn = state.redis;
+    let job_id = job.job_id;
+
+    let content = content_from_redis(&job_id, "status", &mut redis_conn).await;
+
+    match content {
+        Some(status) => (axum::http::StatusCode::OK, status).into_response(),
+        None => (
+            axum::http::StatusCode::NO_CONTENT,
+            format!("Requested job_id {} not found", job_id),
+        )
+            .into_response(),
+    }
+}
+
+/// Allows a user to retrieve the results of a completed job
+async fn route_retrieve(
+    State(state): State<AppState>,
+    Query(job): Query<JobId>,
+) -> impl IntoResponse {
+    let mut redis_conn = state.redis;
+    let job_id = job.job_id;
+
+    let content = content_from_redis(&job_id, "result", &mut redis_conn).await;
+
+    match content {
+        Some(routes) => (axum::http::StatusCode::OK, routes).into_response(),
+        None => (
+            axum::http::StatusCode::NO_CONTENT,
+            format!("Requested job_id {} has not completed yet", job_id),
+        )
+            .into_response(),
+    }
 }
 
 /// Very basic health checker, verify that the app is running and reachable
 async fn health_check() -> impl IntoResponse {
     let msg = "Hello World!";
 
-    let json_response = json!({
-        "status": "success",
-        "message": msg
-    });
-
-    Json(json_response)
+    (axum::http::StatusCode::OK, msg).into_response()
 }
 
 /// Entry point for the fell_finder API
 #[tokio::main]
 async fn main() {
-    let pool = PgPoolOptions::new()
+    // Fetch server configuration options from environment variables
+    let backend_config = BackendConfig::new()
+        .expect("Critical error retrieving backend config!");
+
+    // Connect to postgres DB, contains map data
+    let db_pool = PgPoolOptions::new()
         .max_connections(5)
-        .connect("postgres://postgres:postgres@localhost:5432/fell_finder")
+        .connect(&format!(
+            "postgres://{}:{}@localhost:5432/fell_finder",
+            backend_config.db_user, backend_config.db_pass
+        ))
         .await
         .expect("Error connecting to postgres!");
 
-    let state = AppState { db: pool };
+    // Connect to redis, used to job status & outputs
+    let client = redis::Client::open("redis://127.0.0.1/")
+        .expect("Error connecting to redis!");
+    let redis_conn = client.get_multiplexed_tokio_connection().await.unwrap();
 
+    // Package connections into shared app state
+    let state = AppState {
+        db: db_pool,
+        redis: redis_conn,
+        cfg: backend_config,
+    };
+
+    // TODO: Add support for `--serve` and `--profile` args on launch to
+    //       allow easier benchmarking
+
+    // Define API endpoints
     let router = Router::new()
         .route("/healthcheck", get(health_check))
-        .route("/loop", get(get_routes))
+        // .route("/loop", get(get_routes))
+        .route("/route/request", get(route_request))
+        .route("/route/status", get(route_status))
+        .route("/route/retrieve", get(route_retrieve))
         .with_state(state);
+
+    // Bind to port 8000
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8000")
         .await
         .expect("Error binding to localhost:8000!");
+
+    // Serve the API
     serve(listener, router).await.expect("Error serving API!");
 }

@@ -1,3 +1,6 @@
+use petgraph::graph::NodeIndex;
+use petgraph::{Directed, Graph};
+
 /// Sets the data which will be stored as weights in the petgraph graph, all
 /// attributes will be populated after the graph is created
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
@@ -25,4 +28,9 @@ pub struct EdgeData {
     pub lons: Vec<f64>,
     pub eles: Vec<f64>,
     pub dists: Vec<f64>,
+}
+
+pub struct TaggedGraph {
+    pub start_inx: NodeIndex,
+    pub graph: Graph<NodeData, EdgeData, Directed, u32>,
 }

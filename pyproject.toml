@@ -16,7 +16,6 @@ dev = [
     "pytest-cov>=6.0.0",
     "pytest-xdist>=3.6.1",
     "ruff>=0.8.4",
-    "vulture>=2.14",
 ]
 
 [build-system]
@@ -55,12 +54,3 @@ fell-viewer = { workspace = true }
 
 [tool.uv.workspace]
 members = ["packages/fell_viewer", "packages/fell_loader"]
-
-[tool.vulture]
-paths = [
-    "packages/fell_loader/src",
-    "packages/fell_viewer/src",
-    "webapp.py",
-    "ingestion.py",
-    "vulture_allowlist.py"
-]
