@@ -159,7 +159,7 @@ fn get_cand_ordering(
 /// Sort a vector of candidates according to the user preference, the
 /// hilliest/flattest route will become the first item in the vector
 pub fn sort_candidates(
-    candidates: &mut Vec<Candidate>,
+    candidates: &mut [Candidate],
     config: Arc<RouteConfig>,
 ) {
     // Note inverse comparison to sort in descending order
@@ -170,7 +170,7 @@ pub fn sort_candidates(
 /// the threshold for every candidate which has already been selected
 fn check_if_candidate_is_dissimilar(
     candidate: &Candidate,
-    selected: &Vec<Candidate>,
+    selected: &[Candidate],
     threshold: &f64,
 ) -> bool {
     // https://www.sciencedirect.com/science/article/pii/S1319157817304512

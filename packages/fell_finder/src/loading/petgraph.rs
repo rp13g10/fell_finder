@@ -137,8 +137,6 @@ pub fn tag_dists_to_start(mut tagged_graph: TaggedGraph) -> TaggedGraph {
     for (node_inx, dist) in dists.iter() {
         if let Some(weight) = tagged_graph.graph.node_weight_mut(*node_inx) {
             weight.dist_to_start = Some(*dist);
-        } else {
-            
         }
     }
 
@@ -171,7 +169,9 @@ pub fn get_start_node(
     graph: &Graph<NodeData, EdgeData, Directed, u32>,
 ) -> Option<NodeIndex> {
     for (node_inx, node_data) in graph.node_references() {
-        if node_data.is_start == true { return Some(node_inx) }
+        if node_data.is_start {
+            return Some(node_inx);
+        }
     }
     None
 }
@@ -183,7 +183,9 @@ pub fn get_start_and_end_nodes(
     let mut start_node: Option<NodeIndex> = None;
     let mut end_node: Option<NodeIndex> = None;
     for (node_inx, node_data) in graph.node_references() {
-        if node_data.is_start == true { start_node = Some(node_inx) }
+        if node_data.is_start {
+            start_node = Some(node_inx)
+        }
         if node_data.id == edge.dst {
             end_node = Some(node_inx)
         }

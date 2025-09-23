@@ -20,7 +20,6 @@ use fell_finder::loading::petgraph::{
 };
 use fell_finder::loading::postgres::{load_edges, load_nodes};
 use fell_finder::routing::zimmer::generate_routes;
-use redis;
 use redis::aio::MultiplexedConnection;
 use sqlx::postgres::{PgPool, PgPoolOptions};
 use sqlx::{Pool, Postgres};

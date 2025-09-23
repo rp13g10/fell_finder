@@ -75,15 +75,11 @@ fn process_candidates(
 fn get_route_ordering(a: &Route, b: &Route, mode: &RouteMode) -> Ordering {
     let a_ratio = match mode {
         RouteMode::Hilly => a.metrics.common.gain / a.metrics.common.dist,
-        RouteMode::Flat => {
-            -(a.metrics.common.gain / a.metrics.common.dist)
-        }
+        RouteMode::Flat => -(a.metrics.common.gain / a.metrics.common.dist),
     };
     let b_ratio = match mode {
         RouteMode::Hilly => b.metrics.common.gain / b.metrics.common.dist,
-        RouteMode::Flat => {
-            -(b.metrics.common.gain / b.metrics.common.dist)
-        }
+        RouteMode::Flat => -(b.metrics.common.gain / b.metrics.common.dist),
     };
 
     match a_ratio.partial_cmp(&b_ratio) {
@@ -94,7 +90,7 @@ fn get_route_ordering(a: &Route, b: &Route, mode: &RouteMode) -> Ordering {
 
 /// Sort a vector of routes according to the user preference, the
 /// hilliest/flattest route will become the first item in the vector
-pub fn sort_routes(routes: &mut Vec<Route>, config: Arc<RouteConfig>) {
+pub fn sort_routes(routes: &mut [Route], config: Arc<RouteConfig>) {
     // Note inverse comparison to sort in descending order
     routes.sort_by(|a, b| get_route_ordering(b, a, &config.route_mode));
 }
@@ -114,7 +110,6 @@ pub fn get_max_cands(
     let max_cands = n_edges * attempt.pow(2);
 
     // Apply global maximum
-    
 
     min(max_cands, config.max_candidates)
 }
@@ -211,10 +206,9 @@ pub async fn generate_routes(
     }
 
     // If no completed candidates, try again with higher max candidates
-    let no_cands = candidates.len() == 0;
     let attempts_remaining = attempt < 3;
     let not_at_global_max = max_cands < backend_config.max_candidates;
-    if no_cands & attempts_remaining & not_at_global_max {
+    if candidates.is_empty() & attempts_remaining & not_at_global_max {
         // Box::pin required for recursive async function calls
         return Box::pin(generate_routes(
             tagged_graph,
@@ -241,8 +235,7 @@ pub async fn generate_routes(
     sort_routes(&mut routes, Arc::clone(&route_config));
 
     // If no completed routes, try again with higher max candidates
-    let no_routes = routes.len() == 0;
-    if no_routes & attempts_remaining & not_at_global_max {
+    if routes.is_empty() & attempts_remaining & not_at_global_max {
         return Box::pin(generate_routes(
             tagged_graph,
             route_config,
@@ -251,7 +244,7 @@ pub async fn generate_routes(
             conn,
         ))
         .await;
-    } else if no_routes {
+    } else if routes.is_empty() {
         return Err(RoutingError::NoRoutesError);
     }
 

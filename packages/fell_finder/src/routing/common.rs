@@ -106,8 +106,6 @@ impl Candidate {
             Some(start) => {
                 if &edata.dst == start {
                     return Ok(false);
-                } else {
-                    ();
                 }
             }
             // If there is no 0th point, the candidate has not been set up
@@ -144,7 +142,9 @@ impl Candidate {
     fn sum_surfaces_distance(&self, surfaces: &Vec<String>) -> f64 {
         let mut dist = 0.0;
         for surface in surfaces {
-            if let Some(s_dist) = self.metrics.common.s_dists.get(surface) { dist += s_dist }
+            if let Some(s_dist) = self.metrics.common.s_dists.get(surface) {
+                dist += s_dist
+            }
         }
         dist
     }
@@ -191,7 +191,11 @@ impl Candidate {
         // Pre-validation -----------------------------------------------------
         // Check if node has already been visited
         match self.check_for_overlap(eref) {
-            Ok(overlap) => if overlap == true { return StepResult::Invalid },
+            Ok(overlap) => {
+                if overlap {
+                    return StepResult::Invalid;
+                }
+            }
             Err(_) => return StepResult::Invalid,
         }
 
