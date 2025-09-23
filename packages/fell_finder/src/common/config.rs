@@ -110,8 +110,6 @@ impl TryInto<RouteConfig> for UserRouteConfig {
 
         let job_id = Uuid::new_v4().to_string();
 
-        let job_id = Uuid::new_v4().to_string();
-
         Ok(RouteConfig {
             centre,
             route_mode,
