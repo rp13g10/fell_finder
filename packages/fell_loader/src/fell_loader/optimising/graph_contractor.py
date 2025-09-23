@@ -283,8 +283,8 @@ class GraphContractor:
         """
 
         edges = edges.groupBy("chain_src", "chain_dst").agg(
-            F.collect_set("highway").alias("highway"),
-            F.collect_set("surface").alias("surface"),
+            F.array_sort(F.collect_set("highway")).alias("highway"),
+            F.array_sort(F.collect_set("surface")).alias("surface"),
             F.sum("elevation_gain").alias("elevation_gain"),
             F.sum("elevation_loss").alias("elevation_loss"),
             F.sum("distance").alias("distance"),

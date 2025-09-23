@@ -1369,7 +1369,7 @@ def test_store_df():
     # Assert
     test_df.write.mode.assert_called_once_with("overwrite")
     test_df.csv.assert_called_once_with(
-        target_path, compression=None, sep="\t", encoding="utf8", header=False
+        target_path, compression=None, sep="\t", encoding="utf-8", header=False
     )
 
 
