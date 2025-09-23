@@ -18,6 +18,8 @@ pub struct JobId {
     pub job_id: String,
 }
 
+/// Container for job progress, contains the information required to display a
+/// progress bar for a job which has been started
 #[derive(Serialize, Debug, Clone)]
 pub struct JobProgress {
     current: f64,
@@ -46,6 +48,7 @@ impl JobProgress {
     }
 }
 
+/// Contains details of the status of a current job
 #[derive(Debug)]
 pub enum JobStatus {
     Queued,
@@ -55,6 +58,8 @@ pub enum JobStatus {
     Error(RoutingError),
 }
 
+// Define custom serialization options, this ensures a consistent format
+// is used when returning status information to users
 impl Serialize for JobStatus {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -91,6 +96,8 @@ impl Serialize for JobStatus {
     }
 }
 
+/// Combines the details of a job with a job ID, ready to be sent back to the
+/// user in response to an API request
 #[derive(Serialize, Debug)]
 pub struct JobDetails {
     pub job_id: String,
@@ -99,6 +106,8 @@ pub struct JobDetails {
 
 // MARK: Redis
 
+/// Convenience function which writes content to Redis, such as job status or
+/// job results. Keys are set based on the job ID and the content type.
 pub async fn content_to_redis(
     job_id: &str,
     content_type: &str,
@@ -115,6 +124,8 @@ pub async fn content_to_redis(
         )
 }
 
+/// Convenience function which retrieves content from Redis, such as job status
+/// or job results. Keys are set based on the job ID and the content type.
 pub async fn content_from_redis(
     job_id: &str,
     content_type: &str,

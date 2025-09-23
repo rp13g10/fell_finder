@@ -22,6 +22,7 @@ pub enum RouteMode {
     Flat,
 }
 
+// Enable conversion from string input, used when parsing API requests
 impl FromStr for RouteMode {
     type Err = ConfigError;
 
@@ -53,10 +54,8 @@ impl SurfaceRestriction {
         match restricted_surfaces {
             Some(surfaces) => match restricted_surfaces_perc {
                 Some(perc) => {
-                    let surfaces_vec: Vec<String> = surfaces
-                        .split(',')
-                        .map(String::from)
-                        .collect();
+                    let surfaces_vec: Vec<String> =
+                        surfaces.split(',').map(String::from).collect();
 
                     Some(SurfaceRestriction {
                         restricted_surfaces: surfaces_vec,
@@ -103,17 +102,11 @@ impl TryInto<RouteConfig> for UserRouteConfig {
 
         let route_mode = RouteMode::from_str(&self.route_mode)?;
 
-        let highways: Vec<String> = self
-            .highway_types
-            .split(',')
-            .map(String::from)
-            .collect();
+        let highways: Vec<String> =
+            self.highway_types.split(',').map(String::from).collect();
 
-        let surfaces: Vec<String> = self
-            .surface_types
-            .split(',')
-            .map(String::from)
-            .collect();
+        let surfaces: Vec<String> =
+            self.surface_types.split(',').map(String::from).collect();
 
         let job_id = Uuid::new_v4().to_string();
 
@@ -152,10 +145,8 @@ impl RouteConfig {
     pub fn get_bounding_box(&self) -> BBox {
         let dist_to_corner: f64 = (self.max_distance / 2.0) * (2.0_f64.sqrt());
 
-        let ne =
-            Haversine::destination(self.centre, 45.0, dist_to_corner);
-        let sw =
-            Haversine::destination(self.centre, 225.0, dist_to_corner);
+        let ne = Haversine::destination(self.centre, 45.0, dist_to_corner);
+        let sw = Haversine::destination(self.centre, 225.0, dist_to_corner);
 
         BBox::from_points(&ne, &sw)
     }

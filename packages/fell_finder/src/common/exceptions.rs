@@ -10,6 +10,8 @@ pub enum BackendError {
     InvalidEvarError(String),
 }
 
+// Make tracebacks a bit more helpful if backend configuration options are not
+// set properly
 impl fmt::Display for BackendError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let msg = match self {
@@ -31,6 +33,8 @@ pub enum ConfigError {
 }
 
 impl ConfigError {
+    // Return a more user-friendly string. This is a tactical fix until a
+    // serde-based solution can be set up
     fn to_user_facing_string(&self) -> String {
         match self {
             Self::MissingParamError(param) => {
@@ -43,6 +47,8 @@ impl ConfigError {
     }
 }
 
+// Make tracebacks a bit more helpful if route configuration options are not
+// set properly
 impl fmt::Display for ConfigError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let msg = match self {
@@ -69,6 +75,8 @@ pub enum RoutingError {
     TimeoutError,
 }
 
+// Custom serialization for routing errors, this content is displayed in the
+// popup messages displayed to users if route creation fails for any reason.
 impl Serialize for RoutingError {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -91,6 +99,7 @@ impl Serialize for RoutingError {
                 "A route with impossible geometry was generated".to_string()
             }
             Self::NoRoutesError => {
+                // TODO: Figure out a tidy syntax for multi-line strings
                 "No routes could be generated for the current settings. Please try a different start point, or changing some settings.".to_string()
             }
             Self::InvalidCandidateError => {
@@ -100,10 +109,14 @@ impl Serialize for RoutingError {
                 // TODO: Check to see if there's a way to have Serde convert
                 //       the config error directly to string
                 let cfg_msg = err.to_user_facing_string();
-                format!("An error with the provided route configuration was encountered: {}", cfg_msg)
+                format!(
+                    "An error with the provided route configuration was encountered: {}",
+                    cfg_msg
+                )
             }
             Self::TimeoutError => {
-                "Route calculation timed out. Please try a shorter distance.".to_string()
+                "Route calculation timed out. Please try a shorter distance."
+                    .to_string()
             }
         };
         serializer.serialize_str(&msg)

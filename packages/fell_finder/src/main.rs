@@ -209,9 +209,11 @@ async fn health_check() -> impl IntoResponse {
 /// Entry point for the fell_finder API
 #[tokio::main]
 async fn main() {
+    // Fetch server configuration options from environment variables
     let backend_config = BackendConfig::new()
         .expect("Critical error retrieving backend config!");
 
+    // Connect to postgres DB, contains map data
     let db_pool = PgPoolOptions::new()
         .max_connections(5)
         .connect(&format!(
@@ -221,22 +223,22 @@ async fn main() {
         .await
         .expect("Error connecting to postgres!");
 
-    // NOTE: Suggestion from redis docs is to clone the redis_conn into each
-    // request, operation should be cheap
+    // Connect to redis, used to job status & outputs
     let client = redis::Client::open("redis://127.0.0.1/")
         .expect("Error connecting to redis!");
     let redis_conn = client.get_multiplexed_tokio_connection().await.unwrap();
 
+    // Package connections into shared app state
     let state = AppState {
         db: db_pool,
         redis: redis_conn,
         cfg: backend_config,
     };
 
-    // TODO: Add an endpoint which allows users to request a route and get the
-    //       response directly, without having to generate a separate retrieve
-    //       call
+    // TODO: Add support for `--serve` and `--profile` args on launch to
+    //       allow easier benchmarking
 
+    // Define API endpoints
     let router = Router::new()
         .route("/healthcheck", get(health_check))
         // .route("/loop", get(get_routes))
@@ -244,8 +246,12 @@ async fn main() {
         .route("/route/status", get(route_status))
         .route("/route/retrieve", get(route_retrieve))
         .with_state(state);
+
+    // Bind to port 8000
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8000")
         .await
         .expect("Error binding to localhost:8000!");
+
+    // Serve the API
     serve(listener, router).await.expect("Error serving API!");
 }

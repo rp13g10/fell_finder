@@ -176,27 +176,6 @@ pub fn get_start_node(
     None
 }
 
-pub fn get_start_and_end_nodes(
-    graph: &Graph<NodeData, EdgeData, Directed, u32>,
-    edge: &EdgeData,
-) -> Option<(NodeIndex, NodeIndex)> {
-    let mut start_node: Option<NodeIndex> = None;
-    let mut end_node: Option<NodeIndex> = None;
-    for (node_inx, node_data) in graph.node_references() {
-        if node_data.is_start {
-            start_node = Some(node_inx)
-        }
-        if node_data.id == edge.dst {
-            end_node = Some(node_inx)
-        }
-    }
-
-    match start_node {
-        None => None,
-        Some(start_inx) => end_node.map(|end_inx| (start_inx, end_inx)),
-    }
-}
-
 /// Construct a new graph which contains only those nodes which are reachable
 /// from the start node. This includes both nodes for which no route back to
 /// the start exist, and nodes which are too far from the start point to be
