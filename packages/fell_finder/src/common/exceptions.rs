@@ -67,8 +67,6 @@ impl fmt::Display for ConfigError {
 pub enum RoutingError {
     NoMapDataError,
     DatabaseError(String),
-    RedisError(String),
-    UserError(String),
     DeveloperError(String),
     GeometryError,
     NoRoutesError,
