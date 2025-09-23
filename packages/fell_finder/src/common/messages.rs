@@ -120,10 +120,6 @@ pub async fn content_from_redis(
     content_type: &str,
     conn: &mut MultiplexedConnection,
 ) -> Option<String> {
-    // TODO: Validate behaviour when querying a key which does not exist, seems
-    //       likely that calling expect will cause a panic if the key isn't
-    //       there?
-
     let key = format!("{}_{}", content_type, job_id);
     let content: Result<String, RedisError> =
         redis::cmd("GET").arg(&[key]).query_async(conn).await;

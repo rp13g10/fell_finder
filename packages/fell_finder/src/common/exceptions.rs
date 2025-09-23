@@ -24,10 +24,23 @@ impl fmt::Display for BackendError {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Clone, Debug)]
 pub enum ConfigError {
     MissingParamError(String),
     InvalidParamError(String),
+}
+
+impl ConfigError {
+    fn to_user_facing_string(&self) -> String {
+        match self {
+            Self::MissingParamError(param) => {
+                format!("Missing parameter: {}", param)
+            }
+            Self::InvalidParamError(param) => {
+                format!("Invalid parameter: {}", param)
+            }
+        }
+    }
 }
 
 impl fmt::Display for ConfigError {
@@ -44,17 +57,55 @@ impl fmt::Display for ConfigError {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub enum RoutingError {
     NoMapDataError,
     DatabaseError(String),
-    RedisError(String),
-    UserError(String),
     DeveloperError(String),
-    BinningError,
     GeometryError,
     NoRoutesError,
     InvalidCandidateError,
     ConfigError(ConfigError),
     TimeoutError,
+}
+
+impl Serialize for RoutingError {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let msg: String = match self {
+            Self::NoMapDataError => {
+                "No map data is available for the selected area".to_string()
+            }
+            Self::DatabaseError(err) => {
+                format!("An error was encountered while loading data: {}", err)
+            }
+            Self::DeveloperError(err) => {
+                format!(
+                    "Oops! There seems to be an issue with the server: {}",
+                    err
+                )
+            }
+            Self::GeometryError => {
+                "A route with impossible geometry was generated".to_string()
+            }
+            Self::NoRoutesError => {
+                "No routes could be generated for the current settings. Please try a different start point, or changing some settings.".to_string()
+            }
+            Self::InvalidCandidateError => {
+                "A route with no data was generated".to_string()
+            }
+            Self::ConfigError(err) => {
+                // TODO: Check to see if there's a way to have Serde convert
+                //       the config error directly to string
+                let cfg_msg = err.to_user_facing_string();
+                format!("An error with the provided route configuration was encountered: {}", cfg_msg)
+            }
+            Self::TimeoutError => {
+                "Route calculation timed out. Please try a shorter distance.".to_string()
+            }
+        };
+        serializer.serialize_str(&msg)
+    }
 }
