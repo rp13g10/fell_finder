@@ -29,7 +29,7 @@ fn get_bin_details(
     let bin_size: usize = backend_config.bin_size;
 
     // Total number of bins which will be required
-    let num_bins = (max_cands.clone() as f64 / bin_size as f64).ceil();
+    let num_bins = (*max_cands as f64 / bin_size as f64).ceil();
 
     // Set x bins based on square root of total, then determine number of y
     // bins required to get to the desired total
@@ -191,7 +191,7 @@ fn check_if_candidate_is_dissimilar(
         };
 
         // Compare scores
-        let similarity = &get_similarity(candidate, &selected_candidate);
+        let similarity = &get_similarity(candidate, selected_candidate);
         if similarity > threshold {
             return false;
         }
@@ -230,7 +230,7 @@ pub fn get_dissimilar_routes(
     let mut target_met = false;
 
     // Keep going until required number of routes has been selected
-    while (!target_met) & (to_process.len() > 0) {
+    while (!target_met) & (!to_process.is_empty()) {
         // Compare every candidate to the ones already selected, keep them if
         // they are sufficiently different from all other selected routes
         for candidate in to_process.drain(..) {
@@ -253,7 +253,7 @@ pub fn get_dissimilar_routes(
         // If required number of candidates has not been seleted, increase
         // the threshold and try again
         if (!target_met) & (threshold < max_similarity) {
-            to_process.extend(too_similar.drain(..));
+            to_process.append(&mut too_similar);
             threshold += 0.1;
             if threshold > max_similarity {
                 threshold = max_similarity;

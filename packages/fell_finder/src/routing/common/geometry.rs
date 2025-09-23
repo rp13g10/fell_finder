@@ -20,6 +20,12 @@ pub struct CandidateGeometry {
     eles: Vec<f64>,
 }
 
+impl Default for CandidateGeometry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CandidateGeometry {
     /// Set up a new container for route geometry
     pub fn new() -> CandidateGeometry {
@@ -61,10 +67,7 @@ impl CandidateGeometry {
         let maybe_lon = self.lons.last();
 
         match maybe_lat {
-            Some(lat) => match maybe_lon {
-                Some(lon) => Some(Pos(*lat, *lon)),
-                None => None,
-            },
+            Some(lat) => maybe_lon.map(|lon| Pos(*lat, *lon)),
             None => None,
         }
     }
@@ -125,7 +128,7 @@ impl CandidateGeometry {
             coords: self.zip_coords(),
             dists: self.dists.clone(),
             eles: self.eles.clone(),
-            bbox: bbox,
+            bbox,
         })
     }
 }

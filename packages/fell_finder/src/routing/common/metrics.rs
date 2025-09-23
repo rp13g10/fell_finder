@@ -51,6 +51,12 @@ pub struct CandidateMetrics {
     pub common: CommonMetrics,
 }
 
+impl Default for CandidateMetrics {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CandidateMetrics {
     pub fn new() -> CandidateMetrics {
         CandidateMetrics {

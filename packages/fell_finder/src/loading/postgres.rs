@@ -18,13 +18,13 @@ pub struct NodeRow {
     elevation: f64,
 }
 
-impl Into<NodeData> for NodeRow {
-    fn into(self) -> NodeData {
+impl From<NodeRow> for NodeData {
+    fn from(val: NodeRow) -> Self {
         NodeData {
-            id: self.id,
-            lat: self.lat,
-            lon: self.lon,
-            elevation: self.elevation,
+            id: val.id,
+            lat: val.lat,
+            lon: val.lon,
+            elevation: val.elevation,
             is_start: false, // default, will be overwritten``
             dist_to_start: None, // default, will be overwritten
         }
@@ -47,22 +47,22 @@ pub struct EdgeRow {
     dists: Vec<f64>,
 }
 
-impl Into<EdgeData> for EdgeRow {
+impl From<EdgeRow> for EdgeData {
     /// Unpack the raw edge data into a format which can be loaded into the
     /// graph
-    fn into(self) -> EdgeData {
+    fn from(val: EdgeRow) -> Self {
         EdgeData {
-            src: self.src,
-            dst: self.dst,
-            highway: self.highway,
-            surface: self.surface,
-            elevation_gain: self.elevation_gain,
-            elevation_loss: self.elevation_loss,
-            distance: self.distance,
-            lats: self.lats,
-            lons: self.lons,
-            eles: self.eles,
-            dists: self.dists,
+            src: val.src,
+            dst: val.dst,
+            highway: val.highway,
+            surface: val.surface,
+            elevation_gain: val.elevation_gain,
+            elevation_loss: val.elevation_loss,
+            distance: val.distance,
+            lats: val.lats,
+            lons: val.lons,
+            eles: val.eles,
+            dists: val.dists,
         }
     }
 }

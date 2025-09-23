@@ -33,7 +33,7 @@ fn process_candidate(
 
         match maybe_ddata {
             Some(ddata) => {
-                cand_results.push(candidate.clone().take_step(&eref, &ddata))
+                cand_results.push(candidate.clone().take_step(&eref, ddata))
             }
             None => cand_results.push(StepResult::Invalid),
         };
@@ -76,13 +76,13 @@ fn get_route_ordering(a: &Route, b: &Route, mode: &RouteMode) -> Ordering {
     let a_ratio = match mode {
         RouteMode::Hilly => a.metrics.common.gain / a.metrics.common.dist,
         RouteMode::Flat => {
-            -1.0 * (a.metrics.common.gain / a.metrics.common.dist)
+            -(a.metrics.common.gain / a.metrics.common.dist)
         }
     };
     let b_ratio = match mode {
         RouteMode::Hilly => b.metrics.common.gain / b.metrics.common.dist,
         RouteMode::Flat => {
-            -1.0 * (b.metrics.common.gain / b.metrics.common.dist)
+            -(b.metrics.common.gain / b.metrics.common.dist)
         }
     };
 
@@ -109,14 +109,14 @@ pub fn get_max_cands(
     config: Arc<BackendConfig>,
 ) -> usize {
     let n_edges = graph.edge_count();
-    let attempt = *attempt as usize;
+    let attempt = *attempt;
 
-    let max_cands = n_edges.clone() * attempt.pow(2);
+    let max_cands = n_edges * attempt.pow(2);
 
     // Apply global maximum
-    let max_cands = min(max_cands, config.max_candidates);
+    
 
-    max_cands
+    min(max_cands, config.max_candidates)
 }
 
 /// Recursive algorithm which crawls the provided graph for routes, starting at
@@ -211,7 +211,7 @@ pub async fn generate_routes(
     }
 
     // If no completed candidates, try again with higher max candidates
-    let no_cands = candidates.into_iter().count() == 0;
+    let no_cands = candidates.len() == 0;
     let attempts_remaining = attempt < 3;
     let not_at_global_max = max_cands < backend_config.max_candidates;
     if no_cands & attempts_remaining & not_at_global_max {
@@ -235,16 +235,13 @@ pub async fn generate_routes(
 
     let mut routes: Vec<Route> = completed
         .into_iter()
-        .filter_map(|cand| match cand.finalize() {
-            Ok(route) => Some(route),
-            _ => None,
-        })
+        .filter_map(|cand| cand.finalize().ok())
         .collect();
 
     sort_routes(&mut routes, Arc::clone(&route_config));
 
     // If no completed routes, try again with higher max candidates
-    let no_routes = routes.iter().count() == 0;
+    let no_routes = routes.len() == 0;
     if no_routes & attempts_remaining & not_at_global_max {
         return Box::pin(generate_routes(
             tagged_graph,

@@ -62,12 +62,12 @@ impl Candidate {
 
         Candidate {
             points: vec![start_id],
-            visited: visited,
+            visited,
             geometry: CandidateGeometry::new(),
             metrics: CandidateMetrics::new(),
-            route_config: route_config,
-            backend_config: backend_config,
-            cur_inx: start_inx.clone(),
+            route_config,
+            backend_config,
+            cur_inx: *start_inx,
         }
     }
 
@@ -82,7 +82,7 @@ impl Candidate {
         Ok(Route {
             geometry: self.geometry.finalize()?,
             metrics: self.metrics.finalize(),
-            id: id,
+            id,
         })
     }
 
@@ -102,7 +102,7 @@ impl Candidate {
         let n = self.backend_config.finishing_overlaps;
 
         // Completion of a route is always allowed
-        match self.points.get(0) {
+        match self.points.first() {
             Some(start) => {
                 if &edata.dst == start {
                     return Ok(false);
@@ -144,10 +144,7 @@ impl Candidate {
     fn sum_surfaces_distance(&self, surfaces: &Vec<String>) -> f64 {
         let mut dist = 0.0;
         for surface in surfaces {
-            match self.metrics.common.s_dists.get(surface) {
-                Some(s_dist) => dist += s_dist,
-                None => (),
-            }
+            if let Some(s_dist) = self.metrics.common.s_dists.get(surface) { dist += s_dist }
         }
         dist
     }
@@ -159,7 +156,7 @@ impl Candidate {
                     .sum_surfaces_distance(&restriction.restricted_surfaces);
                 let max_s_dist = restriction.restricted_surfaces_perc
                     * self.route_config.max_distance;
-                if s_dist > max_s_dist { false } else { true }
+                s_dist <= max_s_dist
             }
             None => true,
         }
@@ -194,10 +191,7 @@ impl Candidate {
         // Pre-validation -----------------------------------------------------
         // Check if node has already been visited
         match self.check_for_overlap(eref) {
-            Ok(overlap) => match overlap {
-                true => return StepResult::Invalid,
-                _ => (),
-            },
+            Ok(overlap) => if overlap == true { return StepResult::Invalid },
             Err(_) => return StepResult::Invalid,
         }
 

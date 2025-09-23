@@ -26,10 +26,10 @@ impl BBox {
         let min_lon = sw.x();
 
         BBox {
-            min_lat: min_lat,
-            min_lon: min_lon,
-            max_lat: max_lat,
-            max_lon: max_lon,
+            min_lat,
+            min_lon,
+            max_lat,
+            max_lon,
         }
     }
 

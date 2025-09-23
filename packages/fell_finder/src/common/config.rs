@@ -55,8 +55,7 @@ impl SurfaceRestriction {
                 Some(perc) => {
                     let surfaces_vec: Vec<String> = surfaces
                         .split(',')
-                        .into_iter()
-                        .map(|item| String::from(item))
+                        .map(String::from)
                         .collect();
 
                     Some(SurfaceRestriction {
@@ -99,36 +98,34 @@ impl TryInto<RouteConfig> for UserRouteConfig {
 
         let tol_mult = 1.0 + self.distance_tolerance;
 
-        let min_distance = &self.target_distance / tol_mult;
-        let max_distance = &self.target_distance * tol_mult;
+        let min_distance = self.target_distance / tol_mult;
+        let max_distance = self.target_distance * tol_mult;
 
         let route_mode = RouteMode::from_str(&self.route_mode)?;
 
         let highways: Vec<String> = self
             .highway_types
             .split(',')
-            .into_iter()
-            .map(|item| String::from(item))
+            .map(String::from)
             .collect();
 
         let surfaces: Vec<String> = self
             .surface_types
             .split(',')
-            .into_iter()
-            .map(|item| String::from(item))
+            .map(String::from)
             .collect();
 
         let job_id = Uuid::new_v4().to_string();
 
         Ok(RouteConfig {
-            centre: centre,
-            route_mode: route_mode,
-            min_distance: min_distance,
-            max_distance: max_distance,
-            highways: highways,
-            surfaces: surfaces,
-            surface_restriction: surface_restriction,
-            job_id: job_id,
+            centre,
+            route_mode,
+            min_distance,
+            max_distance,
+            highways,
+            surfaces,
+            surface_restriction,
+            job_id,
         })
     }
 }
@@ -156,9 +153,9 @@ impl RouteConfig {
         let dist_to_corner: f64 = (self.max_distance / 2.0) * (2.0_f64.sqrt());
 
         let ne =
-            Haversine::destination(self.centre, 45.0, dist_to_corner.clone());
+            Haversine::destination(self.centre, 45.0, dist_to_corner);
         let sw =
-            Haversine::destination(self.centre, 225.0, dist_to_corner.clone());
+            Haversine::destination(self.centre, 225.0, dist_to_corner);
 
         BBox::from_points(&ne, &sw)
     }
@@ -204,7 +201,7 @@ pub struct BackendConfig {
 
 impl BackendConfig {
     fn get_evar_as_int(evar: &str) -> Result<usize, BackendError> {
-        let maybe_usr_pref = env::var(&evar);
+        let maybe_usr_pref = env::var(evar);
         match maybe_usr_pref {
             Ok(str) => match str.parse() {
                 Ok(int) => Ok(int),
@@ -217,7 +214,7 @@ impl BackendConfig {
     }
 
     fn get_evar_as_float(evar: &str) -> Result<f64, BackendError> {
-        let maybe_usr_pref = env::var(&evar);
+        let maybe_usr_pref = env::var(evar);
         match maybe_usr_pref {
             Ok(str) => match str.parse() {
                 Ok(float) => Ok(float),
@@ -230,7 +227,7 @@ impl BackendConfig {
     }
 
     fn get_evar_as_str(evar: &str) -> Result<String, BackendError> {
-        let maybe_usr_pref = env::var(&evar);
+        let maybe_usr_pref = env::var(evar);
         match maybe_usr_pref {
             Ok(str) => Ok(str),
             Err(_) => Err(BackendError::MissingEvarError(evar.to_string())),
@@ -272,8 +269,8 @@ impl BackendConfig {
             bin_size: 64,
             pruning_threshold: 0.95,
             display_threshold: 0.9,
-            db_user: db_user,
-            db_pass: db_pass,
+            db_user,
+            db_pass,
             finishing_overlaps: 3,
             max_job_seconds: 300.0,
             progress_update_seconds: 1.0,

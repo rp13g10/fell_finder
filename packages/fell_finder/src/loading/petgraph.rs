@@ -24,8 +24,8 @@ pub fn generate_node_map(
     let mut used_nodes = FxHashSet::<i64>::default();
 
     for edge in edges {
-        used_nodes.insert(edge.src.clone());
-        used_nodes.insert(edge.dst.clone());
+        used_nodes.insert(edge.src);
+        used_nodes.insert(edge.dst);
     }
 
     for node in nodes {
@@ -102,7 +102,7 @@ pub fn tag_start_node(
         // Store details of new closest node if applicable
         if dist_to_start < smallest_dist {
             smallest_dist = dist_to_start;
-            closest_inx = Some(node_index.clone());
+            closest_inx = Some(node_index);
         }
     }
 
@@ -113,7 +113,7 @@ pub fn tag_start_node(
                 weight.is_start = true;
                 Ok(TaggedGraph {
                     start_inx: inx,
-                    graph: graph,
+                    graph,
                 })
             }
             None => Err(RoutingError::NoMapDataError),
@@ -138,7 +138,7 @@ pub fn tag_dists_to_start(mut tagged_graph: TaggedGraph) -> TaggedGraph {
         if let Some(weight) = tagged_graph.graph.node_weight_mut(*node_inx) {
             weight.dist_to_start = Some(*dist);
         } else {
-            ()
+            
         }
     }
 
@@ -156,7 +156,7 @@ fn node_map(
     match node_data.dist_to_start {
         Some(dist) => {
             if dist <= config.max_distance / 2.0 {
-                Some(node_data.clone())
+                Some(*node_data)
             } else {
                 None
             }
@@ -171,12 +171,9 @@ pub fn get_start_node(
     graph: &Graph<NodeData, EdgeData, Directed, u32>,
 ) -> Option<NodeIndex> {
     for (node_inx, node_data) in graph.node_references() {
-        match node_data.is_start {
-            true => return Some(node_inx),
-            false => (),
-        }
+        if node_data.is_start == true { return Some(node_inx) }
     }
-    return None;
+    None
 }
 
 pub fn get_start_and_end_nodes(
@@ -186,10 +183,7 @@ pub fn get_start_and_end_nodes(
     let mut start_node: Option<NodeIndex> = None;
     let mut end_node: Option<NodeIndex> = None;
     for (node_inx, node_data) in graph.node_references() {
-        match node_data.is_start {
-            true => start_node = Some(node_inx),
-            false => (),
-        }
+        if node_data.is_start == true { start_node = Some(node_inx) }
         if node_data.id == edge.dst {
             end_node = Some(node_inx)
         }
@@ -197,10 +191,7 @@ pub fn get_start_and_end_nodes(
 
     match start_node {
         None => None,
-        Some(start_inx) => match end_node {
-            None => None,
-            Some(end_inx) => Some((start_inx, end_inx)),
-        },
+        Some(start_inx) => end_node.map(|end_inx| (start_inx, end_inx)),
     }
 }
 

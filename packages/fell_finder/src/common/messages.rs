@@ -30,8 +30,8 @@ impl JobProgress {
     pub fn new(target: &f64, attempt: &usize) -> JobProgress {
         JobProgress {
             current: 0.0,
-            target: target.clone(),
-            attempt: attempt.clone(),
+            target: *target,
+            attempt: *attempt,
             duration: 0.0,
         }
     }
@@ -42,7 +42,7 @@ impl JobProgress {
     }
 
     pub fn finalize(&mut self) {
-        self.current = self.target.clone();
+        self.current = self.target;
     }
 }
 
@@ -124,8 +124,5 @@ pub async fn content_from_redis(
     let content: Result<String, RedisError> =
         redis::cmd("GET").arg(&[key]).query_async(conn).await;
 
-    match content {
-        Ok(value) => Some(value),
-        Err(_) => None,
-    }
+    content.ok()
 }
