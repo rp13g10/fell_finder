@@ -7,13 +7,13 @@ use crate::common::config::{BackendConfig, RouteConfig, RouteMode};
 use crate::common::exceptions::RoutingError;
 use crate::common::graph_data::{EdgeData, NodeData, TaggedGraph};
 use crate::common::messages::{JobProgress, JobStatus, content_to_redis};
-use crate::routing::common::{Candidate, Route, StepResult};
+use crate::common::routes::{Candidate, Route, StepResult};
 use petgraph::graph::EdgeReference;
 use petgraph::visit::EdgeRef;
 use petgraph::{Directed, Graph};
 use redis::aio::MultiplexedConnection;
 
-use crate::routing::pruning::{get_dissimilar_routes, prune_candidates};
+use crate::pruning::{get_dissimilar_routes, prune_candidates};
 
 /// For a single candidate, determine all edges which can be reached and
 /// check whether it is valid to do so
@@ -24,6 +24,9 @@ fn process_candidate(
     // Get all edges accessible from the current point
     let edges: Vec<EdgeReference<EdgeData>> =
         graph.edges(candidate.cur_inx).collect();
+
+    // TODO: Consume candidate for final edge to reduce number of clone
+    //       operations required
 
     // Check whether traversing these edges is valid
     let mut cand_results = Vec::<StepResult>::new();

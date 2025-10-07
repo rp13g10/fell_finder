@@ -1,8 +1,5 @@
-pub mod geometry;
-pub mod metrics;
-
-use crate::routing::common::geometry::{CandidateGeometry, RouteGeometry};
-use crate::routing::common::metrics::{CandidateMetrics, RouteMetrics};
+use crate::common::routes::geometry::{CandidateGeometry, RouteGeometry};
+use crate::common::routes::metrics::{CandidateMetrics, RouteMetrics};
 
 use petgraph::graph::{EdgeReference, NodeIndex};
 use petgraph::visit::EdgeRef;
@@ -17,7 +14,29 @@ use crate::common::config::{BackendConfig, RouteConfig};
 use crate::common::exceptions::RoutingError;
 use crate::common::graph_data::{EdgeData, NodeData};
 
+pub mod geometry;
+pub mod metrics;
+
+// MARK: Routes
+
+/// Minimal container for a completed route. This holds only the information
+/// required by the webapp in order to render it.
+#[derive(Debug, Serialize)]
+pub struct Route {
+    geometry: RouteGeometry,
+    pub metrics: RouteMetrics,
+    pub id: u64,
+}
+
 // MARK: Candidates
+
+/// Defines the 3 possible outcome states of a candidate after a step has been
+/// taken
+pub enum StepResult {
+    Valid(Candidate),
+    Complete(Candidate),
+    Invalid,
+}
 
 /// Container for a single candidate route
 #[derive(Clone, Debug, PartialEq)]
@@ -31,14 +50,6 @@ pub struct Candidate {
     pub route_config: Arc<RouteConfig>,
     pub backend_config: Arc<BackendConfig>,
     pub cur_inx: NodeIndex,
-}
-
-/// Defines the 3 possible outcome states of a candidate after a step has been
-/// taken
-pub enum StepResult {
-    Valid(Candidate),
-    Complete(Candidate),
-    Invalid,
 }
 
 impl Candidate {
@@ -246,17 +257,6 @@ impl Candidate {
             }
         }
     }
-}
-
-// MARK: Routes
-
-/// Minimal container for a completed route. This holds only the information
-/// required by the webapp in order to render it.
-#[derive(Debug, Serialize)]
-pub struct Route {
-    geometry: RouteGeometry,
-    pub metrics: RouteMetrics,
-    pub id: u64,
 }
 
 // MARK: Tests
