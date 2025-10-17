@@ -1,4 +1,4 @@
-//! This crate contains structs which represent the route configuraiton options
+//! This crate contains structs which represent the route configuration options
 //! selected by the end user. In particular, the RouteConfig struct is used
 //! widely across this package to inform the route creation process.
 
