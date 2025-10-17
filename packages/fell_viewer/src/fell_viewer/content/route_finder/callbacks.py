@@ -310,8 +310,6 @@ def init_callbacks() -> None:
             code = status["status"]
             dtl = status["detail"]
 
-            print(code, dtl)
-
             if code in {"started", "error", "success", "queued"}:
                 time.sleep(1)
 
