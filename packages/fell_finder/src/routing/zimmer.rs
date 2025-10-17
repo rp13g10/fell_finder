@@ -197,7 +197,6 @@ pub async fn generate_routes(
         }
 
         if update_secs > backend_config.progress_update_seconds {
-            println!("Updating progress: {:?}, {:?}", avg_dist, duration);
             progress.update_progress(avg_dist, duration);
             content_to_redis(
                 &route_config.job_id,
