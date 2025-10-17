@@ -13,7 +13,8 @@ use petgraph::visit::EdgeRef;
 use petgraph::{Directed, Graph};
 use redis::aio::MultiplexedConnection;
 
-use crate::pruning::{get_dissimilar_routes, prune_candidates};
+use crate::pruning::prune_candidates;
+use crate::pruning::selecting::get_best_routes_fuzzy;
 
 /// For a single candidate, determine all edges which can be reached and
 /// check whether it is valid to do so
@@ -223,7 +224,7 @@ pub async fn generate_routes(
         .await;
     }
 
-    completed = get_dissimilar_routes(
+    completed = get_best_routes_fuzzy(
         &mut completed,
         backend_config.max_routes,
         Arc::clone(&route_config),

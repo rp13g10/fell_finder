@@ -177,10 +177,17 @@ impl RouteConfig {
 // MARK: Backend Config
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum PruningStrategy {
+    Naive,
+    Fuzzy,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct BackendConfig {
     pub max_candidates: usize,
     pub max_routes: usize,
     pub pruning_threshold: f64,
+    pub pruning_strategy: PruningStrategy,
     pub display_threshold: f64,
     pub bin_size: usize,
     pub db_user: String,
@@ -229,6 +236,17 @@ impl BackendConfig {
     /// information from environment variables. If any variables cannot
     /// be read/parsed, the programme will panic
     pub fn new() -> Result<BackendConfig, BackendError> {
+        let strategy_in =
+            BackendConfig::get_evar_as_str("FF_PRUNING_STRATEGY")?;
+
+        let strategy = match strategy_in.to_uppercase().as_str() {
+            "NAIVE" => Ok(PruningStrategy::Naive),
+            "FUZZY" => Ok(PruningStrategy::Fuzzy),
+            _ => Err(BackendError::InvalidEvarError(
+                "Got invalid option for FF_PRUNING_STRATEGY {:?}, must be one of 'Naive', 'Fuzzy'.".to_string(),
+            )),
+        }?;
+
         Ok(BackendConfig {
             max_candidates: BackendConfig::get_evar_as_int("FF_MAX_CANDS")?,
             max_routes: BackendConfig::get_evar_as_int("FF_MAX_ROUTES")?,
@@ -236,6 +254,7 @@ impl BackendConfig {
             pruning_threshold: BackendConfig::get_evar_as_float(
                 "FF_PRUNING_THRESHOLD",
             )?,
+            pruning_strategy: strategy,
             display_threshold: BackendConfig::get_evar_as_float(
                 "FF_DISPLAY_THRESHOLD",
             )?,
@@ -259,6 +278,7 @@ impl BackendConfig {
             max_routes: 32,
             bin_size: 64,
             pruning_threshold: 0.95,
+            pruning_strategy: PruningStrategy::Naive,
             display_threshold: 0.9,
             db_user,
             db_pass,
