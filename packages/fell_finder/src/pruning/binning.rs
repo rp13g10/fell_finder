@@ -163,6 +163,7 @@ mod tests {
                 "dummy".to_string(),
             )),
             cur_inx: NodeIndex::new(0),
+            start_inx: NodeIndex::new(0),
         }
     }
 

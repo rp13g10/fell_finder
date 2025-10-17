@@ -49,6 +49,7 @@ pub struct Candidate {
     pub metrics: CandidateMetrics,
     pub route_config: Arc<RouteConfig>,
     pub backend_config: Arc<BackendConfig>,
+    pub start_inx: NodeIndex,
     pub cur_inx: NodeIndex,
 }
 
@@ -78,6 +79,7 @@ impl Candidate {
             metrics: CandidateMetrics::new(),
             route_config,
             backend_config,
+            start_inx: start_inx.clone(),
             cur_inx: *start_inx,
         }
     }
@@ -310,6 +312,7 @@ mod tests {
             geometry: CandidateGeometry::new(),
             metrics: CandidateMetrics::new(),
             cur_inx: NodeIndex::new(0),
+            start_inx: NodeIndex::new(0),
         }
     }
 
@@ -425,6 +428,7 @@ mod tests {
             route_config: Arc::clone(&test_route_config),
             backend_config: Arc::clone(&test_backend_config),
             cur_inx: test_index.clone(),
+            start_inx: test_index.clone(),
         };
 
         // Act
@@ -462,6 +466,7 @@ mod tests {
                 geometry: CandidateGeometry::new(),
                 metrics: CandidateMetrics::new(),
                 cur_inx: NodeIndex::new(0),
+                start_inx: NodeIndex::new(0),
             };
             let (test_src, test_dst) = (20, 21);
 

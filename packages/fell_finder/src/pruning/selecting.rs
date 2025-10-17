@@ -6,7 +6,13 @@
 use std::cmp::Ordering;
 use std::sync::Arc;
 
+use petgraph::algo::dijkstra;
+use petgraph::graph::EdgeReference;
+use petgraph::visit::{NodeFiltered, NodeRef};
+use petgraph::{Directed, Graph};
+
 use crate::common::config::{RouteConfig, RouteMode};
+use crate::common::graph_data::{EdgeData, NodeData, TaggedGraph};
 use crate::common::routes::Candidate;
 
 // MARK: Common
@@ -46,6 +52,46 @@ pub fn sort_candidates(
 ) {
     // Note inverse comparison to sort in descending order
     candidates.sort_by(|a, b| get_cand_ordering(b, a, &config.route_mode));
+}
+
+// MARK: Dijkstra
+
+// TODO: Tidy this up & test it
+
+pub fn check_if_return_path_exists(
+    candidate: &Candidate,
+    graph: &Graph<NodeData, EdgeData, Directed, u32>,
+) -> bool {
+    let mut to_remove = candidate.visited.clone();
+    let can_overlap = candidate
+        .points
+        .iter()
+        .cloned()
+        .take(candidate.backend_config.finishing_overlaps);
+    for node in can_overlap {
+        to_remove.remove(&node);
+    }
+
+    let filtered_graph = NodeFiltered::from_fn(graph, |node_index| !{
+        to_remove.contains(&graph.node_weight(node_index).unwrap().id)
+    });
+
+    let result = dijkstra(
+        &filtered_graph,
+        candidate.cur_inx,
+        Some(candidate.start_inx),
+        |edge| edge.weight().distance,
+    );
+
+    let maybe_dist = result.values().next();
+
+    match maybe_dist {
+        None => false,
+        Some(dist) => {
+            (dist + candidate.metrics.common.dist)
+                < candidate.route_config.max_distance
+        }
+    }
 }
 
 // MARK: Fuzzy Selection
@@ -221,6 +267,7 @@ mod tests {
                 "dummy".to_string(),
             )),
             cur_inx: NodeIndex::new(0),
+            start_inx: NodeIndex::new(0),
         }
     }
 

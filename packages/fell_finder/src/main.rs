@@ -226,7 +226,10 @@ async fn main() {
     // Connect to redis, used to job status & outputs
     let client = redis::Client::open("redis://127.0.0.1/")
         .expect("Error connecting to redis!");
-    let redis_conn = client.get_multiplexed_tokio_connection().await.unwrap();
+    let redis_conn = client
+        .get_multiplexed_tokio_connection()
+        .await
+        .expect("Unable to connect to Redis!");
 
     // Package connections into shared app state
     let state = AppState {

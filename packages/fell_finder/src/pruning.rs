@@ -10,11 +10,12 @@ use std::sync::Arc;
 use rayon::prelude::*;
 
 use crate::common::config::{BackendConfig, PruningStrategy, RouteConfig};
+use crate::common::graph_data::TaggedGraph;
 use crate::common::routes::Candidate;
 
 use crate::pruning::binning::{bin_candidates, get_bin_details};
 use crate::pruning::selecting::{
-    get_best_routes_fuzzy, get_best_routes_naive,
+    check_if_return_path_exists, get_best_routes_fuzzy, get_best_routes_naive,
 };
 
 /// Retrieve a limited subset of routes, with an initial binning step to ensure
@@ -22,7 +23,8 @@ use crate::pruning::selecting::{
 /// which find hills earlier on from being selected over those which find them
 /// later in the process
 pub fn prune_candidates(
-    candidates: Vec<Candidate>,
+    tagged_graph: &TaggedGraph,
+    mut candidates: Vec<Candidate>,
     max_cands: &usize,
     route_config: Arc<RouteConfig>,
     backend_config: Arc<BackendConfig>,
@@ -30,6 +32,17 @@ pub fn prune_candidates(
     // Nothing to do if already below target count
     if candidates.len() <= *max_cands {
         return candidates;
+    }
+
+    if backend_config.dijkstra_validation {
+        // If dijkstra validation is enabled, drop any records which don't have
+        // a valid path back to the start
+        candidates = candidates
+            .into_par_iter()
+            .filter(|cand| {
+                check_if_return_path_exists(cand, &tagged_graph.graph)
+            })
+            .collect();
     }
 
     // Create equal size bins along lat & lon, creating a grid over the problem

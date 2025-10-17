@@ -188,6 +188,7 @@ pub struct BackendConfig {
     pub max_routes: usize,
     pub pruning_threshold: f64,
     pub pruning_strategy: PruningStrategy,
+    pub dijkstra_validation: bool,
     pub display_threshold: f64,
     pub bin_size: usize,
     pub db_user: String,
@@ -232,6 +233,19 @@ impl BackendConfig {
         }
     }
 
+    fn get_evar_as_bool(evar: &str) -> Result<bool, BackendError> {
+        let maybe_usr_pref = env::var(evar);
+        match maybe_usr_pref {
+            Ok(str) => match str.parse() {
+                Ok(bool) => Ok(bool),
+                Err(_) => {
+                    Err(BackendError::InvalidEvarError(evar.to_string()))
+                }
+            },
+            Err(_) => Err(BackendError::MissingEvarError(evar.to_string())),
+        }
+    }
+
     /// Create a new BackendConfig object, pulling all of the required
     /// information from environment variables. If any variables cannot
     /// be read/parsed, the programme will panic
@@ -255,6 +269,9 @@ impl BackendConfig {
                 "FF_PRUNING_THRESHOLD",
             )?,
             pruning_strategy: strategy,
+            dijkstra_validation: BackendConfig::get_evar_as_bool(
+                "FF_DIJKSTRA_VALIDATION",
+            )?,
             display_threshold: BackendConfig::get_evar_as_float(
                 "FF_DISPLAY_THRESHOLD",
             )?,
@@ -279,6 +296,7 @@ impl BackendConfig {
             bin_size: 64,
             pruning_threshold: 0.95,
             pruning_strategy: PruningStrategy::Naive,
+            dijkstra_validation: false,
             display_threshold: 0.9,
             db_user,
             db_pass,

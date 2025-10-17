@@ -114,7 +114,6 @@ pub fn get_max_cands(
     let max_cands = n_edges * attempt.pow(2);
 
     // Apply global maximum
-
     min(max_cands, config.max_candidates)
 }
 
@@ -169,6 +168,7 @@ pub async fn generate_routes(
             process_candidates(&tagged_graph.graph, candidates);
         completed.extend(completed_buf.into_iter());
         candidates = prune_candidates(
+            &tagged_graph,
             candidates,
             &max_cands,
             Arc::clone(&route_config),
@@ -197,6 +197,7 @@ pub async fn generate_routes(
         }
 
         if update_secs > backend_config.progress_update_seconds {
+            println!("Updating progress: {:?}, {:?}", avg_dist, duration);
             progress.update_progress(avg_dist, duration);
             content_to_redis(
                 &route_config.job_id,
