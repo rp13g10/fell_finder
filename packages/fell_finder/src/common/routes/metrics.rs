@@ -70,7 +70,7 @@ impl CandidateMetrics {
     }
 }
 
-/// Coontainer for the overall metrics of a completed route
+/// Container for the overall metrics of a completed route
 #[derive(Debug, Serialize, PartialEq)]
 pub struct RouteMetrics {
     pub common: CommonMetrics,

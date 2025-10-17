@@ -142,7 +142,7 @@ pub fn get_dissimilar_routes(
             }
         }
 
-        // If required number of candidates has not been seleted, increase
+        // If required number of candidates has not been selected, increase
         // the threshold and try again
         if (!target_met) & (threshold < max_similarity) {
             to_process.append(&mut too_similar);
@@ -555,7 +555,7 @@ mod tests {
         c2.metrics.common.gain = 1200.0;
         c3.metrics.common.gain = 1100.0;
 
-        // Longest first, then sorted by gain. Hillest route first in output.
+        // Longest first, then sorted by gain. Hilliest route first in output.
         let target = vec![c3.clone(), c1.clone(), c2.clone()];
 
         let mut result = vec![c3.clone(), c2.clone(), c1.clone()];
