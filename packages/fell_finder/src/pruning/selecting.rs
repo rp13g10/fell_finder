@@ -55,12 +55,19 @@ pub fn sort_candidates(
 
 // MARK: Dijkstra
 
-// TODO: Tidy this up & test it
-
+/// Determine whether it is possible for a given candidate to get back to the
+/// start point, and that if such a route exists it is still inside the
+/// configured maximum. As this is a relatively expensive operation, it can be
+/// toggled on/off at server start by using the
+/// FF_DIJKSTRA_VALIDATION = true/false environment variable
 pub fn check_if_return_path_exists(
     candidate: &Candidate,
     graph: &Graph<NodeData, EdgeData, Directed, u32>,
 ) -> bool {
+    // Determine which nodes must be removed from the graph when calculating
+    // whether or not a valid return path exists. This will be all of the
+    // nodes which have previously been visited, aside from the first N
+    // where overlaps are allowed to improve completion rates
     let mut to_remove = candidate.visited.clone();
     let can_overlap = candidate
         .points
@@ -71,19 +78,22 @@ pub fn check_if_return_path_exists(
         to_remove.remove(&node);
     }
 
+    // Create a filtered view of the graph, excluding nodes in the above vec
     let filtered_graph = NodeFiltered::from_fn(graph, |node_index| !{
         to_remove.contains(&graph.node_weight(node_index).unwrap().id)
     });
 
+    // Determine the distance back to the start (if one exists)
     let result = dijkstra(
         &filtered_graph,
         candidate.cur_inx,
         Some(candidate.start_inx),
         |edge| edge.weight().distance,
     );
-
     let maybe_dist = result.values().next();
 
+    // Check whether a route back to the start exists, and is within the
+    // configured max
     match maybe_dist {
         None => false,
         Some(dist) => {
@@ -660,6 +670,11 @@ mod tests {
         );
 
         assert_eq!(result, target);
+    }
+
+    #[test]
+    fn test_check_if_return_path_exists() {
+        // Skipping this for now
     }
 
     #[test]

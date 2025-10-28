@@ -108,9 +108,6 @@ impl Candidate {
         &self,
         eref: &EdgeReference<EdgeData>,
     ) -> Result<bool, RoutingError> {
-        // TODO: Set up error propagation so that this can factor in to the
-        //       returned error code
-
         let edata = eref.weight();
         let n = self.backend_config.finishing_overlaps;
 
