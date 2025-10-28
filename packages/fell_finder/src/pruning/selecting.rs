@@ -7,12 +7,11 @@ use std::cmp::Ordering;
 use std::sync::Arc;
 
 use petgraph::algo::dijkstra;
-use petgraph::graph::EdgeReference;
-use petgraph::visit::{NodeFiltered, NodeRef};
+use petgraph::visit::NodeFiltered;
 use petgraph::{Directed, Graph};
 
 use crate::common::config::{RouteConfig, RouteMode};
-use crate::common::graph_data::{EdgeData, NodeData, TaggedGraph};
+use crate::common::graph_data::{EdgeData, NodeData};
 use crate::common::routes::Candidate;
 
 // MARK: Common

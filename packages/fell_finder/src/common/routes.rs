@@ -79,7 +79,7 @@ impl Candidate {
             metrics: CandidateMetrics::new(),
             route_config,
             backend_config,
-            start_inx: start_inx.clone(),
+            start_inx: *start_inx,
             cur_inx: *start_inx,
         }
     }
