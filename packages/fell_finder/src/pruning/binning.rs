@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use rayon::prelude::*;
 
-use crate::common::config::BackendConfig;
+use crate::common::config::{BackendConfig, BinStrategy};
 use crate::common::routes::Candidate;
 
 #[derive(Eq, PartialEq, Debug)]
@@ -46,52 +46,66 @@ pub fn get_bin_details(
 // TODO: Use a macro to combine functionality of these two functions, if
 //       you're feeling brave enough
 
-/// For 2 candidates, compare their current latitudes
-fn compare_lats(c1: &Candidate, c2: &Candidate) -> Ordering {
-    let maybe_c1 = c1.geometry.lats.last();
-    let maybe_c2 = c2.geometry.lats.last();
-
+fn compare_points(maybe_c1: Option<f64>, maybe_c2: Option<f64>) -> Ordering {
     // Define behaviour if one value is missing
-    let (c1_lat, c2_lat) = match maybe_c1 {
-        Some(c1_lat) => match maybe_c2 {
-            Some(c2_lat) => (c1_lat, c2_lat),
+    let (c1_pos, c2_pos) = match maybe_c1 {
+        Some(c1_pos) => match maybe_c2 {
+            Some(c2_pos) => (c1_pos, c2_pos),
             None => return Ordering::Greater,
         },
         None => return Ordering::Equal,
     };
 
     // Standard comparison
-    if c1_lat < c2_lat {
+    if c1_pos < c2_pos {
         Ordering::Less
-    } else if c1_lat > c2_lat {
+    } else if c1_pos > c2_pos {
         Ordering::Greater
     } else {
         Ordering::Equal
     }
 }
 
+fn get_lat_for_comparison(cand: &Candidate) -> Option<f64> {
+    match cand.backend_config.bin_strategy {
+        BinStrategy::Last => match cand.geometry.get_current_position() {
+            Some((lat, _)) => Some(lat),
+            None => None,
+        },
+        BinStrategy::Centre => match cand.geometry.get_midpoint_position() {
+            Some((lat, _)) => Some(lat),
+            None => None,
+        },
+    }
+}
+
+/// For 2 candidates, compare their current latitudes
+fn compare_lats(c1: &Candidate, c2: &Candidate) -> Ordering {
+    let maybe_c1 = get_lat_for_comparison(c1);
+    let maybe_c2 = get_lat_for_comparison(c2);
+
+    compare_points(maybe_c1, maybe_c2)
+}
+
+fn get_lon_for_comparison(cand: &Candidate) -> Option<f64> {
+    match cand.backend_config.bin_strategy {
+        BinStrategy::Last => match cand.geometry.get_current_position() {
+            Some((_, lon)) => Some(lon),
+            None => None,
+        },
+        BinStrategy::Centre => match cand.geometry.get_midpoint_position() {
+            Some((_, lon)) => Some(lon),
+            None => None,
+        },
+    }
+}
+
 /// For 2 candidates, compare their current longitudes
 fn compare_lons(c1: &Candidate, c2: &Candidate) -> Ordering {
-    let maybe_c1 = c1.geometry.lons.last();
-    let maybe_c2 = c2.geometry.lons.last();
+    let maybe_c1 = get_lon_for_comparison(c1);
+    let maybe_c2 = get_lon_for_comparison(c2);
 
-    // Define behaviour if one value is missing
-    let (c1_lat, c2_lat) = match maybe_c1 {
-        Some(c1_lat) => match maybe_c2 {
-            Some(c2_lat) => (c1_lat, c2_lat),
-            None => return Ordering::Greater,
-        },
-        None => return Ordering::Equal,
-    };
-
-    // Standard comparison
-    if c1_lat < c2_lat {
-        Ordering::Less
-    } else if c1_lat > c2_lat {
-        Ordering::Greater
-    } else {
-        Ordering::Equal
-    }
+    compare_points(maybe_c1, maybe_c2)
 }
 
 /// Assign all of the provided routes to bins based on their central

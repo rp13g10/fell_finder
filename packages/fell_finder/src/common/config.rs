@@ -183,6 +183,12 @@ pub enum PruningStrategy {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum BinStrategy {
+    Last,
+    Centre,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct BackendConfig {
     pub max_candidates: usize,
     pub max_routes: usize,
@@ -191,6 +197,7 @@ pub struct BackendConfig {
     pub dijkstra_validation: bool,
     pub display_threshold: f64,
     pub bin_size: usize,
+    pub bin_strategy: BinStrategy,
     pub db_user: String,
     pub db_pass: String,
     pub finishing_overlaps: usize,
@@ -250,10 +257,10 @@ impl BackendConfig {
     /// information from environment variables. If any variables cannot
     /// be read/parsed, the programme will panic
     pub fn new() -> Result<BackendConfig, BackendError> {
-        let strategy_in =
+        let pruning_strategy_in =
             BackendConfig::get_evar_as_str("FF_PRUNING_STRATEGY")?;
 
-        let strategy = match strategy_in.to_uppercase().as_str() {
+        let pruning_strategy = match pruning_strategy_in.to_uppercase().as_str() {
             "NAIVE" => Ok(PruningStrategy::Naive),
             "FUZZY" => Ok(PruningStrategy::Fuzzy),
             _ => Err(BackendError::InvalidEvarError(
@@ -261,14 +268,26 @@ impl BackendConfig {
             )),
         }?;
 
+        let bin_strategy_in =
+            BackendConfig::get_evar_as_str("FF_BIN_STRATEGY")?;
+
+        let bin_strategy = match bin_strategy_in.to_uppercase().as_str() {
+            "CENTRE" => Ok(BinStrategy::Centre),
+            "LAST" => Ok(BinStrategy::Last),
+            _ => Err(BackendError::InvalidEvarError(
+                "Got invalid option for FF_BIN_STRATEGY {:?}, must be one of 'Centre', 'Last'.".to_string()
+            ))
+        }?;
+
         Ok(BackendConfig {
             max_candidates: BackendConfig::get_evar_as_int("FF_MAX_CANDS")?,
             max_routes: BackendConfig::get_evar_as_int("FF_MAX_ROUTES")?,
             bin_size: BackendConfig::get_evar_as_int("FF_BIN_SIZE")?,
+            bin_strategy: bin_strategy,
             pruning_threshold: BackendConfig::get_evar_as_float(
                 "FF_PRUNING_THRESHOLD",
             )?,
-            pruning_strategy: strategy,
+            pruning_strategy: pruning_strategy,
             dijkstra_validation: BackendConfig::get_evar_as_bool(
                 "FF_DIJKSTRA_VALIDATION",
             )?,
@@ -294,6 +313,7 @@ impl BackendConfig {
             max_candidates: 1024,
             max_routes: 32,
             bin_size: 64,
+            bin_strategy: BinStrategy::Last,
             pruning_threshold: 0.95,
             pruning_strategy: PruningStrategy::Naive,
             dijkstra_validation: false,
