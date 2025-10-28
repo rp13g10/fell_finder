@@ -177,12 +177,27 @@ impl RouteConfig {
 // MARK: Backend Config
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum PruningStrategy {
+    Naive,
+    Fuzzy,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum BinStrategy {
+    Last,
+    Centre,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct BackendConfig {
     pub max_candidates: usize,
     pub max_routes: usize,
     pub pruning_threshold: f64,
+    pub pruning_strategy: PruningStrategy,
+    pub dijkstra_validation: bool,
     pub display_threshold: f64,
     pub bin_size: usize,
+    pub bin_strategy: BinStrategy,
     pub db_user: String,
     pub db_pass: String,
     pub finishing_overlaps: usize,
@@ -225,16 +240,56 @@ impl BackendConfig {
         }
     }
 
+    fn get_evar_as_bool(evar: &str) -> Result<bool, BackendError> {
+        let maybe_usr_pref = env::var(evar);
+        match maybe_usr_pref {
+            Ok(str) => match str.parse() {
+                Ok(bool) => Ok(bool),
+                Err(_) => {
+                    Err(BackendError::InvalidEvarError(evar.to_string()))
+                }
+            },
+            Err(_) => Err(BackendError::MissingEvarError(evar.to_string())),
+        }
+    }
+
     /// Create a new BackendConfig object, pulling all of the required
     /// information from environment variables. If any variables cannot
     /// be read/parsed, the programme will panic
     pub fn new() -> Result<BackendConfig, BackendError> {
+        let pruning_strategy_in =
+            BackendConfig::get_evar_as_str("FF_PRUNING_STRATEGY")?;
+
+        let pruning_strategy = match pruning_strategy_in.to_uppercase().as_str() {
+            "NAIVE" => Ok(PruningStrategy::Naive),
+            "FUZZY" => Ok(PruningStrategy::Fuzzy),
+            _ => Err(BackendError::InvalidEvarError(
+                "Got invalid option for FF_PRUNING_STRATEGY {:?}, must be one of 'Naive', 'Fuzzy'.".to_string(),
+            )),
+        }?;
+
+        let bin_strategy_in =
+            BackendConfig::get_evar_as_str("FF_BIN_STRATEGY")?;
+
+        let bin_strategy = match bin_strategy_in.to_uppercase().as_str() {
+            "CENTRE" => Ok(BinStrategy::Centre),
+            "LAST" => Ok(BinStrategy::Last),
+            _ => Err(BackendError::InvalidEvarError(
+                "Got invalid option for FF_BIN_STRATEGY {:?}, must be one of 'Centre', 'Last'.".to_string()
+            ))
+        }?;
+
         Ok(BackendConfig {
             max_candidates: BackendConfig::get_evar_as_int("FF_MAX_CANDS")?,
             max_routes: BackendConfig::get_evar_as_int("FF_MAX_ROUTES")?,
             bin_size: BackendConfig::get_evar_as_int("FF_BIN_SIZE")?,
+            bin_strategy: bin_strategy,
             pruning_threshold: BackendConfig::get_evar_as_float(
                 "FF_PRUNING_THRESHOLD",
+            )?,
+            pruning_strategy: pruning_strategy,
+            dijkstra_validation: BackendConfig::get_evar_as_bool(
+                "FF_DIJKSTRA_VALIDATION",
             )?,
             display_threshold: BackendConfig::get_evar_as_float(
                 "FF_DISPLAY_THRESHOLD",
@@ -258,7 +313,10 @@ impl BackendConfig {
             max_candidates: 1024,
             max_routes: 32,
             bin_size: 64,
+            bin_strategy: BinStrategy::Last,
             pruning_threshold: 0.95,
+            pruning_strategy: PruningStrategy::Naive,
+            dijkstra_validation: false,
             display_threshold: 0.9,
             db_user,
             db_pass,

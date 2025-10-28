@@ -1,133 +1,20 @@
-//! This module defines the code which keeps the number of candidates being
-//! processed at any one time under control. By pruning routes, we are able to
-//! retain the most promising candidates, with any near-duplicates being
-//! removed. Additional logic is implemented to ensure a good geographical
-//! spread of candidates in the output.
+//! This module provides methods which allow the selection of the 'best'
+//! candidates available. Either a naive approach (sort & take top N) or a
+//! fuzzy approach (take top N dissimilar) can be used. This is configured
+//! through the FF_PRUNING_STRATEGY environment variable.
 
 use std::cmp::Ordering;
 use std::sync::Arc;
 
-use rayon::prelude::*;
+use petgraph::algo::dijkstra;
+use petgraph::visit::NodeFiltered;
+use petgraph::{Directed, Graph};
 
-use crate::common::config::{BackendConfig, RouteConfig, RouteMode};
-use crate::routing::common::Candidate;
+use crate::common::config::{RouteConfig, RouteMode};
+use crate::common::graph_data::{EdgeData, NodeData};
+use crate::common::routes::Candidate;
 
-#[derive(Eq, PartialEq, Debug)]
-struct BinDetails {
-    bin_size_x: usize,
-    bin_size_y: usize,
-}
-
-/// Based on the number of candidates expected to be in memory when route
-/// pruning takes place, determine the number of bins required in order for
-/// each bin to have the desired size
-fn get_bin_details(
-    max_cands: &usize,
-    backend_config: Arc<BackendConfig>,
-) -> BinDetails {
-    // Fetch target bin size
-    let bin_size: usize = backend_config.bin_size;
-
-    // Total number of bins which will be required
-    let num_bins = (*max_cands as f64 / bin_size as f64).ceil();
-
-    // Set x bins based on square root of total, then determine number of y
-    // bins required to get to the desired total
-    let x_bins = (num_bins.sqrt()).ceil();
-    let y_bins = (num_bins / x_bins).ceil();
-
-    BinDetails {
-        // Each x bin will be subdivided into y bins before use
-        bin_size_x: bin_size * (y_bins as usize),
-        bin_size_y: bin_size,
-    }
-}
-
-// TODO: Use a macro to combine functionality of these two functions, if
-//       you're feeling brave enough
-
-/// For 2 candidates, compare their current latitudes
-fn compare_lats(c1: &Candidate, c2: &Candidate) -> Ordering {
-    let maybe_c1 = c1.geometry.lats.last();
-    let maybe_c2 = c2.geometry.lats.last();
-
-    // Define behaviour if one value is missing
-    let (c1_lat, c2_lat) = match maybe_c1 {
-        Some(c1_lat) => match maybe_c2 {
-            Some(c2_lat) => (c1_lat, c2_lat),
-            None => return Ordering::Greater,
-        },
-        None => return Ordering::Equal,
-    };
-
-    // Standard comparison
-    if c1_lat < c2_lat {
-        Ordering::Less
-    } else if c1_lat > c2_lat {
-        Ordering::Greater
-    } else {
-        Ordering::Equal
-    }
-}
-
-/// For 2 candidates, compare their current longitudes
-fn compare_lons(c1: &Candidate, c2: &Candidate) -> Ordering {
-    let maybe_c1 = c1.geometry.lons.last();
-    let maybe_c2 = c2.geometry.lons.last();
-
-    // Define behaviour if one value is missing
-    let (c1_lat, c2_lat) = match maybe_c1 {
-        Some(c1_lat) => match maybe_c2 {
-            Some(c2_lat) => (c1_lat, c2_lat),
-            None => return Ordering::Greater,
-        },
-        None => return Ordering::Equal,
-    };
-
-    // Standard comparison
-    if c1_lat < c2_lat {
-        Ordering::Less
-    } else if c1_lat > c2_lat {
-        Ordering::Greater
-    } else {
-        Ordering::Equal
-    }
-}
-
-/// Assign all of the provided routes to bins based on their central
-/// coordinates. Routes are binned across both lats and lons, analogous
-/// to placing them into a 2d grid.
-fn bin_candidates(
-    bin_details: BinDetails,
-    mut candidates: Vec<Candidate>,
-) -> Vec<Vec<Candidate>> {
-    // First, bin by latitude
-    candidates.par_sort_by(compare_lats);
-    let x_bins = candidates.par_chunks_mut(bin_details.bin_size_x);
-
-    // Then, bin each of those bins by longitude
-    let mut par_bins: Vec<Vec<Vec<Candidate>>> = Vec::new();
-    x_bins
-        .map(|x_bin| {
-            x_bin.sort_by(compare_lons);
-            let x_y_bins: Vec<Vec<Candidate>> = x_bin
-                .chunks(bin_details.bin_size_y)
-                .map(|x_y_bin| x_y_bin.to_vec())
-                .collect();
-            x_y_bins
-        })
-        .collect_into_vec(&mut par_bins);
-
-    par_bins.into_iter().flatten().collect()
-}
-
-/// Determine the level of similarity between two candidates based on the
-/// degree of crossover between the nodes in each
-fn get_similarity(c1: &Candidate, c2: &Candidate) -> f64 {
-    let union = c1.visited.union(&c2.visited).count() as f64;
-    let intersection = c1.visited.intersection(&c2.visited).count() as f64;
-    intersection / union
-}
+// MARK: Common
 
 /// Return the Ordering of candidate a relative to candidate b. Candidates are
 /// sorted by distance in KMs, then by elevation gain
@@ -166,6 +53,66 @@ pub fn sort_candidates(
     candidates.sort_by(|a, b| get_cand_ordering(b, a, &config.route_mode));
 }
 
+// MARK: Dijkstra
+
+/// Determine whether it is possible for a given candidate to get back to the
+/// start point, and that if such a route exists it is still inside the
+/// configured maximum. As this is a relatively expensive operation, it can be
+/// toggled on/off at server start by using the
+/// FF_DIJKSTRA_VALIDATION = true/false environment variable
+pub fn check_if_return_path_exists(
+    candidate: &Candidate,
+    graph: &Graph<NodeData, EdgeData, Directed, u32>,
+) -> bool {
+    // Determine which nodes must be removed from the graph when calculating
+    // whether or not a valid return path exists. This will be all of the
+    // nodes which have previously been visited, aside from the first N
+    // where overlaps are allowed to improve completion rates
+    let mut to_remove = candidate.visited.clone();
+    let can_overlap = candidate
+        .points
+        .iter()
+        .cloned()
+        .take(candidate.backend_config.finishing_overlaps);
+    for node in can_overlap {
+        to_remove.remove(&node);
+    }
+
+    // Create a filtered view of the graph, excluding nodes in the above vec
+    let filtered_graph = NodeFiltered::from_fn(graph, |node_index| !{
+        to_remove.contains(&graph.node_weight(node_index).unwrap().id)
+    });
+
+    // Determine the distance back to the start (if one exists)
+    let result = dijkstra(
+        &filtered_graph,
+        candidate.cur_inx,
+        Some(candidate.start_inx),
+        |edge| edge.weight().distance,
+    );
+    let maybe_dist = result.values().next();
+
+    // Check whether a route back to the start exists, and is within the
+    // configured max
+    match maybe_dist {
+        None => false,
+        Some(dist) => {
+            (dist + candidate.metrics.common.dist)
+                < candidate.route_config.max_distance
+        }
+    }
+}
+
+// MARK: Fuzzy Selection
+
+/// Determine the level of similarity between two candidates based on the
+/// degree of crossover between the nodes in each
+fn get_similarity(c1: &Candidate, c2: &Candidate) -> f64 {
+    let union = c1.visited.union(&c2.visited).count() as f64;
+    let intersection = c1.visited.intersection(&c2.visited).count() as f64;
+    intersection / union
+}
+
 /// For the selected threshold, check whether the provided candidate is below
 /// the threshold for every candidate which has already been selected
 fn check_if_candidate_is_dissimilar(
@@ -202,7 +149,7 @@ fn check_if_candidate_is_dissimilar(
 /// Retain only sufficiently different routes, the similarity threshold will be
 /// set dynamically in order to reach the target count of routes. Note that the
 /// output may not be sorted, use sort_candidates before presenting to the user
-pub fn get_dissimilar_routes(
+pub fn get_best_routes_fuzzy(
     candidates: &mut Vec<Candidate>,
     target_count: usize,
     route_config: Arc<RouteConfig>,
@@ -265,46 +212,26 @@ pub fn get_dissimilar_routes(
     selected
 }
 
-/// Retrieve a limited subset of routes, with an initial binning step to ensure
-/// a good distribution of route shapes. This aims to avoid the trap of routes
-/// which find hills earlier on from being selected over those which find them
-/// later in the process
-pub fn prune_candidates(
-    candidates: Vec<Candidate>,
-    max_cands: &usize,
+// MARK: Naive
+
+/// Retain the 'best' N routes, without fuzzy deduplication. This will result
+/// in a less diverse pool of candidates, but has a dramatically reduced
+/// performance cost.
+pub fn get_best_routes_naive(
+    mut candidates: Vec<Candidate>,
+    target_count: usize,
     route_config: Arc<RouteConfig>,
-    backend_config: Arc<BackendConfig>,
 ) -> Vec<Candidate> {
-    // Nothing to do if already below target count
-    if candidates.len() <= *max_cands {
-        return candidates;
+    // Nothing to do if count is already below target
+    if candidates.len() <= target_count {
+        return candidates.to_owned();
     }
 
-    // Create equal size bins along lat & lon, creating a grid over the problem
-    // space
-    let bin_details = get_bin_details(max_cands, Arc::clone(&backend_config));
-    let mut binned = bin_candidates(bin_details, candidates);
+    // Otherwise, sort candidates and prepare to select
+    sort_candidates(&mut candidates, Arc::clone(&route_config));
 
-    // Create container for selected candidates, set target number of cands
-    // to retain per bin
-    let mut vec_selected: Vec<Vec<Candidate>> = Vec::new();
-    let bin_target: usize = *max_cands / binned.len();
-
-    // Sort according to user preference (hilliest/flattest), dropping
-    // near-duplicates to ensure a good distribution
-    binned
-        .par_iter_mut()
-        .map(|bin_cands| {
-            get_dissimilar_routes(
-                bin_cands,
-                bin_target,
-                Arc::clone(&route_config),
-                backend_config.pruning_threshold,
-            )
-        })
-        .collect_into_vec(&mut vec_selected);
-
-    vec_selected.into_iter().flatten().collect()
+    candidates.truncate(target_count);
+    candidates
 }
 
 // MARK: Tests
@@ -316,8 +243,9 @@ mod tests {
 
     use petgraph::graph::NodeIndex;
 
-    use crate::routing::common::geometry::CandidateGeometry;
-    use crate::routing::common::metrics::CandidateMetrics;
+    use crate::common::config::{BackendConfig, RouteConfig, RouteMode};
+    use crate::common::routes::geometry::CandidateGeometry;
+    use crate::common::routes::metrics::CandidateMetrics;
 
     use super::*;
 
@@ -348,238 +276,8 @@ mod tests {
                 "dummy".to_string(),
             )),
             cur_inx: NodeIndex::new(0),
+            start_inx: NodeIndex::new(0),
         }
-    }
-
-    #[cfg(test)]
-    mod test_get_bin_details {
-        use super::*;
-
-        #[test]
-        fn test_square_number() {
-            let max_cands = 1024; // 64 * 4 * 4
-            let cfg = Arc::new(BackendConfig::default(
-                "dummy".to_string(),
-                "dummy".to_string(),
-            ));
-
-            let target = BinDetails {
-                bin_size_x: 256,
-                bin_size_y: 64,
-            };
-
-            let result = get_bin_details(&max_cands, cfg);
-
-            assert_eq!(result, target);
-        }
-
-        #[test]
-        fn test_no_leftovers() {
-            let max_cands = 1280; // 64 * 5 * 4
-            let cfg = Arc::new(BackendConfig::default(
-                "dummy".to_string(),
-                "dummy".to_string(),
-            ));
-
-            // --> num_bins = 20
-            // --> x_bins = 5, y_bins = 4
-
-            let target = BinDetails {
-                bin_size_x: 256,
-                bin_size_y: 64,
-            };
-
-            let result = get_bin_details(&max_cands, cfg);
-
-            assert_eq!(result, target);
-        }
-
-        #[test]
-        fn test_leftovers() {
-            let max_cands = 5432;
-            let cfg = Arc::new(BackendConfig::default(
-                "dummy".to_string(),
-                "dummy".to_string(),
-            ));
-
-            // --> num_bins = 85 (5432 / 64 = 84.875)
-            // --> x_bins = 10 (sqrt(85) = 9.22)
-            // --> y_bins = 9 (85 / 10 = 8.5)
-
-            let target = BinDetails {
-                bin_size_x: 576,
-                bin_size_y: 64,
-            };
-
-            let result = get_bin_details(&max_cands, cfg);
-
-            assert_eq!(result, target);
-        }
-    }
-
-    #[cfg(test)]
-    mod test_compare_coords {
-        use super::*;
-
-        #[test]
-        fn test_less() {
-            let mut test_candidate_1 = get_test_candidate();
-            let mut test_candidate_2 = get_test_candidate();
-
-            test_candidate_1.geometry.lats.push(0.0);
-            test_candidate_1.geometry.lons.push(0.0);
-
-            test_candidate_2.geometry.lats.push(1.0);
-            test_candidate_2.geometry.lons.push(1.0);
-
-            let target = Ordering::Less;
-
-            let result_lat =
-                compare_lats(&test_candidate_1, &test_candidate_2);
-            let result_lon =
-                compare_lons(&test_candidate_1, &test_candidate_2);
-
-            assert_eq!(result_lat, target);
-            assert_eq!(result_lon, target);
-        }
-
-        #[test]
-        fn test_greater() {
-            let mut test_candidate_1 = get_test_candidate();
-            let mut test_candidate_2 = get_test_candidate();
-
-            test_candidate_1.geometry.lats.push(1.0);
-            test_candidate_1.geometry.lons.push(1.0);
-
-            test_candidate_2.geometry.lats.push(0.0);
-            test_candidate_2.geometry.lons.push(0.0);
-
-            let target = Ordering::Greater;
-
-            let result_lat =
-                compare_lats(&test_candidate_1, &test_candidate_2);
-            let result_lon =
-                compare_lons(&test_candidate_1, &test_candidate_2);
-
-            assert_eq!(result_lat, target);
-            assert_eq!(result_lon, target);
-        }
-
-        #[test]
-        fn test_equal() {
-            let mut test_candidate_1 = get_test_candidate();
-            let mut test_candidate_2 = get_test_candidate();
-
-            test_candidate_1.geometry.lats.push(0.0);
-            test_candidate_1.geometry.lons.push(0.0);
-
-            test_candidate_2.geometry.lats.push(0.0);
-            test_candidate_2.geometry.lons.push(0.0);
-
-            let target = Ordering::Equal;
-
-            let result_lat =
-                compare_lats(&test_candidate_1, &test_candidate_2);
-            let result_lon =
-                compare_lons(&test_candidate_1, &test_candidate_2);
-
-            assert_eq!(result_lat, target);
-            assert_eq!(result_lon, target);
-        }
-    }
-
-    /// Within a single bin, get the min & max coordinate. For tests lat and
-    /// lon are always set to the same value, so we can safely combine them
-    /// into a single list
-    fn get_bin_min_max(bin_cands: &Vec<Candidate>) -> (f64, f64) {
-        let mut all_points: Vec<f64> = Vec::new();
-        for cand in bin_cands {
-            all_points.extend(cand.geometry.lats.clone());
-            all_points.extend(cand.geometry.lons.clone());
-        }
-
-        let bin_min = all_points
-            .clone()
-            .into_iter()
-            .reduce(|x, y| f64::min(x, y))
-            .unwrap();
-        let bin_max = all_points
-            .into_iter()
-            .reduce(|x, y| f64::max(x, y))
-            .unwrap();
-        (bin_min, bin_max)
-    }
-
-    #[test]
-    fn test_bin_candidates() {
-        // Target: 512 candidates, 16 bins (4x4) of 32 candidates each
-        let test_bin_details = BinDetails {
-            bin_size_x: 128, // 4 x 32
-            bin_size_y: 32,
-        };
-
-        // Generate 512 candidates, evenly spread over an 8x8 grid
-        let mut test_candidates: Vec<Candidate> = Vec::new();
-        for lat in 0..8 {
-            for lon in 0..8 {
-                for _ in 0..8 {
-                    let mut point_cand = get_test_candidate();
-                    point_cand.geometry.lats = vec![lat as f64];
-                    point_cand.geometry.lons = vec![lon as f64];
-                    test_candidates.push(point_cand)
-                }
-            }
-        }
-
-        // Set up target properties
-        let target_n_bins = 16;
-        let target_bin_size = 32;
-
-        let target_first_bin_min = 0.0; // eq
-        let target_first_bin_max = 2.0; // lt
-        let target_last_bin_min = 6.0; // eq
-        let target_last_bin_max = 8.0; // lt
-
-        // Act
-        let result = bin_candidates(test_bin_details, test_candidates);
-
-        // Correct number of bins generated
-        assert!(result.len() == target_n_bins);
-
-        // Check contents of bins
-        let mut n_bins_matching_first = 0;
-        let mut n_bins_matching_last = 0;
-        for bin in result {
-            // All bins are of the expected size
-            assert!(bin.len() == target_bin_size);
-
-            // Only one bin matches the range of values expected for the first
-            // and last bins. i.e. the bins do not overlap, and have the
-            // expected values
-            let (bin_min, bin_max) = get_bin_min_max(&bin);
-
-            let in_first = (bin_min >= target_first_bin_min)
-                & (bin_min < target_first_bin_max)
-                & (bin_max >= target_first_bin_min)
-                & (bin_max < target_first_bin_max);
-            let in_last = (bin_min >= target_last_bin_min)
-                & (bin_min < target_last_bin_max)
-                & (bin_max >= target_last_bin_min)
-                & (bin_max < target_last_bin_max);
-
-            match in_first {
-                true => n_bins_matching_first += 1,
-                false => {}
-            }
-
-            match in_last {
-                true => n_bins_matching_last += 1,
-                false => {}
-            }
-        }
-
-        assert_eq!(n_bins_matching_first, 1);
-        assert_eq!(n_bins_matching_last, 1);
     }
 
     #[cfg(test)]
@@ -903,7 +601,7 @@ mod tests {
     }
 
     #[test]
-    fn test_get_dissimilar_routes() {
+    fn test_get_best_routes_fuzzy() {
         let mut test_candidate_1 = get_test_candidate();
         let mut test_candidate_2 = get_test_candidate();
         let mut test_candidate_3 = get_test_candidate();
@@ -964,7 +662,7 @@ mod tests {
         let target =
             vec![test_candidate_5, test_candidate_2, test_candidate_1];
 
-        let result = get_dissimilar_routes(
+        let result = get_best_routes_fuzzy(
             &mut test_candidates,
             test_target_count,
             test_config,
@@ -972,6 +670,11 @@ mod tests {
         );
 
         assert_eq!(result, target);
+    }
+
+    #[test]
+    fn test_check_if_return_path_exists() {
+        // Skipping this for now
     }
 
     #[test]

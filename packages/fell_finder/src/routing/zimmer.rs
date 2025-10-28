@@ -7,13 +7,14 @@ use crate::common::config::{BackendConfig, RouteConfig, RouteMode};
 use crate::common::exceptions::RoutingError;
 use crate::common::graph_data::{EdgeData, NodeData, TaggedGraph};
 use crate::common::messages::{JobProgress, JobStatus, content_to_redis};
-use crate::routing::common::{Candidate, Route, StepResult};
+use crate::common::routes::{Candidate, Route, StepResult};
 use petgraph::graph::EdgeReference;
 use petgraph::visit::EdgeRef;
 use petgraph::{Directed, Graph};
 use redis::aio::MultiplexedConnection;
 
-use crate::routing::pruning::{get_dissimilar_routes, prune_candidates};
+use crate::pruning::prune_candidates;
+use crate::pruning::selecting::get_best_routes_fuzzy;
 
 /// For a single candidate, determine all edges which can be reached and
 /// check whether it is valid to do so
@@ -24,6 +25,9 @@ fn process_candidate(
     // Get all edges accessible from the current point
     let edges: Vec<EdgeReference<EdgeData>> =
         graph.edges(candidate.cur_inx).collect();
+
+    // TODO: Consume candidate for final edge to reduce number of clone
+    //       operations required
 
     // Check whether traversing these edges is valid
     let mut cand_results = Vec::<StepResult>::new();
@@ -110,7 +114,6 @@ pub fn get_max_cands(
     let max_cands = n_edges * attempt.pow(2);
 
     // Apply global maximum
-
     min(max_cands, config.max_candidates)
 }
 
@@ -165,6 +168,7 @@ pub async fn generate_routes(
             process_candidates(&tagged_graph.graph, candidates);
         completed.extend(completed_buf.into_iter());
         candidates = prune_candidates(
+            &tagged_graph,
             candidates,
             &max_cands,
             Arc::clone(&route_config),
@@ -220,7 +224,7 @@ pub async fn generate_routes(
         .await;
     }
 
-    completed = get_dissimilar_routes(
+    completed = get_best_routes_fuzzy(
         &mut completed,
         backend_config.max_routes,
         Arc::clone(&route_config),

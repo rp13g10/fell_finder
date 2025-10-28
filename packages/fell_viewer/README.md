@@ -7,9 +7,9 @@ This package defines the layout of the fell_viewer webapp, allowing users to gen
 * Start the [fell_finder](packages/fell_finder/README.md) API
 * For a 'standard' launch
   * Make sure the `FF_DEBUG_MODE` environment variable is set to 'false'
-    * First, start Celery with: `uv run celery -A webapp.celery_app worker --loglevel=INFO`
+    * First, start Celery with: `uv run --env-file .env celery -A webapp.celery_app worker --loglevel=INFO`
     * Then, without closing the celery process, start the webapp with `uv run python webapp.py`
     * You can then access the webapp by opening 'http://localhost:8050/' in your browser
 * For a 'debug' launch
     * Make sure the `FF_DEBUG_MODE` environment variable is set to 'true'
-    * Start the webapp with `uv run python webapp.py`
+    * Start the webapp with `uv run --env-file .env python webapp.py`

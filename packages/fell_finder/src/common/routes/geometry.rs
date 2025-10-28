@@ -36,6 +36,33 @@ impl CandidateGeometry {
             eles: Vec::<f64>::new(),
         }
     }
+
+    /// Returns the current position of the candidate as a lat, lon tuple. If
+    /// the candidate does not have any lats/lons, returns None
+    pub fn get_current_position(&self) -> Option<(f64, f64)> {
+        if let Some(last_lat) = self.lats.last() {
+            if let Some(last_lon) = self.lons.last() {
+                return Some((last_lat.clone(), last_lon.clone()));
+            }
+        };
+
+        return None;
+    }
+
+    /// Returns the midpoint of the candidate as a lat, lon tuple. If the
+    /// candidate does not have any lats/lons, returns None
+    pub fn get_midpoint_position(&self) -> Option<(f64, f64)> {
+        // Lats & lons will always have the same length
+        let n_points = self.lats.len();
+
+        if n_points > 0 {
+            let mid_lat = (self.lats.iter().sum::<f64>()) / (n_points as f64);
+            let mid_lon = self.lons.iter().sum::<f64>() / (n_points as f64);
+            return Some((mid_lat, mid_lon));
+        }
+
+        return None;
+    }
 }
 
 impl CandidateGeometry {

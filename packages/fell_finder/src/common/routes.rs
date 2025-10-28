@@ -1,8 +1,5 @@
-pub mod geometry;
-pub mod metrics;
-
-use crate::routing::common::geometry::{CandidateGeometry, RouteGeometry};
-use crate::routing::common::metrics::{CandidateMetrics, RouteMetrics};
+use crate::common::routes::geometry::{CandidateGeometry, RouteGeometry};
+use crate::common::routes::metrics::{CandidateMetrics, RouteMetrics};
 
 use petgraph::graph::{EdgeReference, NodeIndex};
 use petgraph::visit::EdgeRef;
@@ -17,7 +14,29 @@ use crate::common::config::{BackendConfig, RouteConfig};
 use crate::common::exceptions::RoutingError;
 use crate::common::graph_data::{EdgeData, NodeData};
 
+pub mod geometry;
+pub mod metrics;
+
+// MARK: Routes
+
+/// Minimal container for a completed route. This holds only the information
+/// required by the webapp in order to render it.
+#[derive(Debug, Serialize)]
+pub struct Route {
+    geometry: RouteGeometry,
+    pub metrics: RouteMetrics,
+    pub id: u64,
+}
+
 // MARK: Candidates
+
+/// Defines the 3 possible outcome states of a candidate after a step has been
+/// taken
+pub enum StepResult {
+    Valid(Candidate),
+    Complete(Candidate),
+    Invalid,
+}
 
 /// Container for a single candidate route
 #[derive(Clone, Debug, PartialEq)]
@@ -30,15 +49,8 @@ pub struct Candidate {
     pub metrics: CandidateMetrics,
     pub route_config: Arc<RouteConfig>,
     pub backend_config: Arc<BackendConfig>,
+    pub start_inx: NodeIndex,
     pub cur_inx: NodeIndex,
-}
-
-/// Defines the 3 possible outcome states of a candidate after a step has been
-/// taken
-pub enum StepResult {
-    Valid(Candidate),
-    Complete(Candidate),
-    Invalid,
 }
 
 impl Candidate {
@@ -67,6 +79,7 @@ impl Candidate {
             metrics: CandidateMetrics::new(),
             route_config,
             backend_config,
+            start_inx: *start_inx,
             cur_inx: *start_inx,
         }
     }
@@ -95,9 +108,6 @@ impl Candidate {
         &self,
         eref: &EdgeReference<EdgeData>,
     ) -> Result<bool, RoutingError> {
-        // TODO: Set up error propagation so that this can factor in to the
-        //       returned error code
-
         let edata = eref.weight();
         let n = self.backend_config.finishing_overlaps;
 
@@ -248,17 +258,6 @@ impl Candidate {
     }
 }
 
-// MARK: Routes
-
-/// Minimal container for a completed route. This holds only the information
-/// required by the webapp in order to render it.
-#[derive(Debug, Serialize)]
-pub struct Route {
-    geometry: RouteGeometry,
-    pub metrics: RouteMetrics,
-    pub id: u64,
-}
-
 // MARK: Tests
 
 #[cfg(test)]
@@ -310,6 +309,7 @@ mod tests {
             geometry: CandidateGeometry::new(),
             metrics: CandidateMetrics::new(),
             cur_inx: NodeIndex::new(0),
+            start_inx: NodeIndex::new(0),
         }
     }
 
@@ -425,6 +425,7 @@ mod tests {
             route_config: Arc::clone(&test_route_config),
             backend_config: Arc::clone(&test_backend_config),
             cur_inx: test_index.clone(),
+            start_inx: test_index.clone(),
         };
 
         // Act
@@ -462,6 +463,7 @@ mod tests {
                 geometry: CandidateGeometry::new(),
                 metrics: CandidateMetrics::new(),
                 cur_inx: NodeIndex::new(0),
+                start_inx: NodeIndex::new(0),
             };
             let (test_src, test_dst) = (20, 21);
 
