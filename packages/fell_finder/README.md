@@ -12,5 +12,5 @@ This package needs to be built before it can be executed. It is recommended that
 
 ## Usage
 
-* Run the executable with `cargo run --release`
+* Run the executable with `uv run --env-file .env cargo run --release`
 * Use `fell_viewer` to generate API calls and view generated routes.

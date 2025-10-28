@@ -13,7 +13,7 @@ The secondary objective is to provide myself with a challenge, and an opportunit
 
 This project is still in early development, with significant work still required before it's ready for general use. That said, with a little leg-work a viable PoC is now up and running. At present, the ingestion pipeline is largely complete (although it's executed on-demand at the moment). A basic webapp is provided, which is able to plot routes on demand and display them to the user. Route creation has been sped up significantly following a rewrite in rust, although longer distances can still take a few seconds to generate.
 
-The rust portion of the code is currently in MVP state, and has a number of improvements which need to be made. The main priority is getting the webapp moved into containers and ready to scale, although this is likely to be a slow burner due to poor internet connectivity on the trains (where most of the dev work is done). While offline, I am continuing to work through the backlog below (in approximate priority order).
+It is likely that the Rust portion of the code can be optimised further, but I'm now satisfied enough with performance to leave it alone for the time being. The main priority is getting the webapp moved into containers and ready to scale, although this is likely to be a slow burner due to poor internet connectivity on the trains (where most of the dev work is done). While offline, I am continuing to work through the backlog below (in approximate priority order).
 
 
 ## Instructions for use
@@ -33,10 +33,9 @@ Eventually, everything will be set up to run in containers. Until then, it takes
   * [python build tools](https://devguide.python.org/getting-started/setup-building/#install-dependencies)
     * If you run into build errors with pyarrow, you can find the dependencies to install [here](https://arrow.apache.org/docs/developers/cpp/building.html)
     * If you run into build errors with numpy, you might need to install the C build tools. Use `dnf group install c-development development-tools` to install them on Fedora
-  * [hatch](https://hatch.pypa.io/latest/install/)
 * Build the [fell_finder](packages/fell_finder/README.md) package
 * Run the [fell_loader](packages/fell_loader/README.md) package to get all of the required data into postgres
-* Run the [fell_viewer](packages/fell_viewer/README.md) to start the webapp
+* Run the [fell_viewer](packages/fell_viewer/README.md) package to start the webapp
     
 ## Environment Variables
 
@@ -68,18 +67,12 @@ These new features are listed in approximate order of priority. A number of smal
 
 ### API
 
-* Improve error handling in Rust API, should be able to return other status codes
-* Collect environment variables up-front, provide option to run with default settings
-* Hyperparameter optimisation for created routes
-  * Use regression model to set params?
+* Set up for use with a profiler and attempt to optimise performance further
+* Wait for inspiration, perhaps there's an alternate approach which works better/faster
 
 
 ### Frontend
 
-* Improve UX when route generation fails
-  * Once different response codes implemented in the API, create toast messages explaining the issue
-* Bring back the progress bar!
-  * Will require the ability to poll the API for progress, good development opportunity
 * Formally define the expected end state of the webapp
   * Set out all of the different features to be built out
   * Define a target layout for each feature
