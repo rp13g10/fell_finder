@@ -2,12 +2,14 @@
 extracts into a tabular format."""
 
 import os
+import re
 import sys
 import zipfile
+from datetime import datetime
 from glob import glob
-from typing import Set
 from xml.etree import ElementTree as ET
 
+import diskcache
 import numpy as np
 import polars as pl
 import rasterio as rio
@@ -15,8 +17,12 @@ from tqdm.contrib.concurrent import process_map
 
 from fell_loader.utils.partitioning import add_bng_partition_to_polars_df
 
-# TODO: Add support for resume of partial loads, will need a thread-safe
-#       cache
+# TODO: Test new code, should now support delta loading and write out files
+#       partitioned by ID rather than lat/lon.
+
+# Set the max number of LIDAR files which will be processed in parallel
+# Allow up to 4gb of RAM per worker
+MAX_WORKERS = 4
 
 
 class LidarLoader:
@@ -38,21 +44,39 @@ class LidarLoader:
 
         self.data_dir = os.environ["FF_DATA_DIR"]
 
-        self.to_load = self.get_available_folders()
+        self.to_load = self.get_folders_to_load()
 
-    def get_available_folders(self) -> Set[str]:
-        """Get a list of all of the data folders which are available within the
+        self.dc = diskcache.Index(
+            os.path.join(self.data_dir, "temp/lidar_bounds")
+        )
+
+    def _get_file_id_from_path(self, path: str) -> str:
+        file_id = re.search(r".*([A-Z][A-Z]\d\d[ns][ew]).*", path)
+
+        if not file_id:
+            raise ValueError(f"Unable to extract file ID from path: {file_id}")
+
+        return file_id.group(1)
+
+    def get_available_folders(self) -> dict[str, str]:
+        """Get a dict of all of the data folders which are available within the
         data directory of this package. Data must have been downloaded from the
         DEFRA website:
         https://environment.data.gov.uk/DefraDataDownload/?Mode=survey
         Data should be from the composite DTM layer at 1m resolution.
 
         Raises:
-            FileNotFoundError: If no folders matching the above pattern are
-            found, an error will be raised.
+            FileNotFoundError: If no folders are found, an error will be raised
 
         Returns:
-            A set containing the absolute path to each data folder
+            A dict mapping the ID for each folder to its path on the
+            filesystem. For example:
+
+                {
+                    'SU00ne': (
+                        '/path/to/extracts/lidar/LIDAR-DTM-1m-2022-SU00ne.zip'
+                    )
+                }
 
         """
         all_lidar_dirs = glob(
@@ -60,7 +84,58 @@ class LidarLoader:
         )
         if not all_lidar_dirs:
             raise FileNotFoundError("No files found in data directory!")
-        return set(all_lidar_dirs)
+
+        return {
+            self._get_file_id_from_path(dir): dir for dir in all_lidar_dirs
+        }
+
+    def get_loaded_folders(self) -> dict[str, str]:
+        """Get a dict of all of the data folders which have already been
+        loaded into the landing data layer.
+
+
+        Returns:
+            A dict mapping the ID for each folder to its path on the
+            filesystem. For example:
+
+                {'SU00ne': '/path/to/landing/lidar/SU00ne'}
+
+        """
+        all_loaded_dirs = glob(os.path.join(self.data_dir, "landing/lidar/*"))
+        if not all_loaded_dirs:
+            return {}
+
+        return {
+            self._get_file_id_from_path(dir): dir for dir in all_loaded_dirs
+        }
+
+    def get_folders_to_load(self) -> dict[str, str]:
+        """Get a dict of all of the data folders which are available within the
+        data directory of this package, and have not yet been loaded into
+        the landing layer. Data must have been downloaded from the
+        DEFRA website:
+        https://environment.data.gov.uk/DefraDataDownload/?Mode=survey
+        Data should be from the composite DTM layer at 1m resolution.
+
+        Raises:
+            FileNotFoundError: If no folders are found, an error will be raised
+
+        Returns:
+            A dict mapping the ID for each folder to its path on the
+            filesystem. For example:
+
+                {
+                    'SU00ne': (
+                        '/path/to/extracts/lidar/LIDAR-DTM-1m-2022-SU00ne.zip'
+                    )
+                }
+
+        """
+
+        available = self.get_available_folders()
+        loaded = self.get_loaded_folders()
+
+        return {k: v for k, v in available.items() if k not in loaded}
 
     @staticmethod
     def _get_filenames_from_archive(
@@ -78,10 +153,30 @@ class LidarLoader:
 
     @staticmethod
     def _get_bbox_from_xml(xml: str) -> np.ndarray:
-        tree = ET.fromstring(xml)
+        """Using the .xml data stored in each LIDAR folder, extract the
+        coordinates which define the bounding box for the array.
 
+        Args:
+            xml: The contents of the XML file in the LIDAR folder
+
+        Raises:
+            AssertionError: If a malformed XML file is encountered, an
+                exception will be raised
+
+        Returns:
+            An array which defines the bounding box for the LIDAR data, takes
+            the form:
+
+                [min_easting, max_easting, min_northing, max_northing]
+
+        """
+
+        # Parse the XML and locate all of the 'pos' tags within it
+        tree = ET.fromstring(xml)
         corners = tree.findall("./spatRepInfo/Georect/cornerPts/pos")
 
+        # Determine the min/max coordinates, there's probably a more elegant
+        # way to do this
         min_easting = sys.maxsize
         max_easting = -sys.maxsize
         min_northing = sys.maxsize
@@ -206,11 +301,13 @@ class LidarLoader:
             A copy of the input dataframe with an updated schema
 
         """
-        lidar_df = lidar_df.select("easting", "northing", "elevation", "ptn")
+        lidar_df = lidar_df.select("easting", "northing", "elevation")
 
         return lidar_df
 
-    def parse_lidar_folder(self, lidar_dir: str) -> pl.DataFrame:
+    def parse_lidar_folder(
+        self, lidar_dir: str
+    ) -> tuple[pl.DataFrame, np.ndarray]:
         """This function will read in the contents of a single LIDAR folder,
         transform it into a tabular format and return its contents as a pySpark
         Dataframe
@@ -219,7 +316,8 @@ class LidarLoader:
             lidar_dir: The location of the LIDAR folder to be loaded
 
         Returns:
-            The contents of the provided LIDAR folder
+            The contents of the provided LIDAR folder, and an array
+            representing its bounding box
 
         """
 
@@ -229,58 +327,106 @@ class LidarLoader:
 
         lidar_df = add_bng_partition_to_polars_df(lidar_df)
         lidar_df = self.set_output_schema(lidar_df)
-        return lidar_df
+        return lidar_df, bbox
 
-    def write_df_to_parquet(self, lidar_df: pl.DataFrame) -> None:
+    def write_df_to_parquet(
+        self, file_id: str, lidar_df: pl.DataFrame
+    ) -> None:
         """Write the contents of a dataframe containing lidar data to the
         specified location. Data will be written in the parquet format, with
         partitioning set on the `ptn` column
 
         Args:
+            file_id: The unique identifier for the lidar file which has been
+                parsed
             lidar_df: A dataframe containing lidar data
 
         """
-        tgt_loc = os.path.join(self.data_dir, "parsed/lidar")
+        now = datetime.now().isoformat()
 
-        lidar_df.write_parquet(
-            tgt_loc,
-            use_pyarrow=True,
-            pyarrow_options={
-                "partition_cols": ["ptn"],
-                "compression": "snappy",
-            },
+        tgt_loc = os.path.join(
+            self.data_dir, "landing/lidar", file_id, f"{now}.parquet"
         )
 
-    def process_lidar_file(self, lidar_dir: str) -> None:
+        lidar_df.write_parquet(tgt_loc, compression="snappy", mkdir=True)
+
+    def process_lidar_file(self, file_spec: tuple[str, str]) -> None:
         """Process a single zip file containing LIDAR data. If the file has
         already been processed, no action will be taken. If an error is
         encountered during process, the name of the offending file will be
         written to bad_files.txt (in the current working directory).
 
+        Note that this accepts a single tuple as an argument so that it can
+        be used more easily with parallel processing libraries.
+
         Args:
-            lidar_dir: The location of the lidar file to be parsed
+            file_spec: A tuple containing the unique identifier for the file
+                to be loaded, and its path on the filesystem.
 
         """
 
+        file_id, lidar_dir = file_spec
+
         try:
-            lidar_df = self.parse_lidar_folder(lidar_dir)
-            self.write_df_to_parquet(lidar_df)
+            lidar_df, bbox = self.parse_lidar_folder(lidar_dir)
+            self.write_df_to_parquet(file_id, lidar_df)
+            self.dc.update([(file_id, bbox)])
             del lidar_df
         except pl.exceptions.ShapeError:
             # NOTE: Risk of thread collision deemed too low to worry about
             with open("bad_files.txt", "a") as fobj:
                 fobj.write(f"{lidar_dir}\n")
 
+    def write_bounds_to_parquet(self) -> None:
+        """Write the bounding box for a file ID to disk. This needs to be a
+        thread-safe operation as multiple files may be processed at once
+
+        Args:
+            file_id: The unique identifier for the lidar file which has been
+                parsed
+            bbox: The bounding box for the file
+
+        """
+
+        records = []
+        for file_id, (
+            min_easting,
+            min_northing,
+            max_easting,
+            max_northing,
+        ) in self.dc.items():  # type: ignore
+            records.append(
+                dict(
+                    file_id=file_id,
+                    min_easting=min_easting,
+                    min_northing=min_northing,
+                    max_easting=max_easting,
+                    max_northing=max_northing,
+                )
+            )
+
+        pl.from_dicts(records).write_parquet(
+            os.path.join(self.data_dir, "landing/lidar_bounds.parquet")
+        )
+
     def load(self) -> None:
         """Primary user facing function for this class. Parses every available
         LIDAR extract and stores the output as a partitioned parquet dataset.
 
-        Data will be written to `data/parsed/lidar` within the configured
+        Data will be written to `data/landing/lidar` within the configured
         data_dir
         """
         process_map(
             self.process_lidar_file,
-            self.to_load,
+            self.to_load.items(),
             desc="Parsing LIDAR data",
             chunksize=1,
+            max_workers=MAX_WORKERS,
         )
+
+        self.write_bounds_to_parquet()
+
+
+if __name__ == "__main__":
+    loader = LidarLoader()
+    loader.load()
