@@ -2,7 +2,7 @@
 data, joins the two datasets together to create a single augmented graph.
 """
 
-# ruff: noqa: ERA001, F401, E501
+# ruff: noqa: ERA001, E501, F401
 
 import logging
 import os
@@ -28,12 +28,15 @@ if __name__ == "__main__":
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
     )
 
+    # Other Setup #############################################################
+    DATA_DIR = os.environ["FF_DATA_DIR"]
+
     # Landing #################################################################
 
-    # lidar_loader = LidarLoader()
-    # self = lidar_loader
-    # lidar_loader.load()
-    # del lidar_loader
+    lidar_loader = LidarLoader()
+    self = lidar_loader
+    lidar_loader.load()
+    del lidar_loader
 
     # Config set for execution on personal devices, not tuned for cloud
     builder = (
@@ -49,6 +52,7 @@ if __name__ == "__main__":
             "org.apache.spark.sql.delta.catalog.DeltaCatalog",
         )
         .config("spark.log.level", "WARN")
+        .config("spark.local.dir", os.path.join(DATA_DIR, "temp", "spark"))
     )
 
     spark = configure_spark_with_delta_pip(builder).getOrCreate()
@@ -59,9 +63,9 @@ if __name__ == "__main__":
 
     # Staging #################################################################
 
-    # node_stager = NodeStager(spark)
-    # node_stager.load()
-    # del node_stager
+    node_stager = NodeStager(spark)
+    node_stager.load()
+    del node_stager
 
     edge_stager = EdgeStager(spark)
     edge_stager.load()

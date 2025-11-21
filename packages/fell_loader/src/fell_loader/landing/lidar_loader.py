@@ -56,8 +56,6 @@ class LidarLoader:
         if not file_id:
             raise ValueError(f"Unable to extract file ID from path: {file_id}")
 
-        logger.debug(f"Got file_id '{file_id}' from path '{path}'")
-
         return file_id.group(1)
 
     def get_available_folders(self) -> dict[str, str]:

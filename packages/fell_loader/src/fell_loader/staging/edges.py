@@ -2,15 +2,15 @@
 with updates applied as a delta on top of data already in the staging layer.
 """
 
+import contextlib
 import logging
 import os
+import shutil
 
 from delta import DeltaTable
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql import types as T
-
-# TODO: See what happens when this gets executed
 
 CHUNK_SIZE = 100_000
 ELEVATION_RES_M = 10
@@ -560,6 +560,14 @@ class EdgeStager:
         edges_tbl.optimize().executeCompaction()
         logger.info("Optimization completed")
 
+    def clear_temp_files(self) -> None:
+        """One the data load operation has finished, clear out any files in
+        the temp directory
+        """
+        logger.info("Clearing temp directory")
+        with contextlib.suppress(FileNotFoundError):
+            shutil.rmtree(os.path.join(self.data_dir, "temp", "edge_updates"))
+
     def load(self) -> None:
         """End-to-end script for the staging of edge data. This reads in the
         contents of the edges dataset from the landing layer, calculates which
@@ -592,3 +600,4 @@ class EdgeStager:
             to_update_df = self.get_edges_to_update()
 
         self.optimise_edges_table()
+        self.clear_temp_files()

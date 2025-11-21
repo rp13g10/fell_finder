@@ -2,15 +2,15 @@
 updates applied as a delta on top of data already in the staging layer.
 """
 
+import contextlib
 import logging
 import os
+import shutil
 
 from delta import DeltaTable
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql import types as T
-
-# TODO: See what happens when this gets executed
 
 CHUNK_SIZE = 100_000
 
@@ -266,7 +266,10 @@ class NodeStager:
 
         # Remove records
         if removals is not None:
-            logger.info("Removing nodes no longer present in map")
+            remove_count = removals.count()
+            logger.info(
+                f"Removing {remove_count} nodes no longer present in map"
+            )
             nodes_tbl.merge(
                 removals, condition="nodes.id = removals.id"
             ).whenMatchedDelete().execute()
@@ -283,6 +286,14 @@ class NodeStager:
         logger.info("Optimizing nodes table")
         nodes_tbl.optimize().executeCompaction()
         logger.info("Optimization completed")
+
+    def clear_temp_files(self) -> None:
+        """One the data load operation has finished, clear out any files in
+        the temp directory
+        """
+        logger.info("Clearing temp directory")
+        with contextlib.suppress(FileNotFoundError):
+            shutil.rmtree(os.path.join(self.data_dir, "temp", "node_updates"))
 
     def load(self) -> None:
         """End-to-end script for the staging of node data. This reads in the
@@ -311,3 +322,4 @@ class NodeStager:
             to_update_df = self.get_nodes_to_update()
 
         self.optimise_nodes_table()
+        self.clear_temp_files()
