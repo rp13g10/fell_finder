@@ -13,6 +13,8 @@ from pyspark.sql import types as T
 
 CHUNK_SIZE = 100_000
 
+logger = logging.getLogger(__name__)
+
 
 class NodeStager:
     """Defines staging logic for the nodes dataset."""
@@ -27,20 +29,17 @@ class NodeStager:
     def initialize_output_table(self) -> None:
         """If no data is present in the staging layer, create an empty table"""
 
-        nodes_tbl = (
-            DeltaTable.createIfNotExists(self.spark)
-            .location(os.path.join(self.data_dir, "staging", "nodes"))
-            .addColumns(
-                [
-                    T.StructField("id", T.LongType()),
-                    T.StructField("lat", T.DoubleType()),
-                    T.StructField("lon", T.DoubleType()),
-                    T.StructField("elevation", T.DoubleType()),
-                    T.StructField("timestamp", T.LongType()),
-                ]
-            )
-            .execute()
-        )
+        DeltaTable.createIfNotExists(self.spark).location(
+            os.path.join(self.data_dir, "staging", "nodes")
+        ).addColumns(
+            [
+                T.StructField("id", T.LongType()),
+                T.StructField("lat", T.DoubleType()),
+                T.StructField("lon", T.DoubleType()),
+                T.StructField("elevation", T.DoubleType()),
+                T.StructField("timestamp", T.LongType()),
+            ]
+        ).execute()
 
     def get_nodes_to_remove(self) -> list[int]:
         """Determine which nodes need to be removed by finding any node IDs
@@ -90,45 +89,51 @@ class NodeStager:
             A dataframe containing a chunk of nodes which need to be updated
 
         """
-        # NOTE: Expected volume is ~7m records in each
 
+        logger.debug("Determining nodes to update")
+        # Read in new & existing datasets
         new_nodes = self.spark.read.parquet(
             os.path.join(self.data_dir, "landing", "nodes")
         )
 
-        # TODO: Handle cases where staging directory doesn't exist yet
         current_nodes = (
             DeltaTable.forPath(
                 self.spark, os.path.join(self.data_dir, "staging", "nodes")
             )
             .toDF()
-            .select("id", F.col("timestamp").alias("cur_timestamp"))
+            .select(
+                "id",
+                F.col("timestamp").alias("cur_timestamp"),
+            )
         )
 
+        # Determine which nodes need updating
         update_mask = F.col("timestamp") > F.col("cur_timestamp")
         new_mask = F.col("cur_timestamp").isNull()
         to_update = (
-            (
-                new_nodes.join(current_nodes, on="id", how="left")
-                .filter(update_mask | new_mask)
-                .drop("cur_timestamp")
-            )
+            new_nodes.join(current_nodes, on="id", how="left")
+            .filter(update_mask | new_mask)
+            .drop("cur_timestamp")
             # TODO: Set this up w. window function to make sure it works as
             #       expected.
-            .orderBy(
-                F.try_divide(F.col("easting"), F.lit(5000)).cast("integer"),
-                F.try_divide(F.col("northing"), F.lit(5000)).cast("integer"),
-            )
-            .limit(CHUNK_SIZE)
         )
+
+        # Sort according to BNG grid to minimise number of LIDAR partitions
+        # required, then select first N records
+        to_update = to_update.orderBy(
+            # NOTE: Each LIDAR file has dimensions 5000x5000, so this is
+            #       analogous to sorting by file ID
+            F.try_divide(F.col("easting"), F.lit(5000)).cast("integer"),
+            F.try_divide(F.col("northing"), F.lit(5000)).cast("integer"),
+        ).limit(CHUNK_SIZE)
 
         # If no data is returned, the load operation can be stopped
         to_update_count = to_update.count()
         if not to_update_count:
             self.updates_applied = True
-            print("No further updates required")
+            logger.info("No further updates required")
         else:
-            print(f"Updating {to_update_count:,.0f} nodes")
+            logger.info(f"Updating {to_update_count:,.0f} nodes")
 
         return to_update
 
@@ -167,7 +172,7 @@ class NodeStager:
         )
 
         files = [row.file_id for row in files_df.collect()]
-        print("Loading elevation for: %s", repr(files))
+        logger.debug("Loading elevation for: %s", repr(files))
 
         # Read in elevation dataset, limiting to only the file paths required
         paths = [
@@ -193,11 +198,6 @@ class NodeStager:
             A copy of nodes with an additional elevation field
 
         """
-
-        # Nodes is known to be a chunk of <1m records, elevation is 25m records
-        # per file_id. Set nodes as broadcast to attempt to speed up the join
-        # and reduce disk IO
-        nodes = F.broadcast(nodes)
 
         # NOTE: This needs to be a left join otherwise any nodes which are not
         #       present in the LIDAR dataset will crop up as needing to be
@@ -243,8 +243,10 @@ class NodeStager:
             removals: A list of node IDs which should be removed
 
         """
-        updates.write.parquet(
-            os.path.join(self.data_dir, "temp/node_updates"), mode="overwrite"
+
+        logger.debug("Writing node updates to temp folder")
+        updates.write.format("delta").mode("overwrite").save(
+            os.path.join(self.data_dir, "temp/node_updates")
         )
 
         # Create references to target table & updates
@@ -257,13 +259,15 @@ class NodeStager:
         updates_df = updates_tbl.toDF().alias("updates")
 
         # Update or insert records
+        logger.info("Applying node updates")
         nodes_tbl.merge(
             updates_df, condition="nodes.id = updates.id"
-        ).whenMatchedUpdateAll().whenNotMatchedInsertAll()
+        ).whenMatchedUpdateAll().whenNotMatchedInsertAll().execute()
+        logger.info("Node updates applied")
 
         # Remove records
         if removals:
-            print(f"Removing {len(removals):,.0f} nodes")
+            logger.info(f"Removing {len(removals):,.0f} nodes")
             nodes_tbl.delete(F.col("id").isin(*removals))
             self.removals_applied = True
 
@@ -274,9 +278,9 @@ class NodeStager:
         nodes_tbl = DeltaTable.forPath(
             self.spark, os.path.join(self.data_dir, "staging", "nodes")
         )
-        print("Optimizing nodes table")
+        logger.info("Optimizing nodes table")
         nodes_tbl.optimize().executeCompaction()
-        print("Optimization completed")
+        logger.info("Optimization completed")
 
     def load(self) -> None:
         """End-to-end script for the staging of node data. This reads in the

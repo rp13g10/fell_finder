@@ -1,6 +1,7 @@
 """Functions relating to the loading of a .osm.pbf network graph into a tabular
 format"""
 
+import logging
 import os
 from glob import glob
 from typing import Literal
@@ -9,6 +10,8 @@ from bng_latlon import WGS84toOSGB36
 from pyspark.sql import DataFrame, SparkSession, Window
 from pyspark.sql import functions as F
 from pyspark.sql import types as T
+
+logger = logging.getLogger(__name__)
 
 
 class OsmLoader:
@@ -83,13 +86,13 @@ class OsmLoader:
         else:
             pbf_loc = pbf_loc[0]
 
+        logging.info(f"Unpacking {pbf_loc}")
         os.system(f"java -jar {self.binary_loc} {pbf_loc}")
-
-        self._set_parquet_locs()
+        logging.info("File processed successfully")
 
     def read_osm_data(self) -> tuple[DataFrame, DataFrame]:
         """Read in the contents of the OSM nodes/ways parquet files as
-        daft dataframes. Note that this can only be called after
+        spark dataframes. Note that this can only be called after
         unpack_osm_pbf.
 
         Returns:
@@ -104,6 +107,7 @@ class OsmLoader:
             self._unpack_osm_pbf()
             self._set_parquet_locs()
 
+        logger.debug("Reading generated parquet files")
         nodes_df = self.spark.read.parquet(self.nodes_loc)
         ways_df = self.spark.read.parquet(self.ways_loc)
 
@@ -368,7 +372,9 @@ class OsmLoader:
         """
         tgt_loc = os.path.join(self.data_dir, "landing", target)
 
+        logger.info(f"Writing data to {tgt_loc}")
         df.write.parquet(tgt_loc, mode="overwrite")
+        logger.info("Data written successfully")
 
     def read_from_parquet(
         self, target: Literal["nodes", "ways", "edges"]

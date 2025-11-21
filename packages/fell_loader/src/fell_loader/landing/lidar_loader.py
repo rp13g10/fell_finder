@@ -1,11 +1,11 @@
 """Functions relating to the extraction & initial transformation of the LIDAR
 extracts into a tabular format."""
 
+import logging
 import os
 import re
 import sys
 import zipfile
-from datetime import datetime
 from glob import glob
 from xml.etree import ElementTree as ET
 
@@ -17,12 +17,11 @@ from tqdm.contrib.concurrent import process_map
 
 from fell_loader.utils.partitioning import add_bng_partition_to_polars_df
 
-# TODO: Test new code, should now support delta loading and write out files
-#       partitioned by ID rather than lat/lon.
-
 # Set the max number of LIDAR files which will be processed in parallel
-# Allow up to 4gb of RAM per worker
-MAX_WORKERS = 4
+# Allow up to 3gb of RAM per worker (should be closer to 2)
+MAX_WORKERS = 8
+
+logger = logging.getLogger(__name__)
 
 
 class LidarLoader:
@@ -56,6 +55,8 @@ class LidarLoader:
         if not file_id:
             raise ValueError(f"Unable to extract file ID from path: {file_id}")
 
+        logger.debug(f"Got file_id '{file_id}' from path '{path}'")
+
         return file_id.group(1)
 
     def get_available_folders(self) -> dict[str, str]:
@@ -79,11 +80,18 @@ class LidarLoader:
                 }
 
         """
-        all_lidar_dirs = glob(
-            os.path.join(self.data_dir, "extracts/lidar/*.zip")
-        )
+
+        pattern = os.path.join(self.data_dir, "extracts/lidar/*.zip")
+
+        logger.debug(f"Searching for LIDAR data using pattern {pattern}")
+
+        all_lidar_dirs = glob(pattern)
         if not all_lidar_dirs:
-            raise FileNotFoundError("No files found in data directory!")
+            raise FileNotFoundError(
+                f"No files matching pattern {pattern} detected!"
+            )
+
+        logger.info(f"Found {len(all_lidar_dirs)} LIDAR source files")
 
         return {
             self._get_file_id_from_path(dir): dir for dir in all_lidar_dirs
@@ -103,11 +111,25 @@ class LidarLoader:
         """
         all_loaded_dirs = glob(os.path.join(self.data_dir, "landing/lidar/*"))
         if not all_loaded_dirs:
+            logger.debug("No existing LIDAR data detected")
             return {}
+
+        logger.debug(f"Found {len(all_loaded_dirs)} parsed LIDAR files")
 
         return {
             self._get_file_id_from_path(dir): dir for dir in all_loaded_dirs
         }
+
+    def initialize_output_folder(self) -> None:
+        """If the 'lidar' folder in the landing layer of the data directory
+        doesn't exist yet, create it.
+        """
+
+        output_dir = os.path.join(self.data_dir, "landing", "lidar")
+
+        if not os.path.exists(output_dir):
+            logger.info(f"Initializing output folder '{output_dir}'")
+            os.makedirs(output_dir)
 
     def get_folders_to_load(self) -> dict[str, str]:
         """Get a dict of all of the data folders which are available within the
@@ -133,9 +155,17 @@ class LidarLoader:
         """
 
         available = self.get_available_folders()
+
+        # Initialize after successful location of output folders, prevent
+        # creation of folders in the wrong place if FF_DATA_DIR is not set
+        # correctly
+        self.initialize_output_folder()
         loaded = self.get_loaded_folders()
 
-        return {k: v for k, v in available.items() if k not in loaded}
+        to_load = {k: v for k, v in available.items() if k not in loaded}
+
+        logger.info(f"{len(to_load)} LIDAR files to load")
+        return to_load
 
     @staticmethod
     def _get_filenames_from_archive(
@@ -321,6 +351,7 @@ class LidarLoader:
 
         """
 
+        logger.info(f"Processing LIDAR data in {lidar_dir}")
         lidar, bbox = self.load_lidar_and_bbox_from_folder(lidar_dir)
 
         lidar_df = self.generate_df_from_lidar_array(lidar, bbox)
@@ -347,6 +378,7 @@ class LidarLoader:
             self.data_dir, "landing", "lidar", f"{file_id}.parquet"
         )
 
+        logger.info(f"Writing LIDAR data to {tgt_loc}")
         lidar_df.write_parquet(tgt_loc, compression="snappy", use_pyarrow=True)
 
     def process_lidar_file(self, file_spec: tuple[str, str]) -> None:
@@ -372,9 +404,7 @@ class LidarLoader:
             self.dc.update([(file_id, bbox)])
             del lidar_df
         except pl.exceptions.ShapeError:
-            # NOTE: Risk of thread collision deemed too low to worry about
-            with open("bad_files.txt", "a") as fobj:
-                fobj.write(f"{lidar_dir}\n")
+            logger.warning(f"Unable to parse file {lidar_dir}")
 
     def write_bounds_to_parquet(self) -> None:
         """Write the bounding box for a file ID to disk. This needs to be a
@@ -387,6 +417,7 @@ class LidarLoader:
 
         """
 
+        logger.info("Updating lidar_bounds table")
         records = []
         for file_id, (
             min_easting,
@@ -415,12 +446,14 @@ class LidarLoader:
         Data will be written to `data/landing/lidar` within the configured
         data_dir
         """
-        process_map(
-            self.process_lidar_file,
-            self.to_load.items(),
-            desc="Parsing LIDAR data",
-            chunksize=1,
-            max_workers=MAX_WORKERS,
-        )
 
-        self.write_bounds_to_parquet()
+        if self.to_load:
+            process_map(
+                self.process_lidar_file,
+                self.to_load.items(),
+                desc="Parsing LIDAR data",
+                chunksize=1,
+                max_workers=MAX_WORKERS,
+            )
+
+            self.write_bounds_to_parquet()

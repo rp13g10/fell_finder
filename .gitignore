@@ -10,3 +10,4 @@ packages/fell_finder/target
 target
 .vscode/*
 .env
+*.log

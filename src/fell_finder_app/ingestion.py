@@ -1,8 +1,10 @@
 """Primary execution script (for now). Triggers ingestion of LIDAR and OSM
-data, joins the two datasets together to create a single augmented graph."""
+data, joins the two datasets together to create a single augmented graph.
+"""
 
 # ruff: noqa: ERA001, F401, E501
 
+import logging
 import os
 
 from delta import configure_spark_with_delta_pip
@@ -16,6 +18,16 @@ from pyspark.sql import SparkSession
 # TODO: Build in some more detailed logging throughout
 
 if __name__ == "__main__":
+    # Logging #################################################################
+    logging.getLogger("py4j").setLevel(logging.ERROR)
+    if os.path.exists("fell_loader.log"):
+        os.remove("fell_loader.log")
+    logging.basicConfig(
+        filename="fell_loader.log",
+        level=logging.DEBUG,
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+    )
+
     # Landing #################################################################
 
     # lidar_loader = LidarLoader()

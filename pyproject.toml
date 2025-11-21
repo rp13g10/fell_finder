@@ -37,7 +37,7 @@ addopts = ["--import-mode=importlib"]
 
 [tool.ruff]
 line-length = 79
-include = ["packages/fell_loader", "packages/fell_viewer"]
+include = ["packages/fell_loader", "packages/fell_viewer", "src/fell_finder_app"]
 exclude = ["vulture_allowlist.py"]
 
 [tool.ruff.lint]
@@ -66,7 +66,7 @@ select = [
     "PERF", # performance
     "DOC", # pydoclint
 ]
-ignore = ["D107", "D415"]
+ignore = ["D107", "D205", "D415", "TD002", "TD003"]
 
 [tool.ruff.lint.per-file-ignores]
 "./tests/*" = ["E501", "ANN201"]
