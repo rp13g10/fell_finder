@@ -5,46 +5,51 @@ data, joins the two datasets together to create a single augmented graph."""
 
 import os
 
-from fell_loader import (
-    BelterLoader,
-    GraphContractor,
-    GraphEnricher,
+from delta import configure_spark_with_delta_pip
+from fell_loader.landing import (
     LidarLoader,
     OsmLoader,
 )
+from fell_loader.staging import NodeStager
 from pyspark.sql import SparkSession
 
 # TODO: Build in some more detailed logging throughout
 
 if __name__ == "__main__":
-    # Raw Data ################################################################
+    # Landing #################################################################
 
-    lidar_loader = LidarLoader()
-    self = lidar_loader
-    lidar_loader.load()
-    del lidar_loader
+    # lidar_loader = LidarLoader()
+    # self = lidar_loader
+    # lidar_loader.load()
+    # del lidar_loader
 
-    # # Config set for execution on personal devices, not tuned for cloud
-    # spark = (
-    #     SparkSession.builder.appName("fell_finder")  # type: ignore
-    #     .config("spark.master", "local[*]")
-    #     .config("spark.driver.memory", "16g")
-    #     .config("spark.driver.memoryOverhead", "4g")
-    #     .config("spark.sql.files.maxPartitionBytes", "67108864")
-    #     .config("spark.sql.adaptive.enabled", "true")
-    #     .config("spark.sql.adaptive.coalescePartitions.enabled", "true")
-    #     .config("spark.sql.shuffle.partitions", "512")
-    #     .config(
-    #         "spark.local.dir", os.path.join(os.environ["FF_DATA_DIR"], "temp")
-    #     )
-    #     .config("spark.log.level", "WARN")
-    #     .config("spark.driver.extraJavaOptions", "-XX:+UseG1GC")
-    #     .getOrCreate()
-    # )
+    # Config set for execution on personal devices, not tuned for cloud
+    builder = (
+        SparkSession.builder.appName("fell_loader")
+        .config("spark.master", "local[*]")
+        .config("spark.driver.memory", "4g")
+        .config("spark.driver.memoryOverhead", "1g")
+        .config(
+            "spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension"
+        )
+        .config(
+            "spark.sql.catalog.spark_catalog",
+            "org.apache.spark.sql.delta.catalog.DeltaCatalog",
+        )
+        .config("spark.log.level", "WARN")
+    )
+
+    spark = configure_spark_with_delta_pip(builder).getOrCreate()
 
     # osm_loader = OsmLoader(spark)
     # osm_loader.load()
     # del osm_loader
+
+    # Staging #################################################################
+
+    node_stager = NodeStager(spark)
+    node_stager.load()
+    del node_stager
 
     # # Combine Datasets ########################################################
     # graph_enricher = GraphEnricher(spark)

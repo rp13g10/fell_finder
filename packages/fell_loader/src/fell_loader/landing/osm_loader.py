@@ -38,7 +38,7 @@ class OsmLoader:
                 will be raised.
 
         """
-        osm_loc = os.path.join(self.data_dir, "temp", "osm")
+        osm_loc = os.path.join(self.data_dir, "extracts", "osm")
 
         nodes_loc = glob(os.path.join(osm_loc, "*.node.parquet"))
         ways_loc = glob(os.path.join(osm_loc, "*.way.parquet"))

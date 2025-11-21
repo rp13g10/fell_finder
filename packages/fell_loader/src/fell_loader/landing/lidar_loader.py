@@ -342,13 +342,12 @@ class LidarLoader:
             lidar_df: A dataframe containing lidar data
 
         """
-        now = datetime.now().isoformat()
 
         tgt_loc = os.path.join(
-            self.data_dir, "landing/lidar", file_id, f"{now}.parquet"
+            self.data_dir, "landing", "lidar", f"{file_id}.parquet"
         )
 
-        lidar_df.write_parquet(tgt_loc, compression="snappy", mkdir=True)
+        lidar_df.write_parquet(tgt_loc, compression="snappy", use_pyarrow=True)
 
     def process_lidar_file(self, file_spec: tuple[str, str]) -> None:
         """Process a single zip file containing LIDAR data. If the file has
@@ -425,8 +424,3 @@ class LidarLoader:
         )
 
         self.write_bounds_to_parquet()
-
-
-if __name__ == "__main__":
-    loader = LidarLoader()
-    loader.load()
