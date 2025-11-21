@@ -1,5 +1,6 @@
 """Functions relating to the extraction & initial transformation of the LIDAR
-extracts into a tabular format."""
+extracts into a tabular format.
+"""
 
 import logging
 import os
@@ -27,7 +28,8 @@ logger = logging.getLogger(__name__)
 class LidarLoader:
     """This contains all of the functions required to convert the data held in
     a LIDAR folder into tabular format. In most use cases, only the `load`
-    method will need to be called."""
+    method will need to be called.
+    """
 
     def __init__(self) -> None:
         """Initialize the loader class. An active pyspark SQL context is
@@ -40,7 +42,6 @@ class LidarLoader:
               which all LIDAR data will have been extracted.
 
         """
-
         self.data_dir = os.environ["FF_DATA_DIR"]
 
         self.to_load = self.get_folders_to_load()
@@ -80,7 +81,6 @@ class LidarLoader:
                 }
 
         """
-
         pattern = os.path.join(self.data_dir, "extracts/lidar/*.zip")
 
         logger.debug(f"Searching for LIDAR data using pattern {pattern}")
@@ -94,7 +94,7 @@ class LidarLoader:
         logger.info(f"Found {len(all_lidar_dirs)} LIDAR source files")
 
         return {
-            self._get_file_id_from_path(dir): dir for dir in all_lidar_dirs
+            self._get_file_id_from_path(dir_): dir_ for dir_ in all_lidar_dirs
         }
 
     def get_loaded_folders(self) -> dict[str, str]:
@@ -117,14 +117,13 @@ class LidarLoader:
         logger.debug(f"Found {len(all_loaded_dirs)} parsed LIDAR files")
 
         return {
-            self._get_file_id_from_path(dir): dir for dir in all_loaded_dirs
+            self._get_file_id_from_path(dir_): dir_ for dir_ in all_loaded_dirs
         }
 
     def initialize_output_folder(self) -> None:
         """If the 'lidar' folder in the landing layer of the data directory
         doesn't exist yet, create it.
         """
-
         output_dir = os.path.join(self.data_dir, "landing", "lidar")
 
         if not os.path.exists(output_dir):
@@ -153,7 +152,6 @@ class LidarLoader:
                 }
 
         """
-
         available = self.get_available_folders()
 
         # Initialize after successful location of output folders, prevent
@@ -172,7 +170,8 @@ class LidarLoader:
         archive: zipfile.ZipFile,
     ) -> tuple[str, str]:
         """Fetch the names of required .tif and .xml files from the provided
-        archive. Improved error handling to be added in a later build."""
+        archive. Improved error handling to be added in a later build.
+        """
         tif_loc = next(
             x.filename for x in archive.filelist if ".tif" in x.filename
         )
@@ -200,7 +199,6 @@ class LidarLoader:
                 [min_easting, max_easting, min_northing, max_northing]
 
         """
-
         # Parse the XML and locate all of the 'pos' tags within it
         tree = ET.fromstring(xml)
         corners = tree.findall("./spatRepInfo/Georect/cornerPts/pos")
@@ -219,20 +217,14 @@ class LidarLoader:
             easting = int(float(easting))
             northing = int(float(northing))
 
-            if easting < min_easting:
-                min_easting = easting
-            if easting > max_easting:
-                max_easting = easting
-            if northing < min_northing:
-                min_northing = northing
-            if northing > max_northing:
-                max_northing = northing
+            min_easting = min(min_easting, easting)
+            max_easting = max(max_easting, easting)
+            min_northing = min(min_northing, northing)
+            max_northing = max(max_northing, northing)
 
         assert all(
-            [
-                (abs(x) != sys.maxsize)
-                for x in [min_easting, max_easting, min_northing, max_northing]
-            ]
+            (abs(x) != sys.maxsize)
+            for x in [min_easting, max_easting, min_northing, max_northing]
         ), "Error while extracting bbox"
         assert min_easting < max_easting, "Error while extracting bbox"
         assert min_northing < max_northing, "Error while extracting bbox"
@@ -264,7 +256,6 @@ class LidarLoader:
                 - northing_max
 
         """
-
         with zipfile.ZipFile(lidar_dir, mode="r") as archive:
             tif_loc, xml_loc = self._get_filenames_from_archive(archive)
 
@@ -282,7 +273,7 @@ class LidarLoader:
         lidar: np.ndarray, bbox: np.ndarray
     ) -> pl.DataFrame:
         """Parse a given array containing LIDAR data, and the corresponding
-        bounding box. Returns a long-form dataframe containg eastings,
+        bounding box. Returns a long-form dataframe containing eastings,
         northings and elevations.
 
         Args:
@@ -350,7 +341,6 @@ class LidarLoader:
             representing its bounding box
 
         """
-
         logger.info(f"Processing LIDAR data in {lidar_dir}")
         lidar, bbox = self.load_lidar_and_bbox_from_folder(lidar_dir)
 
@@ -373,7 +363,6 @@ class LidarLoader:
             lidar_df: A dataframe containing lidar data
 
         """
-
         tgt_loc = os.path.join(
             self.data_dir, "landing", "lidar", f"{file_id}.parquet"
         )
@@ -395,7 +384,6 @@ class LidarLoader:
                 to be loaded, and its path on the filesystem.
 
         """
-
         file_id, lidar_dir = file_spec
 
         try:
@@ -416,7 +404,6 @@ class LidarLoader:
             bbox: The bounding box for the file
 
         """
-
         logger.info("Updating lidar_bounds table")
         records = []
         for file_id, (
@@ -446,7 +433,6 @@ class LidarLoader:
         Data will be written to `data/landing/lidar` within the configured
         data_dir
         """
-
         if self.to_load:
             process_map(
                 self.process_lidar_file,

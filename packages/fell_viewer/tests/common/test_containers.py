@@ -1,12 +1,11 @@
 """Ensure data passed from the webapp to the backend is being stored
-properly"""
+properly
+"""
 
 import os
 from typing import Any
 
 import pytest
-from pytest import approx
-
 from fell_viewer.common.containers import (
     BBox,
     Route,
@@ -14,12 +13,13 @@ from fell_viewer.common.containers import (
     RouteGeometry,
     RouteMetrics,
 )
+from pytest import approx
 
 
 def test_route_config():
     """Ensure derived properties are set properly and appropriate datatypes
-    are being enforced"""
-
+    are being enforced
+    """
     # Arrange
     test_kwargs = dict(
         start_lat="50.0",
@@ -58,7 +58,6 @@ class TestBBox:
 
     def test_from_dict(self):
         """Check that reads from dict are set up properly"""
-
         # Arrange
         test_dict = dict(min_lat=0.1, min_lon=0.2, max_lat=0.3, max_lon=0.4)
         target = BBox(min_lat=0.1, min_lon=0.2, max_lat=0.3, max_lon=0.4)
@@ -71,7 +70,6 @@ class TestBBox:
 
     def test_to_dict(self):
         """Check that conversion to dict is set up properly"""
-
         # Arrange
         test_bbox = BBox(min_lat=0.1, min_lon=0.2, max_lat=0.3, max_lon=0.4)
         target = dict(min_lat=0.1, min_lon=0.2, max_lat=0.3, max_lon=0.4)
@@ -84,7 +82,6 @@ class TestBBox:
 
     def test_centre(self):
         """Check that the centre point is being calculated correctly"""
-
         # Arrange
         test_bbox = BBox(min_lat=0.1, min_lon=0.2, max_lat=0.3, max_lon=0.4)
         target = (0.2, 0.3)
@@ -97,7 +94,6 @@ class TestBBox:
 
     def test_bounds(self):
         """Check that the bounds are being set correctly"""
-
         # Arrange
         test_bbox = BBox(min_lat=0.1, min_lon=0.2, max_lat=0.3, max_lon=0.4)
         target = ((0.1, 0.2), (0.3, 0.4))
@@ -110,7 +106,6 @@ class TestBBox:
 
     def test_to_viewport(self):
         """Check that viewport data is generated properly"""
-
         # Arrange
         test_bbox = BBox(min_lat=0.1, min_lon=0.2, max_lat=0.3, max_lon=0.4)
         target = {"bounds": ((0.1, 0.2), (0.3, 0.4)), "center": (0.2, 0.3)}
@@ -231,7 +226,6 @@ class TestRoute:
 
     def test_from_api_response(self):
         """Check that creation from API response is working"""
-
         # Arrange
         test_response = {
             "id": "route_id",

@@ -1,8 +1,8 @@
 """Defines methods for the GraphEnricher class relating to the processing
-of edges in the graph"""
+of edges in the graph
+"""
 
 from abc import ABC, abstractmethod
-from typing import List
 
 from geopy.distance import distance
 from pyspark.sql import DataFrame, SparkSession
@@ -39,7 +39,6 @@ class EdgeMixin(ABC):
             A copy of the input table with an additional 'edge_steps' column
 
         """
-
         # Calculate edge distance based on start/end coords
         # each increment is ~1m, disregarding the curvature of the earth
         edges = edges.withColumn(
@@ -82,7 +81,7 @@ class EdgeMixin(ABC):
         """
 
         @F.udf(returnType=ArrayType(DoubleType()))
-        def linspace_udf(start: int, end: int, n_steps: int) -> List[float]:
+        def linspace_udf(start: int, end: int, n_steps: int) -> list[float]:
             """Return a list of n_steps evenly spaced points between the start
             and end coordinates.
 
@@ -104,7 +103,7 @@ class EdgeMixin(ABC):
             return [start_f + (delta * step) for step in range(n_steps)]
 
         @F.udf(returnType=ArrayType(IntegerType()))
-        def inx_udf(n_checkpoints: int) -> List[int]:
+        def inx_udf(n_checkpoints: int) -> list[int]:
             """Returns a list of indexes between 0 and n_checkpoints
 
             Args:
@@ -313,6 +312,7 @@ class EdgeMixin(ABC):
         )
         return edges
 
+    # TODO: Move this into sanitised layer prep
     @staticmethod
     def calculate_edge_distances(edges: DataFrame) -> DataFrame:
         """For each edge in the graph, calculate the distance from the start

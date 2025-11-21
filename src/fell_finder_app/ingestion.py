@@ -12,7 +12,7 @@ from fell_loader.landing import (
     LidarLoader,
     OsmLoader,
 )
-from fell_loader.staging import NodeStager
+from fell_loader.staging import EdgeStager, NodeStager
 from pyspark.sql import SparkSession
 
 # TODO: Build in some more detailed logging throughout
@@ -59,9 +59,13 @@ if __name__ == "__main__":
 
     # Staging #################################################################
 
-    node_stager = NodeStager(spark)
-    node_stager.load()
-    del node_stager
+    # node_stager = NodeStager(spark)
+    # node_stager.load()
+    # del node_stager
+
+    edge_stager = EdgeStager(spark)
+    edge_stager.load()
+    del edge_stager
 
     # # Combine Datasets ########################################################
     # graph_enricher = GraphEnricher(spark)

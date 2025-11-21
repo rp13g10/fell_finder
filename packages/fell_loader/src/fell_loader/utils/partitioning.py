@@ -1,5 +1,6 @@
 """Utility functions which are used across the different modules within this
-package."""
+package.
+"""
 
 import os
 

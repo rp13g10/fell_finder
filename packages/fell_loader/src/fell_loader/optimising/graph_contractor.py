@@ -1,5 +1,6 @@
 """Defines the GraphContractor class, which is responsible for minimising the
-complexity of the graph when loaded into networkx for route creation"""
+complexity of the graph when loaded into networkx for route creation
+"""
 
 import os
 from typing import Literal
@@ -14,7 +15,8 @@ from fell_loader.utils.partitioning import add_coords_partition_to_spark_df
 
 class GraphContractor:
     """Class which is responsible for minimising the complexity of the graph
-    when loaded into networkx for route creation"""
+    when loaded into networkx for route creation
+    """
 
     def __init__(self, spark: SparkSession) -> None:
         """Create a graph contractor object, which exposes an optimise method
@@ -58,7 +60,6 @@ class GraphContractor:
             columns
 
         """
-
         out_links = edges.select(
             F.col("src").alias("id"),
             F.col("dst").alias("neighbour"),
@@ -116,7 +117,6 @@ class GraphContractor:
               * dead_end_flag
 
         """
-
         contract_mask = F.col("degree") == 2
         dead_end_mask = F.col("degree") == 1
 
@@ -184,7 +184,6 @@ class GraphContractor:
             chain_dst columns
 
         """
-
         # Bring through flags for the source node
         src_flags = nodes.select(
             F.col("id").alias("src"),
@@ -281,7 +280,6 @@ class GraphContractor:
             An aggregated copy of the input dataframe
 
         """
-
         edges = edges.groupBy("chain_src", "chain_dst").agg(
             F.array_sort(F.collect_set("highway")).alias("highway"),
             F.array_sort(F.collect_set("surface")).alias("surface"),
@@ -323,13 +321,12 @@ class GraphContractor:
         meaningful format.
 
         Args:
-            edges: A dataframe containg all of the chains in the graph
+            edges: A dataframe containing all of the chains in the graph
 
         Returns:
             A copy of the input dataframe with a normalized schema
 
         """
-
         edges = edges.select(
             F.col("chain_src").alias("src"),
             F.col("chain_dst").alias("dst"),
@@ -431,7 +428,6 @@ class GraphContractor:
             A copy of the input dataframe with a standardized schema
 
         """
-
         edges = edges.select(
             "src",
             "dst",
@@ -467,7 +463,6 @@ class GraphContractor:
             A filtered copy of the nodes dataframe
 
         """
-
         src_nodes = edges.select(F.col("src").alias("id"))
         dst_nodes = edges.select(F.col("dst").alias("id"))
         to_keep = src_nodes.union(dst_nodes).dropDuplicates()
@@ -502,7 +497,6 @@ class GraphContractor:
             target: The target location for the enriched dataset
 
         """
-
         # Write the dataframe out to disk
         df.write.mode("overwrite").csv(
             os.path.join(self.data_dir, "optimised", target),
@@ -522,7 +516,6 @@ class GraphContractor:
         This minimises the speed and complexity of the graph, improving the
         performance of the route finding algorithm.
         """
-
         nodes = self.load_df("nodes")
         edges = self.load_df("edges")
 

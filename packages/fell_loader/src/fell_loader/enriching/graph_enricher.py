@@ -85,7 +85,6 @@ class GraphEnricher(NodeMixin, EdgeMixin):
             The filtered contents of the specified dataset
 
         """
-
         basepath = os.path.join(self.data_dir, layer, dataset)
 
         if ptn:
@@ -107,7 +106,6 @@ class GraphEnricher(NodeMixin, EdgeMixin):
                 must contain a 'ptn' column
 
         """
-
         if ptns:
             # Write the dataframe out to disk
             df.write.mode("append").parquet(
@@ -126,7 +124,6 @@ class GraphEnricher(NodeMixin, EdgeMixin):
         datasets with elevation & distance data. Store the enriched datasets
         to the 'enriched' subfolder within the specified data_dir.
         """
-
         # Repartition nodes (move earlier if it works)
         nodes_df = self.load_df("nodes")
         nodes_df = add_bng_partition_to_spark_df(nodes_df)

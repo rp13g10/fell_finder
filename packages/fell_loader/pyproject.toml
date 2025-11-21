@@ -22,21 +22,6 @@ dependencies = [
     "tqdm>=4.67.1",
 ]
 
-[tool.ruff]
-line-length = 79
-
-[tool.ruff.lint]
-select = ["E", "F", "W", "D1", "D41", "ANN001", "ANN2", "ERA"]
-ignore = ["D107", "D415"]
-
-[tool.ruff.lint.per-file-ignores]
-"./tests/*" = ["E501", "ANN201"]
-"__init__.py" = ["D104"]
-
-[tool.setuptools.packages.find]
-where = ["src"]
-include = ["fell_loader*"]
-
 [build-system]
 requires = ["uv_build"]
 build-backend = "uv_build"

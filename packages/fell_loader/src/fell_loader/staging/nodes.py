@@ -1,5 +1,6 @@
 """Staging logic for the nodes dataset. Assigns elevations to all nodes, with
-updates applied as a delta on top of data already in the staging layer."""
+updates applied as a delta on top of data already in the staging layer.
+"""
 
 import logging
 import os
@@ -28,7 +29,6 @@ class NodeStager:
 
     def initialize_output_table(self) -> None:
         """If no data is present in the staging layer, create an empty table"""
-
         DeltaTable.createIfNotExists(self.spark).location(
             os.path.join(self.data_dir, "staging", "nodes")
         ).addColumns(
@@ -41,18 +41,18 @@ class NodeStager:
             ]
         ).execute()
 
-    def get_nodes_to_remove(self) -> list[int]:
+    def get_nodes_to_remove(self) -> DataFrame | None:
         """Determine which nodes need to be removed by finding any node IDs
         which are present in the existing nodes dataset, but not in the new
         one.
 
         Returns:
-            A list of node IDs to be removed
+            A dataframe of node IDs to be removed, or None (if no removals are
+            required)
 
         """
-
         if self.removals_applied:
-            return []
+            return None
 
         new_nodes = self.spark.read.parquet(
             os.path.join(self.data_dir, "landing", "nodes")
@@ -69,9 +69,11 @@ class NodeStager:
 
         # Need to remove nodes in staging layer which are not in the landing
         # layer
-        to_delete = current_nodes.join(new_nodes, on="id", how="anti")
-
-        to_delete = [row["id"] for row in to_delete.collect()]
+        to_delete = (
+            current_nodes.join(new_nodes, on="id", how="anti")
+            .select("id")
+            .alias("removals")
+        )
 
         return to_delete
 
@@ -89,7 +91,6 @@ class NodeStager:
             A dataframe containing a chunk of nodes which need to be updated
 
         """
-
         logger.debug("Determining nodes to update")
         # Read in new & existing datasets
         new_nodes = self.spark.read.parquet(
@@ -198,7 +199,6 @@ class NodeStager:
             A copy of nodes with an additional elevation field
 
         """
-
         # NOTE: This needs to be a left join otherwise any nodes which are not
         #       present in the LIDAR dataset will crop up as needing to be
         #       updated on every iteration
@@ -234,7 +234,7 @@ class NodeStager:
         return nodes
 
     def apply_node_updates(
-        self, updates: DataFrame, removals: list[int]
+        self, updates: DataFrame, removals: DataFrame | None
     ) -> None:
         """Apply a chunk of node updates to the data in the staging layer.
 
@@ -243,7 +243,6 @@ class NodeStager:
             removals: A list of node IDs which should be removed
 
         """
-
         logger.debug("Writing node updates to temp folder")
         updates.write.format("delta").mode("overwrite").save(
             os.path.join(self.data_dir, "temp/node_updates")
@@ -266,9 +265,12 @@ class NodeStager:
         logger.info("Node updates applied")
 
         # Remove records
-        if removals:
-            logger.info(f"Removing {len(removals):,.0f} nodes")
-            nodes_tbl.delete(F.col("id").isin(*removals))
+        if removals is not None:
+            logger.info("Removing nodes no longer present in map")
+            nodes_tbl.merge(
+                removals, condition="nodes.id = removals.id"
+            ).whenMatchedDelete().execute()
+            logger.info("Node removals applied")
             self.removals_applied = True
 
     def optimise_nodes_table(self) -> None:
@@ -289,13 +291,15 @@ class NodeStager:
         which have not been changed since the last data load will not be
         modified.
         """
-
         self.initialize_output_table()
 
         to_remove = self.get_nodes_to_remove()
         to_update_df = self.get_nodes_to_update()
 
         while not self.updates_applied:
+            # Free up memory before each new iteration
+            self.spark._jvm.System.gc()  # type: ignore
+
             elevation_df = self.read_elevation(to_update_df)
 
             to_update_df = self.tag_nodes(to_update_df, elevation_df)

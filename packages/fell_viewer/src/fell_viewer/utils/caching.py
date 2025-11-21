@@ -1,13 +1,13 @@
 """Utility functions which can be used to help cache information as part of a
-browser session, and retrieve it again"""
+browser session, and retrieve it again
+"""
 
 import json
-from typing import List
 
 from fell_viewer.common.containers import Route
 
 
-def store_routes_to_str(routes: List[Route]) -> str:
+def store_routes_to_str(routes: list[Route]) -> str:
     """Quick convenience function which allows the storing of a list of Route
     objects as a single string. Required in order to store the routes in
     memory on the client device
@@ -24,7 +24,7 @@ def store_routes_to_str(routes: List[Route]) -> str:
     return route_str
 
 
-def load_routes_from_str(route_str: str) -> List[Route]:
+def load_routes_from_str(route_str: str) -> list[Route]:
     """Quick convenience function which unpacks a string representing a list
     of routes into a list of Route objects
 

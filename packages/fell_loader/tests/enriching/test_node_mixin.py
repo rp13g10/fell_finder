@@ -1,10 +1,9 @@
 """Tests for methods relating to enrichment of nodes"""
 
+from fell_loader.enriching.node_mixin import NodeMixin
 from pyspark.sql import SparkSession
 from pyspark.sql.types import StringType, StructField, StructType
 from pyspark.testing import assertDataFrameEqual
-
-from fell_loader.enriching.node_mixin import NodeMixin
 
 
 def test_tag_nodes(test_session: SparkSession):

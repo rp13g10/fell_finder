@@ -1,5 +1,6 @@
 """Defines methods for the GraphEnricher class relating to the processing
-of nodes in the graph"""
+of nodes in the graph
+"""
 
 from abc import ABC, abstractmethod
 
@@ -30,7 +31,6 @@ class NodeMixin(ABC):
             A copy of nodes with an additional elevation field
 
         """
-
         nodes = nodes.repartition("ptn")
         elevation = elevation.repartition("ptn")
 

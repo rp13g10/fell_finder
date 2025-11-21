@@ -3,6 +3,7 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
+from fell_loader.parsing.osm_loader import OsmLoader
 from pyspark.sql import SparkSession
 from pyspark.sql.types import (
     ArrayType,
@@ -18,12 +19,11 @@ from pyspark.sql.types import (
 )
 from pyspark.testing import assertDataFrameEqual
 
-from fell_loader.parsing.osm_loader import OsmLoader
-
 
 class MockOsmLoader(OsmLoader):
     """Mock implementation of the OSM loader class, uses static values instead
-    of fetching info from environment variables"""
+    of fetching info from environment variables
+    """
 
     def __init__(self) -> None:
         self.data_dir = "data_dir"
@@ -34,12 +34,12 @@ class MockOsmLoader(OsmLoader):
 
 class TestSetParquetLocs:
     """Make sure the locations of parquet files to be read are being generated
-    properly"""
+    properly
+    """
 
     @patch("fell_loader.parsing.osm_loader.glob")
     def test_files_found(self, mock_glob: MagicMock):
         """If files are found, they should be saved down"""
-
         # Arrange
         mock_glob.side_effect = lambda x: [
             x.replace("*", "file_1"),
@@ -61,7 +61,6 @@ class TestSetParquetLocs:
     @patch("fell_loader.parsing.osm_loader.glob")
     def test_files_not_found(self, mock_glob: MagicMock):
         """If files are found, they should be saved down"""
-
         # Arrange
         mock_glob.return_value = []
         test_loader = MockOsmLoader()
@@ -74,11 +73,11 @@ class TestSetParquetLocs:
 @patch("fell_loader.parsing.osm_loader.glob")
 class TestUnpackOsmPbf:
     """Make sure the correct calls are generated in order to unpack
-    OSM data into parquet files"""
+    OSM data into parquet files
+    """
 
     def test_no_data(self, mock_glob: MagicMock):
         """If no data is found, an exception should be raised"""
-
         # Arrange
         mock_glob.return_value = []
         test_loader = MockOsmLoader()
@@ -95,7 +94,6 @@ class TestUnpackOsmPbf:
 
     def test_multiple_files(self, mock_glob: MagicMock):
         """If multiple files are found, an exception should be raised"""
-
         # Arrange
         mock_glob.return_value = ["file_1", "file_2"]
         test_loader = MockOsmLoader()
@@ -111,8 +109,8 @@ class TestUnpackOsmPbf:
     @patch("fell_loader.parsing.osm_loader.os")
     def test_single_file(self, mock_os: MagicMock, mock_glob: MagicMock):
         """If a single file is found, it should be unpacked and the locations
-        of the generated files stored internally"""
-
+        of the generated files stored internally
+        """
         # Arrange
         mock_glob.return_value = ["file_1"]
 
@@ -129,11 +127,11 @@ class TestUnpackOsmPbf:
 
 class TestReadOsmData:
     """Make sure the right data is being read in, and data is extracted
-    on-demand"""
+    on-demand
+    """
 
     def test_data_ready(self):
         """If parquet files are present, read them directly"""
-
         # Arrange
         test_loader = MockOsmLoader()
         test_loader._set_parquet_locs = MagicMock()
@@ -155,7 +153,6 @@ class TestReadOsmData:
 
     def test_data_not_ready(self):
         """If no parquet files are present, unpack the .osm.pbf file"""
-
         # Arrange
         test_loader = MockOsmLoader()
         test_loader._set_parquet_locs = MagicMock(
@@ -183,7 +180,8 @@ def test_assign_bng_coords(
     mock_wgs84_to_osgb36: MagicMock, test_session: SparkSession
 ):
     """Check that records are correctly being assigned BNG coordinates based
-    on their latitude & longitude"""
+    on their latitude & longitude
+    """
     # Arrange #################################################################
 
     # ----- Test Data -----
@@ -344,7 +342,6 @@ def test_unpack_tags(test_session: SparkSession):
 
 def test_get_tag_as_column(test_session: SparkSession):
     """Make sure extraction of tags into columns is working properly"""
-
     # Arrange #################################################################
 
     # ----- Test Data -----
@@ -403,7 +400,8 @@ def test_get_tag_as_column(test_session: SparkSession):
 
 def test_get_roads_and_paths(test_session: SparkSession):
     """Make sure filtering out of non-traversible ways has been set up
-    properly"""
+    properly
+    """
     # Arrange #################################################################
 
     # ----- Test Data -----
@@ -1199,4 +1197,5 @@ def test_read_from_parquet():
 def test_load():
     """This needs to be built out, preferably in a way which demonstrates
     that the E2E process works as expected, rather than simply showing that
-    the correct calls are being generated."""
+    the correct calls are being generated.
+    """

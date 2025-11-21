@@ -1,5 +1,6 @@
 """Functions relating to the loading of a .osm.pbf network graph into a tabular
-format"""
+format
+"""
 
 import logging
 import os
@@ -16,14 +17,15 @@ logger = logging.getLogger(__name__)
 
 class OsmLoader:
     """Reads in the contents of the provided OSM extract. Generates three
-    parquet datasets containing details of the graph nodes, ways and edges."""
+    parquet datasets containing details of the graph nodes, ways and edges.
+    """
 
     # MARK: Class Setup
 
     def __init__(self, spark: SparkSession) -> None:
         """Create an instance of the OSM loader, store down the directory which
-        contains the data to be loaded."""
-
+        contains the data to be loaded.
+        """
         self.spark = spark
 
         self.data_dir = os.environ["FF_DATA_DIR"]
@@ -71,20 +73,18 @@ class OsmLoader:
                 be raised
 
         """
-
         pbf_loc = glob(
             os.path.join(self.data_dir, "extracts", "osm", "*.osm.pbf")
         )
 
         if not pbf_loc:
             raise FileNotFoundError(f"No osm.pbf file detected in {pbf_loc}")
-        elif len(pbf_loc) > 1:
+        if len(pbf_loc) > 1:
             pbf_str = ", ".join(pbf_loc)
             raise RuntimeError(
                 f"Multiple osm.pbf files detected in {pbf_loc}: {pbf_str}"
             )
-        else:
-            pbf_loc = pbf_loc[0]
+        pbf_loc = pbf_loc[0]
 
         logging.info(f"Unpacking {pbf_loc}")
         os.system(f"java -jar {self.binary_loc} {pbf_loc}")
@@ -100,7 +100,6 @@ class OsmLoader:
             ways
 
         """
-
         try:
             self._set_parquet_locs()
         except FileNotFoundError:
@@ -231,7 +230,6 @@ class OsmLoader:
             A filtered copy of the input dataset with a new 'highway' column
 
         """
-
         ways = ways.filter(F.col("tags").getItem("highway").isNotNull())
 
         return ways
@@ -251,7 +249,6 @@ class OsmLoader:
             every edge contained within a way
 
         """
-
         # Explode the ways out to a single node per record
         edges = ways.select(
             F.col("id").alias("way_id"),
@@ -338,7 +335,6 @@ class OsmLoader:
             A subset of the provided dataframe
 
         """
-
         edges = edges.select(
             "src",
             "dst",
@@ -402,7 +398,6 @@ class OsmLoader:
         assigned to partitions according to eastings & northings before being
         written out to disk.
         """
-
         nodes, ways = self.read_osm_data()
 
         nodes = self.assign_bng_coords(nodes)

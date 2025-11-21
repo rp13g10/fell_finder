@@ -1,5 +1,6 @@
 """Defines static page elements, which are displayed regardless of the page
-the user is accessing."""
+the user is accessing.
+"""
 
 import dash_bootstrap_components as dbc
 from dash import dcc

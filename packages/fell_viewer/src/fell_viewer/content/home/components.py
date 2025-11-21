@@ -59,7 +59,6 @@ class HomeText(FVComponent):
 
     def generate(self) -> Component:
         """Generates the text which will be shown on the project homepage"""
-
         text_kwargs: dict[str, Any] = dict(className="mb-3")
 
         text_rows = [

@@ -1,11 +1,12 @@
 """Defines a function which can be used to initialize the callbacks used in
-the route finder page"""
+the route finder page
+"""
 
 import json
 import os
 import time
 from collections.abc import Callable
-from typing import Any, Dict, List, Literal, Tuple, Union
+from typing import Any, Literal
 
 import dash_bootstrap_components as dbc
 import dash_leaflet as dl
@@ -38,12 +39,12 @@ ROUTE_START_PNG = get_image_as_str("route_start.png")
 MAX_JOB_DURATION = int(os.environ.get("FF_MAX_JOB_SECONDS", "600"))
 
 with open(
-    os.path.join(CUR_DIR, "highway_types.json"), "r", encoding="utf8"
+    os.path.join(CUR_DIR, "highway_types.json"), encoding="utf8"
 ) as fobj:
     HIGHWAY_TYPES = json.load(fobj)
 
 with open(
-    os.path.join(CUR_DIR, "surface_types.json"), "r", encoding="utf8"
+    os.path.join(CUR_DIR, "surface_types.json"), encoding="utf8"
 ) as fobj:
     SURFACE_TYPES = json.load(fobj)
 
@@ -51,8 +52,8 @@ with open(
 def init_callbacks() -> None:
     """This function needs to be called in a function which defines elements of
     the page config in order to ensure the enclosed callbacks are correctly
-    registered"""
-
+    registered
+    """
     # ruff: noqa: ANN202
 
     @callback(
@@ -61,7 +62,7 @@ def init_callbacks() -> None:
         State("route-plot", "children"),
         prevent_initial_call=True,
     )
-    def show_clicked_point_on_map(click_data: Dict, current_children: List):
+    def show_clicked_point_on_map(click_data: dict, current_children: list):
         """Whenever the user clicks a point on the route, add a marker to the
         map at the selected point
 
@@ -103,7 +104,7 @@ def init_callbacks() -> None:
         Output("route-restricted-surfaces", "options"),
         Input("route-allowed-surfaces", "value"),
     )
-    def update_restriction_options(route_allowed_surfaces: List[str]):
+    def update_restriction_options(route_allowed_surfaces: list[str]):
         return route_allowed_surfaces
 
     # Required Callbacks (new setup)
@@ -130,13 +131,13 @@ def init_callbacks() -> None:
         prevent_initial_call=True,
     )
     def request_new_route_from_input(
-        n_clicks: Union[int, None],
-        current_children: List,
+        n_clicks: int | None,
+        current_children: list,
         route_dist: str,
         route_mode: Literal["hilly", "flat"],
-        route_highways: List[str],
-        route_allowed_surfaces: List[str],
-        route_restricted_surfaces: List[str],
+        route_highways: list[str],
+        route_allowed_surfaces: list[str],
+        route_restricted_surfaces: list[str],
         route_restricted_perc: int,
     ):
         """Trigger the creation of a new route. This will spawn a background
@@ -160,7 +161,6 @@ def init_callbacks() -> None:
             An ID for for the route creation job which has been spawned
 
         """
-
         if not n_clicks:
             return no_update
 
@@ -297,7 +297,6 @@ def init_callbacks() -> None:
             keys
 
         """
-
         status: dict[str, Any] = {"status": "queued", "detail": None}
         last_status: dict[str, Any] = {"status": None, "detail": None}
 
@@ -356,7 +355,6 @@ def init_callbacks() -> None:
             A json-encoded string containing details of any generated routes
 
         """
-
         status = json.loads(status_str)
 
         if status["status"] == "error":
@@ -406,7 +404,7 @@ def init_callbacks() -> None:
     )
     def update_primary_plot_on_calculation(
         cached_routes: str, current_children: list
-    ) -> Union[Tuple[NoUpdate, NoUpdate, NoUpdate], Tuple[List, Dict, Figure]]:
+    ) -> tuple[NoUpdate, NoUpdate, NoUpdate] | tuple[list, dict, Figure]:
         """When the user selects a new route for display in the primary plot,
         fetch the relevant data and render it as a polyline
 
@@ -421,7 +419,6 @@ def init_callbacks() -> None:
             removed and a new one added
 
         """
-
         if not cached_routes:
             return no_update, no_update, no_update
 
@@ -481,7 +478,6 @@ def init_callbacks() -> None:
             removed and a new one added
 
         """
-
         # Determine which route was clicked
         if not ctx.triggered_id:
             raise ValueError("Something went wrong updating the plot")
@@ -545,7 +541,6 @@ def init_callbacks() -> None:
             The details of a GPX file to trigger a download for
 
         """
-
         # Determine which route was clicked
         if not ctx.triggered_id:
             raise ValueError("Something went wrong updating the plot")
@@ -582,7 +577,7 @@ def init_callbacks() -> None:
         prevent_initial_call=True,
     )
     def update_map_based_on_profile(
-        hover_data: Union[Dict, None], current_children: List
+        hover_data: dict | None, current_children: list
     ):
         """When the user hovers over the elevation profile, place a marker on
         the map at the corresponding location.

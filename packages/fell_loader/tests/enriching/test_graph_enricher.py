@@ -3,7 +3,6 @@
 from unittest.mock import MagicMock
 
 import pytest
-
 from fell_loader.enriching.graph_enricher import GraphEnricher
 
 
@@ -18,7 +17,6 @@ class MockGraphEnricher(GraphEnricher):
 
 def test_load_df():
     """Make sure data is being read in and repartitioned correctly"""
-
     # Arrange #################################################################
 
     test_enricher = MockGraphEnricher()
@@ -43,7 +41,6 @@ class TestStoreDf:
 
     def test_with_partitions(self):
         """Make sure data is being stored to disk correctly"""
-
         # Arrange #################################################################
 
         test_enricher = MockGraphEnricher()
@@ -66,7 +63,6 @@ class TestStoreDf:
 
     def test_without_partitions(self):
         """Make sure data is being stored to disk correctly"""
-
         # Arrange #################################################################
 
         test_enricher = MockGraphEnricher()

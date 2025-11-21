@@ -3,6 +3,7 @@
 from unittest.mock import MagicMock
 
 import pytest
+from fell_loader.optimising.graph_contractor import GraphContractor
 from pyspark.sql import SparkSession
 from pyspark.sql.types import (
     ArrayType,
@@ -15,8 +16,6 @@ from pyspark.sql.types import (
 )
 from pyspark.testing import assertDataFrameEqual
 
-from fell_loader.optimising.graph_contractor import GraphContractor
-
 
 class MockGraphContractor(GraphContractor):
     """Dummy implementation with static properties"""
@@ -28,7 +27,6 @@ class MockGraphContractor(GraphContractor):
 
 def test_load_df():
     """Make sure the correct read calls are being generated"""
-
     # Arrange
     test_contractor = MockGraphContractor()
     test_dataset = "nodes"
@@ -43,7 +41,6 @@ def test_load_df():
 
 def test_get_node_degrees(test_session: SparkSession):
     """Make sure node degrees are being calculated properly"""
-
     # Arrange #################################################################
 
     # Test Data ---------------------------------------------------------------
@@ -134,7 +131,6 @@ def test_get_node_degrees(test_session: SparkSession):
 
 def test_add_degrees_to_nodes(test_session: SparkSession):
     """Make sure the table join has been set up properly"""
-
     # Arrange #################################################################
 
     test_contractor = MockGraphContractor()
@@ -218,8 +214,8 @@ def test_add_degrees_to_nodes(test_session: SparkSession):
 
 def test_derive_node_flags(test_session: SparkSession):
     """Make sure nodes are correctly being flagged for contraction
-    or removal"""
-
+    or removal
+    """
     # Arrange #################################################################
 
     # Test Data ---------------------------------------------------------------
@@ -278,8 +274,8 @@ def test_derive_node_flags(test_session: SparkSession):
 
 def test_derive_way_start_end_flags(test_session: SparkSession):
     """Make sure the first & last nodes in each way are being flagged
-    properly"""
-
+    properly
+    """
     # Arrange #################################################################
 
     # Test Data ---------------------------------------------------------------
@@ -352,8 +348,8 @@ def test_derive_way_start_end_flags(test_session: SparkSession):
 
 def test_derive_chain_src_dst(test_session: SparkSession):
     """Make sure that the chain source/destination nodes are being detected
-    properly"""
-
+    properly
+    """
     # Arrange #################################################################
 
     # Test Data ---------------------------------------------------------------
@@ -488,8 +484,8 @@ def test_derive_chain_src_dst(test_session: SparkSession):
 
 def test_propagate_chain_src_dst(test_session: SparkSession):
     """Make sure that chain source/destination nodes are being propagated
-    down the chain correctly"""
-
+    down the chain correctly
+    """
     # Arrange #################################################################
 
     # Test Data ---------------------------------------------------------------
@@ -578,7 +574,6 @@ def test_propagate_chain_src_dst(test_session: SparkSession):
 
 def test_contract_chains(test_session: SparkSession):
     """Make sure that chains are being collapsed properly"""
-
     # Arrange #################################################################
 
     # Test Data ---------------------------------------------------------------
@@ -820,7 +815,6 @@ def test_contract_chains(test_session: SparkSession):
 
 def test_generate_new_edges_from_chains(test_session: SparkSession):
     """Make sure that new edges are being generated correctly"""
-
     # Arrange #################################################################
 
     # Test Data ---------------------------------------------------------------
@@ -1058,7 +1052,6 @@ def test_generate_new_edges_from_chains(test_session: SparkSession):
 
 def test_drop_dead_ends(test_session: SparkSession):
     """Make sure that any dead ends are being removed cleanly"""
-
     # Arrange #################################################################
 
     # Test Data ---------------------------------------------------------------
@@ -1114,7 +1107,6 @@ def test_drop_dead_ends(test_session: SparkSession):
 
 def test_set_edge_output_schema(test_session: SparkSession):
     """Make sure that the correct output schema is being set"""
-
     # Arrange #################################################################
 
     # Test Data ---------------------------------------------------------------
@@ -1192,8 +1184,8 @@ def test_set_edge_output_schema(test_session: SparkSession):
 
 def test_drop_unused_nodes(test_session: SparkSession):
     """Make sure that any nodes without a corresponding edge (i.e. those which
-    were along the middle of a chain) are being removed"""
-
+    were along the middle of a chain) are being removed
+    """
     # Arrange #################################################################
 
     # Test Data ---------------------------------------------------------------
@@ -1288,8 +1280,8 @@ def test_drop_unused_nodes(test_session: SparkSession):
 
 def test_set_node_output_schema(test_session: SparkSession):
     """Make sure that the output schema for the nodes dataset is being set
-    properly"""
-
+    properly
+    """
     # Arrange #################################################################
 
     # Test Data ---------------------------------------------------------------
@@ -1350,8 +1342,8 @@ def test_set_node_output_schema(test_session: SparkSession):
 
 def test_store_df():
     """Make sure that the correct calls are being generated when storing data
-    back to disk"""
-
+    back to disk
+    """
     # Arrange
     test_contractor = MockGraphContractor()
 

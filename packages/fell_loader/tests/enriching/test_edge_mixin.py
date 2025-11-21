@@ -1,8 +1,8 @@
 """Tests for methods relating to enrichment of graph edges"""
 
-from typing import Tuple
 from unittest.mock import MagicMock, patch
 
+from fell_loader.enriching.edge_mixin import EdgeMixin
 from pyspark.sql import SparkSession
 from pyspark.sql.types import (
     BooleanType,
@@ -13,8 +13,6 @@ from pyspark.sql.types import (
     StructType,
 )
 from pyspark.testing import assertDataFrameEqual
-
-from fell_loader.enriching.edge_mixin import EdgeMixin
 
 
 class DummyEdgeMixin(EdgeMixin):
@@ -532,7 +530,6 @@ def test_calculate_elevation_changes(test_session: SparkSession):
 
 def test_implode_edges(test_session: SparkSession):
     """Make sure data is being aggregated properly"""
-
     # Arrange #################################################################
 
     # Test Data ---------------------------------------------------------------
@@ -626,7 +623,6 @@ def test_calculate_edge_distances(
     mock_distance: MagicMock, test_session: SparkSession
 ):
     """Make sure the distance calculation is being applied properly"""
-
     # Arrange #################################################################
 
     # Test Data ---------------------------------------------------------------
@@ -653,7 +649,7 @@ def test_calculate_edge_distances(
     test_df = test_session.createDataFrame(test_data, test_schema)
 
     def side_effect(
-        source: Tuple[float, float], destination: Tuple[float, float]
+        source: tuple[float, float], destination: tuple[float, float]
     ) -> float:
         """Mock behaviour for geopy.distance"""
         src_lat, src_lon = source
@@ -703,7 +699,6 @@ def test_calculate_edge_distances(
 
 def test_set_edge_output_schema(test_session: SparkSession):
     """Make sure the output schema is being set correctly"""
-
     # Arrange #################################################################
 
     # Test Data ---------------------------------------------------------------

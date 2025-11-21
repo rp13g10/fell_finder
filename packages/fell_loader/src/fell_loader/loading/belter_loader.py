@@ -1,6 +1,7 @@
 """Contains a helper class which iterates through all of the CSV
 files present in the optimised data directory and copies them directly
-into postgres"""
+into postgres
+"""
 
 import os
 from glob import glob
@@ -10,26 +11,23 @@ from psycopg2.extensions import connection
 from tqdm import tqdm
 
 curdir = os.path.dirname(os.path.abspath(__file__))
-with open(os.path.join(curdir, "init_db.sql"), "r", encoding="utf8") as fobj:
+with open(os.path.join(curdir, "init_db.sql"), encoding="utf8") as fobj:
     INIT_DB_QUERY = fobj.read()
 
-with open(os.path.join(curdir, "init_ptns.sql"), "r", encoding="utf8") as fobj:
+with open(os.path.join(curdir, "init_ptns.sql"), encoding="utf8") as fobj:
     INIT_PTNS_TEMPLATE = fobj.read()
 
-with open(
-    os.path.join(curdir, "copy_nodes.sql"), "r", encoding="utf8"
-) as fobj:
+with open(os.path.join(curdir, "copy_nodes.sql"), encoding="utf8") as fobj:
     COPY_NODES_QUERY = fobj.read()
 
-with open(
-    os.path.join(curdir, "copy_edges.sql"), "r", encoding="utf8"
-) as fobj:
+with open(os.path.join(curdir, "copy_edges.sql"), encoding="utf8") as fobj:
     COPY_EDGES_QUERY = fobj.read()
 
 
 class BelterLoader:
     """Class responsible for initializing the postgres database and loading
-    data into it"""
+    data into it
+    """
 
     def __init__(self) -> None:
         self.db = self._get_db_conn()
@@ -91,7 +89,8 @@ class BelterLoader:
 
     def init_db(self) -> None:
         """Initializes the database with all required tables, indexes and
-        partitions ready for data to be loaded."""
+        partitions ready for data to be loaded.
+        """
         init_ptns_query = self._gen_ptns_query()
 
         cur = self.db.cursor()
@@ -112,7 +111,7 @@ class BelterLoader:
         #       this seems to go via stdout
 
         for file_name in tqdm(to_load):
-            with open(file_name, "r", encoding="utf8") as fobj:
+            with open(file_name, encoding="utf8") as fobj:
                 cur.copy_expert(
                     COPY_NODES_QUERY,
                     fobj,
@@ -128,7 +127,7 @@ class BelterLoader:
         cur = self.db.cursor()
 
         for file_name in tqdm(to_load):
-            with open(file_name, "r", encoding="utf8") as fobj:
+            with open(file_name, encoding="utf8") as fobj:
                 cur.copy_expert(
                     COPY_EDGES_QUERY,
                     fobj,

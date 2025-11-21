@@ -7,16 +7,16 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import polars as pl
 import pytest
-from polars.testing import assert_frame_equal
-
 from fell_loader.parsing.lidar_loader import (
     LidarLoader,
 )
+from polars.testing import assert_frame_equal
 
 
 class MockLidarLoader(LidarLoader):
     """Mock implementation of the Lidar Loader which uses static values
-    instead of fetching data from environment variables"""
+    instead of fetching data from environment variables
+    """
 
     def __init__(self) -> None:
         self.data_dir = "data_dir"
@@ -85,8 +85,8 @@ def test_get_filenames_from_archive():
 
 def test_get_bbox_from_xml():
     """Check that the contents of XML files is being parsed correctly to
-    generate bounding boxes for each file"""
-
+    generate bounding boxes for each file
+    """
     # Arrange
     test_xml = dedent(
         """
@@ -163,7 +163,6 @@ def test_load_lidar_and_bbox_from_folder(
     mock_zipfile: MagicMock, mock_rio: MagicMock
 ):
     """Check that the correct calls are being generated"""
-
     # Arrange #################################################################
 
     # Arguments to be provided
@@ -216,7 +215,6 @@ class TestGenerateDfFromLidarArray:
 
     def test_square_bbox(self):
         """Check the standard case (5000x5000 grid)"""
-
         # Arrange
         test_bbox = np.array(
             [
@@ -266,7 +264,6 @@ class TestGenerateDfFromLidarArray:
 
     def test_rectangular_bbox(self):
         """Check the standard case (5000x5000 grid)"""
-
         # Arrange
         test_bbox = np.array(
             [
@@ -353,7 +350,6 @@ def test_set_output_schema():
 @patch("fell_loader.utils.partitioning.PTN_EDGE_SIZE_M", 10000)
 def test_parse_lidar_folder():
     """Ensure the correct calls are made, and output is as expected"""
-
     # Arrange #################################################################
 
     # Mock Loader -------------------------------------------------------------
@@ -431,7 +427,6 @@ def test_parse_lidar_folder():
 
 def test_write_df_to_parquet():
     """Ensure the correct calls are made when writing data"""
-
     # Arrange
     mock_write_parquet = MagicMock()
     mock_df = MagicMock()
@@ -461,7 +456,6 @@ class TestProcessLidarFile:
     @patch("fell_loader.parsing.lidar_loader.open")
     def test_processing_success(self, mock_open: MagicMock):
         """Happy path, no issues while processing"""
-
         # Arrange #############################################################
 
         # Provided Arguments --------------------------------------------------
@@ -490,7 +484,6 @@ class TestProcessLidarFile:
     @patch("fell_loader.parsing.lidar_loader.open")
     def test_processing_failure(self, mock_open: MagicMock):
         """Unhappy path, non-standard file"""
-
         # Arrange #############################################################
 
         # Provided Arguments --------------------------------------------------
@@ -529,7 +522,6 @@ class TestProcessLidarFile:
 @patch("fell_loader.parsing.lidar_loader.process_map")
 def test_load(mock_process_map: MagicMock):
     """Ensure the correct info is passed to process_map"""
-
     # Arrange
     mock_loader = MockLidarLoader()
 
