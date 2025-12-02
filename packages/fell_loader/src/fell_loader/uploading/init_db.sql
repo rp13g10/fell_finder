@@ -1,4 +1,6 @@
-/* Run using psql -U ross -d fell_finder -a -f init_db.sql */ CREATE SCHEMA IF NOT EXISTS routing;
+/* Run using psql -U ross -d fell_finder -a -f init_db.sql */
+
+CREATE SCHEMA IF NOT EXISTS routing;
 
 DROP TABLE IF EXISTS routing.nodes;
 

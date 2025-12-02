@@ -336,7 +336,7 @@ class LidarLoader(BaseLoader):
             representing its bounding box
 
         """
-        logger.info(f"Processing LIDAR data in {lidar_dir}")
+        logger.debug(f"Processing LIDAR data in {lidar_dir}")
         lidar, bbox = self.load_lidar_and_bbox_from_folder(lidar_dir)
 
         lidar_df = self.generate_df_from_lidar_array(lidar, bbox)
@@ -360,7 +360,7 @@ class LidarLoader(BaseLoader):
         """
         tgt_loc = self.data_dir / "landing" / "lidar" / f"{file_id}.parquet"
 
-        logger.info(f"Writing LIDAR data to {tgt_loc}")
+        logger.debug(f"Writing LIDAR data to {tgt_loc}")
         lidar_df.write_parquet(tgt_loc, compression="snappy", use_pyarrow=True)
 
     def process_lidar_file(self, file_spec: tuple[str, str]) -> None:

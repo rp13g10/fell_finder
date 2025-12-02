@@ -3,38 +3,43 @@ files present in the optimised data directory and copies them directly
 into postgres
 """
 
+import logging
 import os
-from glob import glob
+from pathlib import Path
 
 import psycopg2 as pg
 from psycopg2.extensions import connection
 from tqdm import tqdm
 
-# TODO: Migrate this over to using pathlib
+from fell_loader.base import BaseLoader
 
-curdir = os.path.dirname(os.path.abspath(__file__))
-with open(os.path.join(curdir, "init_db.sql"), encoding="utf8") as fobj:
-    INIT_DB_QUERY = fobj.read()
+logger = logging.Logger(__name__)
 
-with open(os.path.join(curdir, "init_ptns.sql"), encoding="utf8") as fobj:
-    INIT_PTNS_TEMPLATE = fobj.read()
+CUR_DIR = Path(__file__).parent.absolute()
 
-with open(os.path.join(curdir, "copy_nodes.sql"), encoding="utf8") as fobj:
-    COPY_NODES_QUERY = fobj.read()
+with (CUR_DIR / "init_db.sql").open("r", encoding="utf8") as file:
+    INIT_DB_QUERY = file.read()
 
-with open(os.path.join(curdir, "copy_edges.sql"), encoding="utf8") as fobj:
-    COPY_EDGES_QUERY = fobj.read()
+with (CUR_DIR / "init_ptns.sql").open("r", encoding="utf8") as file:
+    INIT_PTNS_TEMPLATE = file.read()
+
+with (CUR_DIR / "copy_nodes.sql").open("r", encoding="utf8") as file:
+    COPY_NODES_QUERY = file.read()
+
+with (CUR_DIR / "copy_edges.sql").open("r", encoding="utf8") as file:
+    COPY_EDGES_QUERY = file.read()
 
 
-class GraphUploader:
+class GraphUploader(BaseLoader):
     """Class responsible for initializing the postgres database and loading
     data into it
     """
 
     def __init__(self) -> None:
+        super().__init__()
+
         self.db = self._get_db_conn()
         self.db.autocommit = True
-        self.data_dir = os.environ["FF_DATA_DIR"]
 
     def _get_credentials(self) -> tuple[str, str]:
         """Quick & dirty function to fetch credentials for database access,
@@ -95,43 +100,53 @@ class GraphUploader:
         """
         init_ptns_query = self._gen_ptns_query()
 
+        logger.info("Initializing database")
         cur = self.db.cursor()
         cur.execute(INIT_DB_QUERY)
         cur.execute(init_ptns_query)
 
         cur.close()
+        logger.info("Database initialization complete")
 
     def upload_nodes(self) -> None:
         """Loads each CSV file in the optimised nodes folder into the db"""
-        to_load = glob(
-            os.path.join(self.data_dir, "optimised", "nodes", "*.csv")
-        )
+        to_load = list((self.data_dir / "optimised" / "nodes").glob("*.csv"))
 
         cur = self.db.cursor()
 
         # TODO: Switch back to using COPY command once running in containers,
         #       this seems to go via stdout
 
-        for file_name in tqdm(to_load):
-            with open(file_name, encoding="utf8") as fobj:
+        logger.info("Uploading nodes to database")
+        for path in tqdm(to_load):
+            logger.debug("Loading file %s", path)
+            with path.open(encoding="utf8") as file:
                 cur.copy_expert(
                     COPY_NODES_QUERY,
-                    fobj,
+                    file,
                 )
         cur.close()
+        logger.info("Upload completed")
 
     def upload_edges(self) -> None:
         """Loads each CSV file in the optimised edges folder into the db"""
-        to_load = glob(
-            os.path.join(self.data_dir, "optimised", "edges", "*.csv")
-        )
+        to_load = list((self.data_dir / "optimised" / "edges").glob("*.csv"))
 
         cur = self.db.cursor()
 
-        for file_name in tqdm(to_load):
-            with open(file_name, encoding="utf8") as fobj:
+        logger.info("Uploading edges to database")
+        for path in tqdm(to_load):
+            logger.debug("Loading file %s", path)
+            with path.open(encoding="utf8") as file:
                 cur.copy_expert(
                     COPY_EDGES_QUERY,
-                    fobj,
+                    file,
                 )
         cur.close()
+        logger.info("Upload completed")
+
+    def run(self) -> None:
+        """Loads all CSV files into the db"""
+        self.init_db()
+        self.upload_nodes()
+        self.upload_edges()

@@ -469,14 +469,16 @@ class GraphOptimiser(BaseSparkLoader):
             target: The target location for the enriched dataset
 
         """
-        # Write the dataframe out to disk
+        tgt_loc = self.data_dir / "optimised" / target
+        logger.info("Writing data to %s", tgt_loc)
         df.write.mode("overwrite").csv(
-            (self.data_dir / "optimised" / target).as_posix(),
+            tgt_loc.as_posix(),
             compression=None,
             sep="\t",
             encoding="utf-8",
             header=False,
         )
+        logger.info("Data written successfully")
 
     def run(self) -> None:
         """Run the graph contraction algorithm on the enriched nodes & edges

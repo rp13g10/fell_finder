@@ -7,7 +7,7 @@ import logging
 import os
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Literal
+from typing import Literal
 
 from delta import DeltaTable
 from pyspark.sql import DataFrame, SparkSession
@@ -25,17 +25,6 @@ class BaseLoader(ABC):
 
     def __init__(self) -> None:
         self.data_dir = Path(os.environ["FF_DATA_DIR"])
-
-    @abstractmethod
-    def write_parquet(
-        self,
-        df: Any,  # noqa: ANN401
-        layer: Layer,
-        dataset: Dataset,
-    ) -> None:
-        """Every loader must provide a `write_parquet` method which stores a
-        dataframe into a layer within the data directory
-        """
 
     @abstractmethod
     def run(self) -> None:
@@ -79,6 +68,8 @@ class BaseSparkLoader(BaseLoader, ABC):
 
         df.write.parquet(tgt_loc.as_posix(), mode="overwrite")
 
+        logger.info("Data written successfully")
+
     def read_parquet(
         self,
         layer: Layer,
@@ -106,6 +97,7 @@ class BaseSparkLoader(BaseLoader, ABC):
             logger.error(msg)
             raise FileNotFoundError(msg)
 
+        logger.debug("Reading parquet from %s", tgt_loc)
         return self.spark.read.parquet(tgt_loc.as_posix())
 
     def read_delta(self, layer: Layer, dataset: Dataset) -> DataFrame:
@@ -134,4 +126,5 @@ class BaseSparkLoader(BaseLoader, ABC):
             logger.error(msg)
             raise FileNotFoundError(msg)
 
+        logger.debug("Reading delta from %s", tgt_loc)
         return DeltaTable.forPath(self.spark, tgt_loc.as_posix()).toDF()
