@@ -10,6 +10,8 @@ import psycopg2 as pg
 from psycopg2.extensions import connection
 from tqdm import tqdm
 
+# TODO: Migrate this over to using pathlib
+
 curdir = os.path.dirname(os.path.abspath(__file__))
 with open(os.path.join(curdir, "init_db.sql"), encoding="utf8") as fobj:
     INIT_DB_QUERY = fobj.read()
@@ -24,7 +26,7 @@ with open(os.path.join(curdir, "copy_edges.sql"), encoding="utf8") as fobj:
     COPY_EDGES_QUERY = fobj.read()
 
 
-class BelterLoader:
+class GraphUploader:
     """Class responsible for initializing the postgres database and loading
     data into it
     """
@@ -99,7 +101,7 @@ class BelterLoader:
 
         cur.close()
 
-    def load_nodes(self) -> None:
+    def upload_nodes(self) -> None:
         """Loads each CSV file in the optimised nodes folder into the db"""
         to_load = glob(
             os.path.join(self.data_dir, "optimised", "nodes", "*.csv")
@@ -118,7 +120,7 @@ class BelterLoader:
                 )
         cur.close()
 
-    def load_edges(self) -> None:
+    def upload_edges(self) -> None:
         """Loads each CSV file in the optimised edges folder into the db"""
         to_load = glob(
             os.path.join(self.data_dir, "optimised", "edges", "*.csv")

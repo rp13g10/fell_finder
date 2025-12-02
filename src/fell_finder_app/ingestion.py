@@ -12,10 +12,11 @@ from fell_loader.landing import (
     LidarLoader,
     OsmLoader,
 )
+from fell_loader.optimising import GraphOptimiser
+from fell_loader.sanitising import EdgeSanitiser, NodeSanitiser
 from fell_loader.staging import EdgeStager, NodeStager
+from fell_loader.uploading import GraphUploader
 from pyspark.sql import SparkSession
-
-# TODO: Build in some more detailed logging throughout
 
 if __name__ == "__main__":
     # Logging #################################################################
@@ -33,10 +34,10 @@ if __name__ == "__main__":
 
     # Landing #################################################################
 
-    lidar_loader = LidarLoader()
-    self = lidar_loader
-    lidar_loader.load()
-    del lidar_loader
+    # lidar_loader = LidarLoader()
+    # self = lidar_loader
+    # lidar_loader.load()
+    # del lidar_loader
 
     # Config set for execution on personal devices, not tuned for cloud
     builder = (
@@ -57,35 +58,43 @@ if __name__ == "__main__":
 
     spark = configure_spark_with_delta_pip(builder).getOrCreate()
 
+    # TODO: Set this to skip load if osm file has not changed since last run
+
     # osm_loader = OsmLoader(spark)
     # osm_loader.load()
     # del osm_loader
 
     # Staging #################################################################
 
-    node_stager = NodeStager(spark)
-    node_stager.load()
-    del node_stager
+    # node_stager = NodeStager(spark)
+    # node_stager.load()
+    # del node_stager
 
-    edge_stager = EdgeStager(spark)
-    edge_stager.load()
-    del edge_stager
+    # edge_stager = EdgeStager(spark)
+    # edge_stager.load()
+    # del edge_stager
 
-    # # Combine Datasets ########################################################
-    # graph_enricher = GraphEnricher(spark)
-    # graph_enricher.enrich()
-    # del graph_enricher
+    # Sanitising ##############################################################
 
-    # # Optimise Graph ##########################################################
-    # graph_contractor = GraphContractor(spark)
-    # graph_contractor.contract()
-    # del graph_contractor
+    # edge_sanitiser = EdgeSanitiser(spark)
+    # edge_sanitiser.load()
+    # del edge_sanitiser
 
-    # spark.stop()
+    # node_sanitiser = NodeSanitiser(spark)
+    # node_sanitiser.load()
+    # del node_sanitiser
+
+    # Optimising ##############################################################
+
+    graph_optimiser = GraphOptimiser(spark)
+    graph_optimiser.contract()
+    del graph_optimiser
+
+    spark.stop()
 
     # # Load to Postgres ########################################################
 
-    # db_loader = BelterLoader()
-    # db_loader.init_db()
-    # db_loader.load_nodes()
-    # db_loader.load_edges()
+    graph_uploader = GraphUploader()
+    graph_uploader.init_db()
+    graph_uploader.upload_nodes()
+    graph_uploader.upload_edges()

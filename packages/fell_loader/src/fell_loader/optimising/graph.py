@@ -2,50 +2,22 @@
 complexity of the graph when loaded into networkx for route creation
 """
 
-import os
-from typing import Literal
+import logging
 
-from pyspark import StorageLevel
-from pyspark.sql import DataFrame, SparkSession
+from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 from pyspark.sql.window import Window
 
+from fell_loader.base import BaseSparkLoader
 from fell_loader.utils.partitioning import add_coords_partition_to_spark_df
 
+logger = logging.getLogger(__name__)
 
-class GraphContractor:
+
+class GraphOptimiser(BaseSparkLoader):
     """Class which is responsible for minimising the complexity of the graph
-    when loaded into networkx for route creation
+    which is used for route creation
     """
-
-    def __init__(self, spark: SparkSession) -> None:
-        """Create a graph contractor object, which exposes an optimise method
-        that removes nodes from the graph which do not form junctions
-
-        Args:
-            data_dir: A folder containing parsed lidar, node and edge datasets
-            spark: The active spark session
-
-        """
-        self.data_dir = os.environ["FF_DATA_DIR"]
-        self.spark = spark
-
-    def load_df(self, dataset: Literal["edges", "nodes"]) -> DataFrame:
-        """Load in the contents of a single dataset as a spark dataframe.
-
-        Args:
-            dataset: The name of the dataset to be loaded, must be in the
-              `enriched` subfolder of the configured `data_dir`
-
-        Returns:
-            The contents of the specified dataset
-
-        """
-        data_dir = os.path.join(self.data_dir, "enriched", dataset)
-
-        df = self.spark.read.parquet(data_dir)
-
-        return df
 
     @staticmethod
     def _get_node_degrees(edges: DataFrame) -> DataFrame:
@@ -488,7 +460,7 @@ class GraphContractor:
 
         return nodes
 
-    def store_df(self, df: DataFrame, target: str) -> None:
+    def export_to_csv(self, df: DataFrame, target: str) -> None:
         """Store an enriched dataframe to disk, as utf-8 encoded CSV files.
         These can then be bulk loaded directly into postgres.
 
@@ -499,14 +471,14 @@ class GraphContractor:
         """
         # Write the dataframe out to disk
         df.write.mode("overwrite").csv(
-            os.path.join(self.data_dir, "optimised", target),
+            (self.data_dir / "optimised" / target).as_posix(),
             compression=None,
             sep="\t",
             encoding="utf-8",
             header=False,
         )
 
-    def contract(self) -> None:
+    def run(self) -> None:
         """Run the graph contraction algorithm on the enriched nodes & edges
         datasets. This will combine all edges in the graph which are neither
         junctions nor the ends of ways, storing the geometry of the combined
@@ -516,17 +488,15 @@ class GraphContractor:
         This minimises the speed and complexity of the graph, improving the
         performance of the route finding algorithm.
         """
-        nodes = self.load_df("nodes")
-        edges = self.load_df("edges")
+        nodes = self.read_parquet(layer="sanitised", dataset="nodes")
+        edges = self.read_parquet(layer="sanitised", dataset="edges")
 
         nodes = self.add_degrees_to_nodes(nodes, edges)
         nodes = self.derive_node_flags(nodes)
-        nodes = nodes.persist(StorageLevel.DISK_ONLY)
 
         edges = self.derive_way_start_end_flags(edges)
         edges = self.derive_chain_src_dst(nodes, edges)
         edges = self.propagate_chain_src_dst(edges)
-        edges = edges.persist(StorageLevel.DISK_ONLY)
 
         edges = self.contract_chains(edges)
         edges = self.generate_new_edges_from_chains(edges)
@@ -541,5 +511,5 @@ class GraphContractor:
         nodes = add_coords_partition_to_spark_df(nodes)
         nodes = self.set_node_output_schema(nodes)
 
-        self.store_df(nodes, "nodes")
-        self.store_df(edges, "edges")
+        self.export_to_csv(nodes, "nodes")
+        self.export_to_csv(edges, "edges")

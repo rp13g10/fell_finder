@@ -3,11 +3,10 @@ extracts into a tabular format.
 """
 
 import logging
-import os
 import re
 import sys
 import zipfile
-from glob import glob
+from pathlib import Path
 from xml.etree import ElementTree as ET
 
 import diskcache
@@ -16,6 +15,7 @@ import polars as pl
 import rasterio as rio
 from tqdm.contrib.concurrent import process_map
 
+from fell_loader.base import BaseLoader
 from fell_loader.utils.partitioning import add_bng_partition_to_polars_df
 
 # Set the max number of LIDAR files which will be processed in parallel
@@ -25,9 +25,9 @@ MAX_WORKERS = 8
 logger = logging.getLogger(__name__)
 
 
-class LidarLoader:
+class LidarLoader(BaseLoader):
     """This contains all of the functions required to convert the data held in
-    a LIDAR folder into tabular format. In most use cases, only the `load`
+    a LIDAR folder into tabular format. In most use cases, only the `run`
     method will need to be called.
     """
 
@@ -42,13 +42,12 @@ class LidarLoader:
               which all LIDAR data will have been extracted.
 
         """
-        self.data_dir = os.environ["FF_DATA_DIR"]
+        super().__init__()
 
         self.to_load = self.get_folders_to_load()
 
-        self.dc = diskcache.Index(
-            os.path.join(self.data_dir, "temp/lidar_bounds")
-        )
+        dc_path = Path(self.data_dir) / "temp" / "lidar_bounds"
+        self.dc = diskcache.Index(dc_path.as_posix())
 
     def _get_file_id_from_path(self, path: str) -> str:
         file_id = re.search(r".*([A-Z][A-Z]\d\d[ns][ew]).*", path)
@@ -79,15 +78,12 @@ class LidarLoader:
                 }
 
         """
-        pattern = os.path.join(self.data_dir, "extracts/lidar/*.zip")
+        lidar_dir = self.data_dir / "extracts" / "lidar"
+        logger.debug(f"Searching for LIDAR data in  {lidar_dir}")
+        all_lidar_dirs = [path.as_posix() for path in lidar_dir.glob("*.zip")]
 
-        logger.debug(f"Searching for LIDAR data using pattern {pattern}")
-
-        all_lidar_dirs = glob(pattern)
         if not all_lidar_dirs:
-            raise FileNotFoundError(
-                f"No files matching pattern {pattern} detected!"
-            )
+            raise FileNotFoundError(f"No .zip files found in {lidar_dir}!")
 
         logger.info(f"Found {len(all_lidar_dirs)} LIDAR source files")
 
@@ -107,7 +103,8 @@ class LidarLoader:
                 {'SU00ne': '/path/to/landing/lidar/SU00ne'}
 
         """
-        all_loaded_dirs = glob(os.path.join(self.data_dir, "landing/lidar/*"))
+        loaded_dir = self.data_dir / "landing" / "lidar"
+        all_loaded_dirs = [path.as_posix() for path in loaded_dir.glob("*")]
         if not all_loaded_dirs:
             logger.debug("No existing LIDAR data detected")
             return {}
@@ -122,11 +119,11 @@ class LidarLoader:
         """If the 'lidar' folder in the landing layer of the data directory
         doesn't exist yet, create it.
         """
-        output_dir = os.path.join(self.data_dir, "landing", "lidar")
+        output_dir = self.data_dir / "landing" / "lidar"
 
-        if not os.path.exists(output_dir):
+        if not output_dir.exists():
             logger.info(f"Initializing output folder '{output_dir}'")
-            os.makedirs(output_dir)
+            output_dir.mkdir(parents=True)
 
     def get_folders_to_load(self) -> dict[str, str]:
         """Get a dict of all of the data folders which are available within the
@@ -361,9 +358,7 @@ class LidarLoader:
             lidar_df: A dataframe containing lidar data
 
         """
-        tgt_loc = os.path.join(
-            self.data_dir, "landing", "lidar", f"{file_id}.parquet"
-        )
+        tgt_loc = self.data_dir / "landing" / "lidar" / f"{file_id}.parquet"
 
         logger.info(f"Writing LIDAR data to {tgt_loc}")
         lidar_df.write_parquet(tgt_loc, compression="snappy", use_pyarrow=True)
@@ -420,11 +415,10 @@ class LidarLoader:
                 )
             )
 
-        pl.from_dicts(records).write_parquet(
-            os.path.join(self.data_dir, "landing/lidar_bounds.parquet")
-        )
+        target = self.data_dir / "landing" / "lidar_bounds.parquet"
+        pl.from_dicts(records).write_parquet(target)
 
-    def load(self) -> None:
+    def run(self) -> None:
         """Primary user facing function for this class. Parses every available
         LIDAR extract and stores the output as a partitioned parquet dataset.
 

@@ -4,7 +4,6 @@ updates applied as a delta on top of data already in the staging layer.
 
 import contextlib
 import logging
-import os
 import shutil
 
 from delta import DeltaTable
@@ -12,25 +11,26 @@ from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql import types as T
 
+from fell_loader.base import BaseSparkLoader
+
 CHUNK_SIZE = 100_000
 
 logger = logging.getLogger(__name__)
 
 
-class NodeStager:
+class NodeStager(BaseSparkLoader):
     """Defines staging logic for the nodes dataset."""
 
     def __init__(self, spark: SparkSession) -> None:
-        self.spark = spark
+        super().__init__(spark)
 
-        self.data_dir = os.environ["FF_DATA_DIR"]
         self.removals_applied = False
         self.updates_applied = False
 
     def initialize_output_table(self) -> None:
         """If no data is present in the staging layer, create an empty table"""
         DeltaTable.createIfNotExists(self.spark).location(
-            os.path.join(self.data_dir, "staging", "nodes")
+            (self.data_dir / "staging" / "nodes").as_posix()
         ).addColumns(
             [
                 T.StructField("id", T.LongType()),
@@ -54,18 +54,14 @@ class NodeStager:
         if self.removals_applied:
             return None
 
-        new_nodes = self.spark.read.parquet(
-            os.path.join(self.data_dir, "landing", "nodes")
-        ).select("id")
+        new_nodes = self.read_parquet(layer="landing", dataset="nodes").select(
+            "id"
+        )
 
         # Staging layer must be read in as delta table
-        current_nodes = (
-            DeltaTable.forPath(
-                self.spark, os.path.join(self.data_dir, "staging", "nodes")
-            )
-            .toDF()
-            .select("id")
-        )
+        current_nodes = self.read_delta(
+            layer="staging", dataset="nodes"
+        ).select("id")
 
         # Need to remove nodes in staging layer which are not in the landing
         # layer
@@ -93,19 +89,13 @@ class NodeStager:
         """
         logger.debug("Determining nodes to update")
         # Read in new & existing datasets
-        new_nodes = self.spark.read.parquet(
-            os.path.join(self.data_dir, "landing", "nodes")
-        )
+        new_nodes = self.read_parquet(layer="landing", dataset="nodes")
 
-        current_nodes = (
-            DeltaTable.forPath(
-                self.spark, os.path.join(self.data_dir, "staging", "nodes")
-            )
-            .toDF()
-            .select(
-                "id",
-                F.col("timestamp").alias("cur_timestamp"),
-            )
+        current_nodes = self.read_delta(
+            layer="staging", dataset="nodes"
+        ).select(
+            "id",
+            F.col("timestamp").alias("cur_timestamp"),
         )
 
         # Determine which nodes need updating
@@ -115,8 +105,6 @@ class NodeStager:
             new_nodes.join(current_nodes, on="id", how="left")
             .filter(update_mask | new_mask)
             .drop("cur_timestamp")
-            # TODO: Set this up w. window function to make sure it works as
-            #       expected.
         )
 
         # Sort according to BNG grid to minimise number of LIDAR partitions
@@ -152,8 +140,8 @@ class NodeStager:
             provided nodes
 
         """
-        bounds = self.spark.read.parquet(
-            os.path.join(self.data_dir, "landing", "lidar_bounds.parquet")
+        bounds = self.read_parquet(
+            layer="landing", dataset="lidar_bounds.parquet"
         )
 
         # Get file IDs for nodes by joining onto bounds and getting distinct
@@ -177,7 +165,9 @@ class NodeStager:
 
         # Read in elevation dataset, limiting to only the file paths required
         paths = [
-            os.path.join(self.data_dir, "landing", "lidar", f"{file}.parquet")
+            (
+                self.data_dir / "landing" / "lidar" / f"{file}.parquet"
+            ).as_posix()
             for file in files
         ]
         elevation = self.spark.read.parquet(*paths)
@@ -245,15 +235,15 @@ class NodeStager:
         """
         logger.debug("Writing node updates to temp folder")
         updates.write.format("delta").mode("overwrite").save(
-            os.path.join(self.data_dir, "temp/node_updates")
+            (self.data_dir / "temp" / "node_updates").as_posix()
         )
 
         # Create references to target table & updates
         nodes_tbl = DeltaTable.forPath(
-            self.spark, os.path.join(self.data_dir, "staging", "nodes")
+            self.spark, (self.data_dir / "staging" / "nodes").as_posix()
         ).alias("nodes")
         updates_tbl = DeltaTable.forPath(
-            self.spark, os.path.join(self.data_dir, "temp", "node_updates")
+            self.spark, (self.data_dir / "temp" / "node_updates").as_posix()
         )
         updates_df = updates_tbl.toDF().alias("updates")
 
@@ -281,7 +271,7 @@ class NodeStager:
         the staging layer to prevent file counts from getting out of control.
         """
         nodes_tbl = DeltaTable.forPath(
-            self.spark, os.path.join(self.data_dir, "staging", "nodes")
+            self.spark, (self.data_dir / "staging" / "nodes").as_posix()
         )
         logger.info("Optimizing nodes table")
         nodes_tbl.optimize().executeCompaction()
@@ -293,9 +283,9 @@ class NodeStager:
         """
         logger.info("Clearing temp directory")
         with contextlib.suppress(FileNotFoundError):
-            shutil.rmtree(os.path.join(self.data_dir, "temp", "node_updates"))
+            shutil.rmtree((self.data_dir / "temp" / "node_updates").as_posix())
 
-    def load(self) -> None:
+    def run(self) -> None:
         """End-to-end script for the staging of node data. This reads in the
         contents of the nodes dataset from the landing layer, calculates which
         records need to be updated and tags them with elevation data. Any nodes
@@ -308,7 +298,7 @@ class NodeStager:
         to_update_df = self.get_nodes_to_update()
 
         while not self.updates_applied:
-            # Free up memory before each new iteration
+            # Attempt to free up memory before each new iteration
             self.spark._jvm.System.gc()  # type: ignore
 
             elevation_df = self.read_elevation(to_update_df)

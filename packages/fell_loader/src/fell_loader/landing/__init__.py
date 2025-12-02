@@ -2,7 +2,7 @@
 suitable for downstream processing
 """
 
-from fell_loader.landing.lidar_loader import LidarLoader
-from fell_loader.landing.osm_loader import OsmLoader
+from fell_loader.landing.lidar import LidarLoader
+from fell_loader.landing.osm import OsmLoader
 
 __all__ = ["LidarLoader", "OsmLoader"]

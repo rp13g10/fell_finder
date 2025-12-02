@@ -4,7 +4,6 @@ with updates applied as a delta on top of data already in the staging layer.
 
 import contextlib
 import logging
-import os
 import shutil
 
 from delta import DeltaTable
@@ -12,26 +11,26 @@ from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql import types as T
 
+from fell_loader.base import BaseSparkLoader
+
 CHUNK_SIZE = 100_000
 ELEVATION_RES_M = 10
 
 logger = logging.getLogger(__name__)
 
 
-class EdgeStager:
+class EdgeStager(BaseSparkLoader):
     """Defines staging logic for the edges dataset."""
 
     def __init__(self, spark: SparkSession) -> None:
-        self.spark = spark
-
-        self.data_dir = os.environ["FF_DATA_DIR"]
+        super().__init__(spark)
         self.removals_applied = False
         self.updates_applied = False
 
     def initialize_output_table(self) -> None:
         """If no data is present in the staging layer, create an empty table"""
         DeltaTable.createIfNotExists(self.spark).location(
-            os.path.join(self.data_dir, "staging", "edges")
+            (self.data_dir / "staging" / "edges").as_posix()
         ).addColumns(
             [
                 T.StructField("src", T.LongType()),
@@ -66,18 +65,14 @@ class EdgeStager:
         if self.removals_applied:
             return None
 
-        new_edges = self.spark.read.parquet(
-            os.path.join(self.data_dir, "landing", "edges")
-        ).select("src", "dst")
+        new_edges = self.read_parquet(layer="landing", dataset="edges").select(
+            "src", "dst"
+        )
 
         # Staging layer must be read in as delta table
-        current_edges = (
-            DeltaTable.forPath(
-                self.spark, os.path.join(self.data_dir, "staging", "edges")
-            )
-            .toDF()
-            .select("src", "dst")
-        )
+        current_edges = self.read_delta(
+            layer="staging", dataset="edges"
+        ).select("src", "dst")
 
         # Need to remove edges in staging layer which are not in the landing
         # layer
@@ -105,33 +100,22 @@ class EdgeStager:
         """
         logger.debug("Determining edges to update")
         # Read in new & existing datasets
-        new_edges = self.spark.read.parquet(
-            os.path.join(self.data_dir, "landing", "edges")
-        )
+        new_edges = self.read_parquet(layer="landing", dataset="edges")
 
-        current_edges = (
-            DeltaTable.forPath(
-                self.spark, os.path.join(self.data_dir, "staging", "edges")
-            )
-            .toDF()
-            .select(
-                "src",
-                "dst",
-                F.col("timestamp").alias("cur_timestamp"),
-            )
+        current_edges = self.read_delta(
+            layer="staging", dataset="edges"
+        ).select(
+            "src",
+            "dst",
+            F.col("timestamp").alias("cur_timestamp"),
         )
 
         # Determine which edges need updating
         update_mask = F.col("timestamp") > F.col("cur_timestamp")
         new_mask = F.col("cur_timestamp").isNull()
-        to_update = (
-            new_edges.join(
-                current_edges, on=["src", "dst"], how="left"
-            ).filter(update_mask | new_mask)
-            # .drop("cur_timestamp")
-            # TODO: Set this up w. window function to make sure it works as
-            #       expected.
-        )
+        to_update = new_edges.join(
+            current_edges, on=["src", "dst"], how="left"
+        ).filter(update_mask | new_mask)
 
         # Sort according to BNG grid to minimise number of LIDAR partitions
         # required, then select first N records
@@ -166,8 +150,8 @@ class EdgeStager:
             provided edges
 
         """
-        bounds = self.spark.read.parquet(
-            os.path.join(self.data_dir, "landing", "lidar_bounds.parquet")
+        bounds = self.read_parquet(
+            layer="landing", dataset="lidar_bounds.parquet"
         )
 
         # Get file IDs for edges by joining onto bounds and getting distinct
@@ -200,7 +184,9 @@ class EdgeStager:
 
         # Read in elevation dataset, limiting to only the file paths required
         paths = [
-            os.path.join(self.data_dir, "landing", "lidar", f"{file}.parquet")
+            (
+                self.data_dir / "landing" / "lidar" / f"{file}.parquet"
+            ).as_posix()
             for file in files
         ]
         if paths:
@@ -254,6 +240,7 @@ class EdgeStager:
             ).astype(T.IntegerType()),
         )
 
+        # Set minimum of 2 points (start & end)
         edges = edges.withColumn(
             "edge_steps", F.greatest(F.lit(2), F.col("edge_steps"))
         )
@@ -470,6 +457,14 @@ class EdgeStager:
                 lambda x: x.getItem("elevation"),
             ),
         ).drop("elevation_pairs")
+
+        # Null out elevation if only partial data is present
+        edges = edges.withColumn(
+            "elevation",
+            F.when(
+                F.exists(F.col("elevation"), lambda x: x.isNull()), F.lit(None)
+            ).otherwise(F.col("elevation")),
+        )
         return edges
 
     @staticmethod
@@ -512,15 +507,15 @@ class EdgeStager:
         """
         logger.debug("Writing edge updates to temp folder")
         updates.write.format("delta").mode("overwrite").save(
-            os.path.join(self.data_dir, "temp/edge_updates")
+            (self.data_dir / "temp" / "edge_updates").as_posix()
         )
 
         # Create references to target table & updates
         edges_tbl = DeltaTable.forPath(
-            self.spark, os.path.join(self.data_dir, "staging", "edges")
+            self.spark, (self.data_dir / "staging" / "edges").as_posix()
         ).alias("edges")
         updates_tbl = DeltaTable.forPath(
-            self.spark, os.path.join(self.data_dir, "temp", "edge_updates")
+            self.spark, (self.data_dir / "temp" / "edge_updates").as_posix()
         )
         updates_df = updates_tbl.toDF().alias("updates")
 
@@ -554,7 +549,7 @@ class EdgeStager:
         the staging layer to prevent file counts from getting out of control.
         """
         edges_tbl = DeltaTable.forPath(
-            self.spark, os.path.join(self.data_dir, "staging", "edges")
+            self.spark, (self.data_dir / "staging" / "edges").as_posix()
         )
         logger.info("Optimizing edges table")
         edges_tbl.optimize().executeCompaction()
@@ -566,9 +561,9 @@ class EdgeStager:
         """
         logger.info("Clearing temp directory")
         with contextlib.suppress(FileNotFoundError):
-            shutil.rmtree(os.path.join(self.data_dir, "temp", "edge_updates"))
+            shutil.rmtree((self.data_dir / "temp" / "edge_updates").as_posix())
 
-    def load(self) -> None:
+    def run(self) -> None:
         """End-to-end script for the staging of edge data. This reads in the
         contents of the edges dataset from the landing layer, calculates which
         records need to be updated and tags them with elevation data. Any edges

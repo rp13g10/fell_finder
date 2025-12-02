@@ -3,33 +3,35 @@ traverse, and tagging it up with some derived metrics such as distance and
 elevation gain/loss.
 """
 
-import os
+import logging
 
-from delta import DeltaTable
 from geopy.distance import distance
-from pyspark.sql import DataFrame, SparkSession
+from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 from pyspark.sql import types as T
-from pyspark.sql.window import Window
+
+from fell_loader.base import BaseSparkLoader
+
+logger = logging.getLogger(__name__)
 
 
-class EdgeSanitiser:
+class EdgeSanitiser(BaseSparkLoader):
     """Defines sanitising logic for the edges dataset"""
 
-    def __init__(self, spark: SparkSession) -> None:
-        self.spark = spark
-        self.data_dir = os.environ["FF_DATA_DIR"]
+    @staticmethod
+    def drop_edges_without_elevation(edges: DataFrame) -> DataFrame:
+        """Drop any edges which haven't been tagged with elevation data. This
+        can happen when the user uploads a .osm file which extends beyond the
+        range which they have provided LIDAR data for.
 
-    def get_edges(self) -> DataFrame:
-        """Read in the contents of the edges dataset from the staging layer
+        Args:
+            edges: The contents of the staged edges dataset
 
         Returns:
-            The contents of the edges dataset
+            A copy of the edges dataset with records with NULL in 'elevation'
+            removed
         """
-        edges = DeltaTable.forPath(
-            self.spark, os.path.join(self.data_dir, "staging", "edges")
-        ).toDF()
-        return edges
+        return edges.dropna(subset=["elevation"])
 
     @staticmethod
     def _get_tag_as_column(df: DataFrame, tag_name: str) -> DataFrame:
@@ -54,13 +56,13 @@ class EdgeSanitiser:
 
         return df
 
-    def flag_footways(self, ways: DataFrame) -> DataFrame:
-        """Attempt to use tags to determine which ways have been explicitly
+    def flag_footways(self, edges: DataFrame) -> DataFrame:
+        """Attempt to use tags to determine which edges have been explicitly
         marked as accessible by foot. This may indicate a public crossing over
         private land, or the presence of a footpath next to a busy road.
 
         Args:
-            ways: A dataframe containing the ways from the OSM extract
+            edges: A dataframe containing the edges from the OSM extract
 
         Returns:
             A copy of the input dataset with an additional boolean
@@ -77,10 +79,10 @@ class EdgeSanitiser:
             "sidewalk:both",
         ]
 
-        ways = ways.withColumn("explicit_footway", F.lit(False))
-        ways = ways.withColumn("separate_footway", F.lit(False))
+        edges = edges.withColumn("explicit_footway", F.lit(False))
+        edges = edges.withColumn("separate_footway", F.lit(False))
         for tag in footway_tags:
-            ways = self._get_tag_as_column(ways, tag)
+            edges = self._get_tag_as_column(edges, tag)
             # NOTE: sidewalk = separate denotes a sidewalk which is mapped as
             #       a separate way. We don't want to send people down the road,
             #       as the sidewalk will also be pulled through as part of the
@@ -91,27 +93,27 @@ class EdgeSanitiser:
             )
             separate_mask = F.col(tag).isNotNull() & (F.col(tag) == "separate")
 
-            ways = ways.withColumn(
+            edges = edges.withColumn(
                 "explicit_footway", F.col("explicit_footway") | explicit_mask
             ).withColumn(
                 "separate_footway", F.col("separate_footway") | separate_mask
             )
-            ways = ways.drop(tag)
+            edges = edges.drop(tag)
 
-        return ways
+        return edges
 
-    def remove_restricted_routes(self, ways: DataFrame) -> DataFrame:
-        """Remove any ways which correspond to routes with access controls,
+    def remove_restricted_routes(self, edges: DataFrame) -> DataFrame:
+        """Remove any edges which correspond to routes with access controls,
         which are not usable by the public
 
         Args:
-            ways: A dataframe containing the ways from the OSM extract
+            edges: A dataframe containing the edges from the OSM extract
 
         Returns:
             A filtered copy of the input dataset
 
         """
-        ways = self._get_tag_as_column(ways, "access")
+        edges = self._get_tag_as_column(edges, "access")
 
         accessible_mask = F.col("access").isin(
             "yes", "permissive", "designated"
@@ -121,45 +123,46 @@ class EdgeSanitiser:
 
         explicit_mask = F.col("explicit_footway")
 
-        ways = ways.filter(accessible_mask | noflag_mask | explicit_mask).drop(
-            "access"
-        )
+        edges = edges.filter(
+            accessible_mask | noflag_mask | explicit_mask
+        ).drop("access")
 
-        return ways
+        return edges
 
-    def remove_unsafe_routes(self, ways: DataFrame) -> DataFrame:
+    def remove_unsafe_routes(self, edges: DataFrame) -> DataFrame:
         """Some parts of the map will not be suitable for use by the routing
         algorithm as they are not safe to run on. This function will exclude
         all motorways, and any high-speed roads (<=50 mph) which do not have
         a footpath.
 
         Args:
-            ways: A dataframe containing the ways from the OSM extract
+            edges: A dataframe containing the edges from the OSM extract
 
         Returns:
             A filtered copy of the input dataset
 
         """
         # Drop motorways & motorway links
+        edges = self._get_tag_as_column(edges, "highway")
         not_motorway_mask = ~F.col("highway").contains(F.lit("motorway"))
-        ways = ways.filter(not_motorway_mask)
+        edges = edges.filter(not_motorway_mask)
 
         # Drop any roads where the footway forms a separate edge
         separate_mask = F.col("separate_footway")
-        ways = ways.filter(~separate_mask)
+        edges = edges.filter(~separate_mask)
 
         # Get rid of roundabouts
-        ways = self._get_tag_as_column(ways, "junction")
+        edges = self._get_tag_as_column(edges, "junction")
         not_roundabout_mask = F.col("junction") != "roundabout"
         not_junction_mask = F.col("junction").isNull()
-        ways = ways.filter(not_roundabout_mask | not_junction_mask).drop(
+        edges = edges.filter(not_roundabout_mask | not_junction_mask).drop(
             "junction"
         )
 
         # Extract max speed on other roads as an integer
-        ways = self._get_tag_as_column(ways, "maxspeed")
+        edges = self._get_tag_as_column(edges, "maxspeed")
 
-        ways = ways.withColumn(
+        edges = edges.withColumn(
             "maxspeed",
             F.regexp_extract(
                 F.col("maxspeed"), r"[A-Za-z\s]*(\d{1,3})[A-Za-z\s]*", 1
@@ -171,61 +174,61 @@ class EdgeSanitiser:
         low_speed_mask = F.col("maxspeed") < 50
         no_speed_mask = F.col("maxspeed").isNull()
         footway_mask = F.col("explicit_footway")
-        ways = ways.filter(low_speed_mask | no_speed_mask | footway_mask).drop(
-            "maxspeed"
-        )
+        edges = edges.filter(
+            low_speed_mask | no_speed_mask | footway_mask
+        ).drop("maxspeed")
 
-        return ways
+        return edges
 
-    def set_flat_flag(self, ways: DataFrame) -> DataFrame:
+    def set_flat_flag(self, edges: DataFrame) -> DataFrame:
         """For any edges which correspond to a feature which means data from
         a terrain model for elevation will not apply (i.e. a bridge or a
         tunnel), set a flag to ensure the elevation data for these edges is
         masked.
 
         Args:
-            ways: A dataframe containing the ways from the OSM extract
+            edges: A dataframe containing the edges from the OSM extract
 
         Returns:
             A copy of the input dataset with an additional boolean
             'is_flat' column
 
         """
-        ways = self._get_tag_as_column(ways, "bridge")
-        ways = self._get_tag_as_column(ways, "tunnel")
+        edges = self._get_tag_as_column(edges, "bridge")
+        edges = self._get_tag_as_column(edges, "tunnel")
 
-        ways = ways.withColumn(
+        edges = edges.withColumn(
             "is_flat",
             (F.col("bridge").isNotNull()) | (F.col("tunnel").isNotNull()),
         ).drop("bridge", "tunnel")
 
-        return ways
+        return edges
 
-    def set_oneway_flag(self, ways: DataFrame) -> DataFrame:
+    def set_oneway_flag(self, edges: DataFrame) -> DataFrame:
         """For any routes which are not one-way, we will need to create a
         reversed view to enable graph traversal in both directions. This
         information is recorded in the tags, so we must retrieve it for
         ease of use.
 
         Args:
-            ways: A dataframe containing the ways from the OSM extract
+            edges: A dataframe containing the edges from the OSM extract
 
         Returns:
             A copy of the input dataset with an additional boolean 'oneway'
             column
 
         """
-        ways = self._get_tag_as_column(ways, "oneway")
+        edges = self._get_tag_as_column(edges, "oneway")
 
         bidirectional_mask = F.col("oneway") == "no"
         noflag_mask = F.col("oneway").isNull()
 
-        ways = ways.withColumn(
+        edges = edges.withColumn(
             "oneway",
             ~(bidirectional_mask | noflag_mask),
         )
 
-        return ways
+        return edges
 
     @staticmethod
     def calculate_elevation_changes(edges: DataFrame) -> DataFrame:
@@ -241,35 +244,67 @@ class EdgeSanitiser:
             elevation_loss fields
 
         """
-        # TODO: This needs updating to work on an array, source dataset is
-        #       no longer exploded
 
-        rolling_window = Window.partitionBy("src", "dst").orderBy("inx")
+        @F.udf(T.MapType(T.StringType(), T.DoubleType()))
+        def changes_udf(elevation: list[float]) -> dict[str, float]:
+            """Calculate total gain/loss for each edge. A UDF has been used as
+            the alternative explode operation would also be very expensive, and
+            this operation cannot be achieved with native spark functions.
+
+            Args:
+                elevation: The (ordered) list of elevation samples along the
+                    edge. At time of writing, samples are taken every 10m.
+
+            Returns:
+                A dict containing 'gain' and 'loss' keys, showing total
+                gain/loss accrued when traversing the edge
+            """
+            # If data suggests a grade of >60%, zero it out
+            MAX_DELTA = 6.0
+            output = {"elevation_gain": 0.0, "elevation_loss": 0.0}
+
+            last_point = None
+            for point in elevation:
+                # Skip first point, need something to compare to
+                if last_point is None:
+                    last_point = point
+                    continue
+
+                assert point is not None, f"point is None! got {elevation}"
+                assert last_point is not None, (
+                    f"last_point is None! got {elevation}"
+                )
+
+                # Check that absolute change is within expected bounds
+                delta = abs(point - last_point)
+                valid_step = delta < MAX_DELTA
+
+                # Add step to gain/loss ass appropriate
+                if (point > last_point) & valid_step:
+                    output["elevation_gain"] += point - last_point
+                elif (point < last_point) & valid_step:
+                    output["elevation_loss"] += last_point - point
+                last_point = point
+
+            return output
 
         edges = edges.withColumn(
-            "last_elevation", F.lag("elevation", offset=1).over(rolling_window)
-        )
-        edges = edges.withColumn(
-            "delta", F.col("elevation") - F.col("last_elevation")
-        )
-
-        edges = edges.withColumn(
-            "elevation_gain",
-            F.when(F.col("is_flat"), F.lit(0.0)).otherwise(
-                F.abs(F.greatest(F.col("delta"), F.lit(0.0)))
+            "changes",
+            F.when(
+                # Zero-out changes when edge is known to be flat
+                F.col("is_flat"),
+                F.create_map(),
+            ).otherwise(
+                # Otherwise, sum changes across the array
+                changes_udf(F.col("elevation"))
             ),
         )
-
-        edges = edges.withColumn(
-            "elevation_loss",
-            F.when(F.col("is_flat"), F.lit(0.0)).otherwise(
-                F.abs(F.least(F.col("delta"), F.lit(0.0)))
-            ),
-        )
-
-        edges = edges.withColumn(
-            "elevation", F.when(~F.col("is_flat"), F.col("elevation"))
-        )
+        edges = edges.withColumns(
+            {
+                "elevation_gain": F.col("changes").getItem("elevation_gain"),
+                "elevation_loss": F.col("changes").getItem("elevation_loss"),
+            }
+        ).fillna(0.0, subset=["elevation_gain", "elevation_loss"])
 
         return edges
 
@@ -361,3 +396,62 @@ class EdgeSanitiser:
         out = edges.unionByName(reverse)
 
         return out
+
+    def set_output_schema(self, edges: DataFrame) -> DataFrame:
+        """Ensure only the required columns are written out to disk, enforce
+        expected datataypes
+
+        Args:
+            edges: A dataframe containing details of all edges in the graph
+
+        Returns:
+            A copy of the input dataframe, with a standardised schema
+        """
+        edges = self._get_tag_as_column(edges, "surface")
+
+        return edges.select(
+            F.col("src").astype(T.LongType()),
+            F.col("dst").astype(T.LongType()),
+            F.col("way_id").astype(T.LongType()),
+            F.col("way_inx").astype(T.IntegerType()),
+            F.col("src_lat").astype(T.DoubleType()),
+            F.col("src_lon").astype(T.DoubleType()),
+            F.col("dst_lat").astype(T.DoubleType()),
+            F.col("dst_lon").astype(T.DoubleType()),
+            F.col("highway").astype(T.StringType()),
+            F.col("surface").astype(T.StringType()),
+            F.col("elevation_gain").astype(T.StringType()),
+            F.col("elevation_loss").astype(T.StringType()),
+            F.col("distance").astype(T.StringType()),
+        )
+
+    def run(self) -> None:
+        """End-to-end script for the sanitising of edge data. This reads in the
+        contents of the edges dataset from the staging layer, removes any
+        edges which are not suitable for runners and tags each edge with
+        additional metrics. Elevation gain/loss is calculated based on the
+        LIDAR samples for each edge (with some post-processing), and the
+        distance for each edge is calculated based on its start/end
+        coordinates.
+        """
+        # Read in data
+        edges = self.read_delta(layer="staging", dataset="edges")
+        edges = self.drop_edges_without_elevation(edges)
+
+        # Limit to edges which are suitable for runners
+        edges = self.flag_footways(edges)
+        edges = self.remove_restricted_routes(edges)
+        edges = self.remove_unsafe_routes(edges)
+
+        # Calculate elevation gain/loss & distance
+        edges = self.set_flat_flag(edges)
+        edges = self.calculate_elevation_changes(edges)
+        edges = self.calculate_edge_distances(edges)
+
+        # Add reverse edges
+        edges = self.set_oneway_flag(edges)
+        edges = self.add_reverse_edges(edges)
+
+        # Write to disk
+        edges = self.set_output_schema(edges)
+        self.write_parquet(edges, layer="sanitised", dataset="edges")
