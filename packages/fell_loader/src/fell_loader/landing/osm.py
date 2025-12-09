@@ -2,8 +2,10 @@
 format
 """
 
+import contextlib
 import logging
 import os
+import shutil
 from pathlib import Path
 
 from bng_latlon import WGS84toOSGB36
@@ -12,6 +14,7 @@ from pyspark.sql import functions as F
 from pyspark.sql import types as T
 
 from fell_loader.base import BaseSparkLoader
+from fell_loader.schemas.landing import EDGES_SCHEMA, NODES_SCHEMA
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +32,7 @@ class OsmLoader(BaseSparkLoader):
         """
         super().__init__(spark)
 
+        self.skip_load = False
         self.binary_loc = Path(os.environ["FF_PARQUETIZER_LOC"])
 
         self._set_parquet_locs()
@@ -75,6 +79,7 @@ class OsmLoader(BaseSparkLoader):
         osm_loc = self.data_dir / "extracts" / "osm"
         pbf_loc = list(osm_loc.glob("*.osm.pbf"))
 
+        # Check for source data
         if not pbf_loc:
             raise FileNotFoundError(f"No osm.pbf file detected in {pbf_loc}")
         if len(pbf_loc) > 1:
@@ -84,11 +89,31 @@ class OsmLoader(BaseSparkLoader):
             )
         pbf_loc = pbf_loc[0]
 
+        # Check if file has changed from previous run
+        checkpoint_file = self.data_dir / "landing" / "latest_osm.txt"
+        if not checkpoint_file.exists():
+            logger.info(
+                "No record of previous files detected, "
+                "OSM data will be reloaded"
+            )
+            last_file = None
+        else:
+            last_file = checkpoint_file.read_text().strip()
+            logger.info(f"Previous file to be loaded was {last_file}")
+
+        if pbf_loc.as_posix() == last_file:
+            logger.info("OSM data has not changed, and will not be reloaded")
+            self.skip_load = True
+            return
+        logger.info(f"New file is {pbf_loc.as_posix()}")
+
+        # Unpack source file
         logger.info(f"Unpacking {pbf_loc}")
         os.system(f"java -jar {self.binary_loc} {pbf_loc}")
+        checkpoint_file.write_text(pbf_loc.as_posix())
         logger.info("File processed successfully")
 
-    def read_osm_data(self) -> tuple[DataFrame, DataFrame]:
+    def read_osm_data(self) -> tuple[DataFrame, DataFrame] | tuple[None, None]:
         """Read in the contents of the OSM nodes/ways parquet files as
         spark dataframes. Note that this can only be called after
         unpack_osm_pbf.
@@ -98,11 +123,14 @@ class OsmLoader(BaseSparkLoader):
             ways
 
         """
-        try:
-            self._set_parquet_locs()
-        except FileNotFoundError:
-            self._unpack_osm_pbf()
-            self._set_parquet_locs()
+        # Unpack OSM data to parquet
+        self._unpack_osm_pbf()
+
+        if self.skip_load:
+            return None, None
+
+        # Retain location of generated files
+        self._set_parquet_locs()
 
         logger.debug("Reading generated parquet files")
         nodes_df = self.spark.read.parquet(self.nodes_loc.as_posix())
@@ -158,25 +186,44 @@ class OsmLoader(BaseSparkLoader):
         return nodes
 
     @staticmethod
-    def set_node_output_schema(nodes: DataFrame) -> DataFrame:
-        """Ensure the node output dataset contains only the required columns
+    def drop_nodes_not_in_edges(
+        nodes: DataFrame, edges: DataFrame
+    ) -> DataFrame:
+        """A large proportion of nodes in the OSM dataset correspond to things
+        like objects (trees), buildings, or boundaries. As these are not of
+        any value when generating running routes, they are discarded to reduce
+        the volume of data which is joined on to the elevation dataset.
+        Any records in the nodes dataset where the id not not appear in either
+        the src or dst column of the edges dataset will be removed.
 
         Args:
-            nodes: A dataframe containing details of all nodes in the graph
+            nodes: The complete nodes dataset
+            edges: The final edges dataset
 
         Returns:
-            A subset of the provided dataframe
+            A filtered copy of the nodes dataset
+        """
+        logger.debug("Dropping nodes which do not correspond to an edge")
+        src_ids = edges.select(F.col("src").alias("id"))
+        dst_ids = edges.select(F.col("dst").alias("id"))
+        ids = src_ids.union(dst_ids).distinct()
+
+        nodes = nodes.join(ids, on="id", how="inner")
+
+        return nodes
+
+    @staticmethod
+    def rename_coord_fields(df: DataFrame) -> DataFrame:
+        """Rename 'latitude' and 'longitude' to 'lat' and 'lon' for brevity
+
+        Args:
+            df: A dataframe containing 'latitude' and 'longitude' columns
+
+        Returns:
+            A modfied view of the provided dataframe with renames applied
 
         """
-        nodes = nodes.select(
-            "id",
-            F.col("latitude").alias("lat"),
-            F.col("longitude").alias("lon"),
-            "easting",
-            "northing",
-            "timestamp",
-        )
-        return nodes
+        return df.withColumnsRenamed({"latitude": "lat", "longitude": "lon"})
 
     # MARK: Edge Parsing
 
@@ -353,6 +400,14 @@ class OsmLoader(BaseSparkLoader):
 
     # MARK: Main Runner
 
+    def clear_temp_files(self) -> None:
+        """One the data load operation has finished, clear out any files in
+        the temp directory
+        """
+        logger.info("Clearing temp directory")
+        with contextlib.suppress(FileNotFoundError):
+            shutil.rmtree((self.data_dir / "temp" / "nodes").as_posix())
+
     def run(self) -> None:
         """End-to-end data load script for an OSM extract. This will read in
         the contents of the file using pyrosm, perform some basic processing to
@@ -362,13 +417,17 @@ class OsmLoader(BaseSparkLoader):
         written out to disk.
         """
         nodes, ways = self.read_osm_data()
+        if (nodes is None) or (ways is None):
+            if not self.skip_load:
+                raise ValueError("Unhandled exception while reading map data")
+            return
 
         nodes = self.assign_bng_coords(nodes)
-        nodes = self.set_node_output_schema(nodes)
+        nodes = self.rename_coord_fields(nodes)
 
         # Write out nodes, read in output to save re-evalulating transforms
-        self.write_parquet(nodes, layer="landing", dataset="nodes")
-        nodes = self.read_parquet(layer="landing", dataset="nodes")
+        self.write_parquet(nodes, layer="temp", dataset="nodes")
+        nodes = self.read_parquet(layer="temp", dataset="nodes")
 
         ways = self.unpack_tags(ways)
         ways = self.get_roads_and_paths(ways)
@@ -381,4 +440,10 @@ class OsmLoader(BaseSparkLoader):
         edges = self.get_edge_end_coords(nodes, edges)
         edges = self.set_edge_output_schema(edges)
 
+        edges = self.map_to_schema(edges, EDGES_SCHEMA)
         self.write_parquet(edges, layer="landing", dataset="edges")
+
+        edges = self.read_parquet(layer="landing", dataset="edges")
+        nodes = self.drop_nodes_not_in_edges(nodes, edges)
+        nodes = self.map_to_schema(nodes, NODES_SCHEMA)
+        self.write_parquet(nodes, layer="landing", dataset="nodes")

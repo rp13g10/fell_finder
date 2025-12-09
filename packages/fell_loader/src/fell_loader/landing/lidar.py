@@ -317,7 +317,11 @@ class LidarLoader(BaseLoader):
             A copy of the input dataframe with an updated schema
 
         """
-        lidar_df = lidar_df.select("easting", "northing", "elevation")
+        lidar_df = lidar_df.select(
+            pl.col("easting").cast(pl.Int32()),
+            pl.col("northing").cast(pl.Int32()),
+            pl.col("elevation").cast(pl.Float64()),
+        )
 
         return lidar_df
 
@@ -416,7 +420,14 @@ class LidarLoader(BaseLoader):
             )
 
         target = self.data_dir / "landing" / "lidar_bounds.parquet"
-        pl.from_dicts(records).write_parquet(target)
+        new = pl.from_dicts(records)
+        try:
+            old = pl.read_parquet(target)
+            full = pl.concat([old, new])
+        except FileNotFoundError:
+            full = new
+
+        full.write_parquet(target)
 
     def run(self) -> None:
         """Primary user facing function for this class. Parses every available
@@ -434,4 +445,4 @@ class LidarLoader(BaseLoader):
                 max_workers=MAX_WORKERS,
             )
 
-            self.write_bounds_to_parquet()
+        self.write_bounds_to_parquet()

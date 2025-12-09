@@ -11,6 +11,7 @@ from pyspark.sql import functions as F
 from pyspark.sql import types as T
 
 from fell_loader.base import BaseSparkLoader
+from fell_loader.schemas.sanitised import EDGES_SCHEMA
 
 logger = logging.getLogger(__name__)
 
@@ -397,34 +398,6 @@ class EdgeSanitiser(BaseSparkLoader):
 
         return out
 
-    def set_output_schema(self, edges: DataFrame) -> DataFrame:
-        """Ensure only the required columns are written out to disk, enforce
-        expected datataypes
-
-        Args:
-            edges: A dataframe containing details of all edges in the graph
-
-        Returns:
-            A copy of the input dataframe, with a standardised schema
-        """
-        edges = self._get_tag_as_column(edges, "surface")
-
-        return edges.select(
-            F.col("src").astype(T.LongType()),
-            F.col("dst").astype(T.LongType()),
-            F.col("way_id").astype(T.LongType()),
-            F.col("way_inx").astype(T.IntegerType()),
-            F.col("src_lat").astype(T.DoubleType()),
-            F.col("src_lon").astype(T.DoubleType()),
-            F.col("dst_lat").astype(T.DoubleType()),
-            F.col("dst_lon").astype(T.DoubleType()),
-            F.col("highway").astype(T.StringType()),
-            F.col("surface").astype(T.StringType()),
-            F.col("elevation_gain").astype(T.StringType()),
-            F.col("elevation_loss").astype(T.StringType()),
-            F.col("distance").astype(T.StringType()),
-        )
-
     def run(self) -> None:
         """End-to-end script for the sanitising of edge data. This reads in the
         contents of the edges dataset from the staging layer, removes any
@@ -453,5 +426,6 @@ class EdgeSanitiser(BaseSparkLoader):
         edges = self.add_reverse_edges(edges)
 
         # Write to disk
-        edges = self.set_output_schema(edges)
+        edges = self._get_tag_as_column(edges, "surface")
+        edges = self.map_to_schema(edges, EDGES_SCHEMA)
         self.write_parquet(edges, layer="sanitised", dataset="edges")

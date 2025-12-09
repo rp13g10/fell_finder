@@ -6,9 +6,9 @@ import logging
 
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
-from pyspark.sql import types as T
 
 from fell_loader.base import BaseSparkLoader
+from fell_loader.schemas.sanitised import NODES_SCHEMA
 
 logger = logging.getLogger(__name__)
 
@@ -36,24 +36,6 @@ class NodeSanitiser(BaseSparkLoader):
 
         return nodes
 
-    @staticmethod
-    def set_output_schema(nodes: DataFrame) -> DataFrame:
-        """Ensure only the required columns are written out to disk, enforce
-        expected datatypes
-
-        Args:
-            nodes: The nodes dataset to be written to the sanitised layer
-
-        Returns:
-            A copy of the input dataframe, with a sanitised schema
-        """
-        return nodes.select(
-            F.col("id").astype(T.LongType()),
-            F.col("lat").astype(T.DoubleType()),
-            F.col("lon").astype(T.DoubleType()),
-            F.col("elevation").astype(T.DoubleType()),
-        )
-
     def run(self) -> None:
         """End-to-end loading script for nodes going into the sanitised
         layer. This simply filters the nodes dataset to include only those
@@ -63,6 +45,6 @@ class NodeSanitiser(BaseSparkLoader):
         edges = self.read_parquet(layer="sanitised", dataset="edges")
 
         nodes = self.remove_unused_nodes(nodes, edges)
-        nodes = self.set_output_schema(nodes)
+        nodes = self.map_to_schema(nodes, NODES_SCHEMA)
 
         self.write_parquet(nodes, layer="sanitised", dataset="nodes")

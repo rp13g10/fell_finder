@@ -9,6 +9,7 @@ from pyspark.sql import functions as F
 from pyspark.sql.window import Window
 
 from fell_loader.base import BaseSparkLoader
+from fell_loader.schemas.optimised import EDGES_SCHEMA, NODES_SCHEMA
 from fell_loader.utils.partitioning import add_coords_partition_to_spark_df
 
 logger = logging.getLogger(__name__)
@@ -316,23 +317,21 @@ class GraphOptimiser(BaseSparkLoader):
                 F.col("src_geom.src_lat"),
                 -1,
                 F.element_at("dst_geom.dst_lat", -1),
-            ).alias("geom_lat"),
+            ).alias("lats"),
             # Collect lons at each point in the edge
             F.array_insert(
                 F.col("src_geom.src_lon"),
                 -1,
                 F.element_at("dst_geom.dst_lon", -1),
-            ).alias("geom_lon"),
+            ).alias("lons"),
             # Collect elevation at each point in the edge
             F.array_insert(
                 F.col("src_geom.src_elevation"),
                 -1,
                 F.element_at("dst_geom.dst_elevation", -1),
-            ).alias("geom_elevation"),
+            ).alias("eles"),
             # Collect distance at each point in the edge, starting at 0
-            F.array_insert(F.col("geom.distance"), 1, 0.0).alias(
-                "geom_distance"
-            ),
+            F.array_insert(F.col("geom.distance"), 1, 0.0).alias("dists"),
             # Retrieve dead end flags for src/dest
             F.element_at("src_geom.src_dead_end_flag", 1).alias(
                 "src_dead_end_flag"
@@ -380,46 +379,13 @@ class GraphOptimiser(BaseSparkLoader):
             type
 
         """
-        for col in ["geom_lat", "geom_lon", "geom_elevation", "geom_distance"]:
+        for col in ["lats", "lons", "eles", "dists"]:
             edges = edges.withColumn(
                 col,
                 F.concat(
                     F.lit("{"), F.array_join(col, delimiter=","), F.lit("}")
                 ),
             )
-        return edges
-
-    @staticmethod
-    def set_edge_output_schema(edges: DataFrame) -> DataFrame:
-        """Finalise the schema of the edges dataset ready for writing to disk
-
-        Args:
-            edges: A dataframe containing all of the chains in the graph
-
-        Returns:
-            A copy of the input dataframe with a standardized schema
-
-        """
-        edges = edges.select(
-            "src",
-            "dst",
-            "src_lat",
-            "src_lon",
-            "highway",
-            "surface",
-            "elevation_gain",
-            "elevation_loss",
-            "distance",
-            # NOTE: Array order is preserved within DataFrames
-            F.col("geom_lat").alias("lats"),
-            F.col("geom_lon").alias("lons"),
-            F.col("geom_elevation").alias("eles"),
-            F.col("geom_distance").alias("dists"),
-            "ptn",
-        )
-
-        edges = edges.dropna(subset=["src", "dst"])
-
         return edges
 
     @staticmethod
@@ -440,23 +406,6 @@ class GraphOptimiser(BaseSparkLoader):
         to_keep = src_nodes.union(dst_nodes).dropDuplicates()
 
         nodes = nodes.join(to_keep, on="id", how="inner")
-
-        return nodes
-
-    @staticmethod
-    def set_node_output_schema(nodes: DataFrame) -> DataFrame:
-        """Ensure the nodes dataset has a consistent schema
-
-        Args:
-            nodes: A dataframe containing all of the nodes in the graph
-
-        Returns:
-            A subset of the input dataframe
-
-        """
-        nodes = nodes.select("id", "lat", "lon", "elevation", "ptn")
-
-        nodes = nodes.dropna(subset=["id"])
 
         return nodes
 
@@ -507,11 +456,11 @@ class GraphOptimiser(BaseSparkLoader):
         edges = add_coords_partition_to_spark_df(
             edges, lat_col="src_lat", lon_col="src_lon"
         )
-        edges = self.set_edge_output_schema(edges)
+        edges = self.map_to_schema(edges, EDGES_SCHEMA)
 
         nodes = self.drop_unused_nodes(nodes, edges)
         nodes = add_coords_partition_to_spark_df(nodes)
-        nodes = self.set_node_output_schema(nodes)
+        nodes = self.map_to_schema(nodes, NODES_SCHEMA)
 
         self.export_to_csv(nodes, "nodes")
         self.export_to_csv(edges, "edges")

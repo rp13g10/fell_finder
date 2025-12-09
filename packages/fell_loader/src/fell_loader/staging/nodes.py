@@ -9,9 +9,10 @@ import shutil
 from delta import DeltaTable
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
-from pyspark.sql import types as T
 
 from fell_loader.base import BaseSparkLoader
+from fell_loader.schemas import landing as lnd
+from fell_loader.schemas import staging as stg
 
 CHUNK_SIZE = 100_000
 
@@ -27,19 +28,41 @@ class NodeStager(BaseSparkLoader):
         self.removals_applied = False
         self.updates_applied = False
 
+        self.remaining_count = -1
+        self.current_chunk_size = -1
+
     def initialize_output_table(self) -> None:
         """If no data is present in the staging layer, create an empty table"""
         DeltaTable.createIfNotExists(self.spark).location(
             (self.data_dir / "staging" / "nodes").as_posix()
-        ).addColumns(
-            [
-                T.StructField("id", T.LongType()),
-                T.StructField("lat", T.DoubleType()),
-                T.StructField("lon", T.DoubleType()),
-                T.StructField("elevation", T.DoubleType()),
-                T.StructField("timestamp", T.LongType()),
-            ]
-        ).execute()
+        ).addColumns(stg.NODES_SCHEMA.fields).execute()
+
+    def check_for_lidar_update(self) -> bool:
+        lidar_files = (self.data_dir / "landing" / "lidar").glob("*.parquet")
+        lidar_files = (path.as_posix() for path in lidar_files)
+
+        last_run_loc = self.data_dir / "staging" / "last_run_lidar.txt"
+        if not last_run_loc.exists():
+            logger.debug("No record of lidar files from previous runs")
+            last_run_files = ""
+        else:
+            logger.debug("Found record of previous lidar runs")
+            last_run_files = last_run_loc.read_text()
+
+        updated = str(sorted(lidar_files)) != last_run_files.strip()
+        logger.debug(f"Lidar files updated: {updated}")
+        return updated
+
+    def clear_data_without_elevation(self) -> None:
+        logger.info("Dropping records where elevation is NULL")
+
+        nodes_tbl = DeltaTable.forPath(
+            self.spark, (self.data_dir / "staging" / "nodes").as_posix()
+        )
+
+        nodes_tbl.delete(F.col("elevation").isNull())
+
+        logger.debug("Records dropped successfully")
 
     def get_nodes_to_remove(self) -> DataFrame | None:
         """Determine which nodes need to be removed by finding any node IDs
@@ -107,6 +130,9 @@ class NodeStager(BaseSparkLoader):
             .drop("cur_timestamp")
         )
 
+        if self.remaining_count == -1:
+            self.remaining_count = to_update.count()
+
         # Sort according to BNG grid to minimise number of LIDAR partitions
         # required, then select first N records
         to_update = to_update.orderBy(
@@ -117,12 +143,15 @@ class NodeStager(BaseSparkLoader):
         ).limit(CHUNK_SIZE)
 
         # If no data is returned, the load operation can be stopped
-        to_update_count = to_update.count()
-        if not to_update_count:
+        self.current_chunk_size = to_update.count()
+        if not self.current_chunk_size:
             self.updates_applied = True
             logger.info("No further updates required")
         else:
-            logger.info(f"Updating {to_update_count:,.0f} nodes")
+            logger.info(
+                f"Updating {self.current_chunk_size:,.0f} of "
+                f"{self.remaining_count:,.0f} nodes"
+            )
 
         return to_update
 
@@ -170,7 +199,9 @@ class NodeStager(BaseSparkLoader):
             ).as_posix()
             for file in files
         ]
-        elevation = self.spark.read.parquet(*paths)
+
+        # Schema must be provided, as `paths` may be empty
+        elevation = self.spark.read.schema(lnd.LIDAR_SCHEMA).parquet(*paths)
 
         return elevation
 
@@ -200,28 +231,6 @@ class NodeStager(BaseSparkLoader):
         )
 
         return tagged
-
-    @staticmethod
-    def set_node_output_schema(nodes: DataFrame) -> DataFrame:
-        """Bring through only the required columns for the enriched node
-        dataset
-
-        Args:
-            nodes: The enriched node dataset
-
-        Returns:
-            A subset of the input dataset
-
-        """
-        nodes = nodes.select(
-            F.col("id").astype(T.LongType()),
-            F.col("lat").astype(T.DoubleType()),
-            F.col("lon").astype(T.DoubleType()),
-            F.col("elevation").astype(T.DoubleType()),
-            F.col("timestamp").astype(T.LongType()),
-        )
-
-        return nodes
 
     def apply_node_updates(
         self, updates: DataFrame, removals: DataFrame | None
@@ -294,6 +303,9 @@ class NodeStager(BaseSparkLoader):
         """
         self.initialize_output_table()
 
+        if self.check_for_lidar_update():
+            self.clear_data_without_elevation()
+
         to_remove = self.get_nodes_to_remove()
         to_update_df = self.get_nodes_to_update()
 
@@ -304,9 +316,11 @@ class NodeStager(BaseSparkLoader):
             elevation_df = self.read_elevation(to_update_df)
 
             to_update_df = self.tag_nodes(to_update_df, elevation_df)
-            to_update_df = self.set_node_output_schema(to_update_df)
+            to_update_df = self.map_to_schema(to_update_df, stg.NODES_SCHEMA)
 
             self.apply_node_updates(to_update_df, to_remove)
+
+            self.remaining_count -= self.current_chunk_size
 
             to_remove = self.get_nodes_to_remove()
             to_update_df = self.get_nodes_to_update()

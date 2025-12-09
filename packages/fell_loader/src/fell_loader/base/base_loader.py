@@ -11,10 +11,12 @@ from typing import Literal
 
 from delta import DeltaTable
 from pyspark.sql import DataFrame, SparkSession
+from pyspark.sql import functions as F
+from pyspark.sql import types as T
 
 logger = logging.getLogger(__name__)
 
-type Layer = Literal["landing", "staging", "sanitised", "optimised"]
+type Layer = Literal["landing", "staging", "sanitised", "optimised", "temp"]
 type Dataset = Literal["nodes", "ways", "edges"]
 
 
@@ -43,6 +45,25 @@ class BaseSparkLoader(BaseLoader, ABC):
         super().__init__()
 
         self.spark = spark
+
+    def map_to_schema(self, df: DataFrame, schema: T.StructType) -> DataFrame:
+        """Apply a specific schema to a dataframe, ensuring that both column
+        names and types align. Any columns in the dataframe not in the schema
+        will be removed. If any columns in the dataframe can not be cast to
+        the declared type, this operation will fail.
+
+        Args:
+            df: The dataframe to update the schema for
+            schema: The new schema to be applied
+
+        Returns:
+            A copy of the provided dataframe with an updated schema
+        """
+        to_select = [
+            F.col(field.name).cast(field.dataType) for field in schema
+        ]
+
+        return df.select(*to_select)
 
     def write_parquet(
         self,
