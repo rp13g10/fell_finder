@@ -41,6 +41,20 @@ class EdgeStager(BaseSparkLoader):
     #       base class
 
     def check_for_lidar_update(self) -> bool:
+        """Determine whether there has been any change in the LIDAR data
+        available since the last run. This cross-checks the current contents
+        of the 'landing/lidar' folder in the data directory against
+        'last_run_lidar.txt' in the 'staging' folder in the data directory.
+        This file is written by the `EdgeStager` component at the end of each
+        successful run.
+
+        Returns:
+            True if there has been a change in the available LIDAR data, False
+            if there hasn't
+        """
+        # TODO: Move this out into utils or a base class to prevent duplication
+        #       of code
+
         lidar_files = (self.data_dir / "landing" / "lidar").glob("*.parquet")
         lidar_files = (path.as_posix() for path in lidar_files)
 
@@ -57,6 +71,11 @@ class EdgeStager(BaseSparkLoader):
         return updated
 
     def clear_data_without_elevation(self) -> None:
+        """Drop any records which don't currently have a value for elevation.
+        This will cause them to be re-processed, and tagged with elevation
+        using the latest set of available LIDAR data. This should only be
+        triggered when the LIDAR data changes.
+        """
         logger.info("Dropping records where elevation is NULL")
 
         edges_tbl = DeltaTable.forPath(
@@ -546,9 +565,15 @@ class EdgeStager(BaseSparkLoader):
         )
         logger.info("Optimizing edges table")
         edges_tbl.optimize().executeCompaction()
+        edges_tbl.vacuum()
         logger.info("Optimization completed")
 
     def record_lidar_files(self) -> None:
+        """Store a record of the LIDAR files which are currently present in
+        the landing layer. Future runs will reference this in order to detect
+        the presence of new files. The file list is written to
+        'staging/last_run_lidar.txt'
+        """
         lidar_files = (self.data_dir / "landing" / "lidar").glob("*.parquet")
 
         (self.data_dir / "staging" / "last_run_lidar.txt").write_text(

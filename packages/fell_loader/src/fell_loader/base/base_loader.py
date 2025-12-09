@@ -46,7 +46,9 @@ class BaseSparkLoader(BaseLoader, ABC):
 
         self.spark = spark
 
-    def map_to_schema(self, df: DataFrame, schema: T.StructType) -> DataFrame:
+    def map_to_schema(
+        self, df: DataFrame, schema: T.StructType, cast: bool = True
+    ) -> DataFrame:
         """Apply a specific schema to a dataframe, ensuring that both column
         names and types align. Any columns in the dataframe not in the schema
         will be removed. If any columns in the dataframe can not be cast to
@@ -55,13 +57,19 @@ class BaseSparkLoader(BaseLoader, ABC):
         Args:
             df: The dataframe to update the schema for
             schema: The new schema to be applied
+            cast: If True, data will be explicitly cast to the types specified
+                in the schema. If False, no cast will be performed and only
+                column selection will be applied.
 
         Returns:
             A copy of the provided dataframe with an updated schema
         """
-        to_select = [
-            F.col(field.name).cast(field.dataType) for field in schema
-        ]
+        if cast:
+            to_select = [
+                F.col(field.name).cast(field.dataType) for field in schema
+            ]
+        else:
+            to_select = [F.col(field.name) for field in schema]
 
         return df.select(*to_select)
 

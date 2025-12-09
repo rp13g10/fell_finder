@@ -38,6 +38,17 @@ class NodeStager(BaseSparkLoader):
         ).addColumns(stg.NODES_SCHEMA.fields).execute()
 
     def check_for_lidar_update(self) -> bool:
+        """Determine whether there has been any change in the LIDAR data
+        available since the last run. This cross-checks the current contents
+        of the 'landing/lidar' folder in the data directory against
+        'last_run_lidar.txt' in the 'staging' folder in the data directory.
+        This file is written by the `EdgeStager` component at the end of each
+        successful run.
+
+        Returns:
+            True if there has been a change in the available LIDAR data, False
+            if there hasn't
+        """
         lidar_files = (self.data_dir / "landing" / "lidar").glob("*.parquet")
         lidar_files = (path.as_posix() for path in lidar_files)
 
@@ -54,6 +65,11 @@ class NodeStager(BaseSparkLoader):
         return updated
 
     def clear_data_without_elevation(self) -> None:
+        """Drop any records which don't currently have a value for elevation.
+        This will cause them to be re-processed, and tagged with elevation
+        using the latest set of available LIDAR data. This should only be
+        triggered when the LIDAR data changes.
+        """
         logger.info("Dropping records where elevation is NULL")
 
         nodes_tbl = DeltaTable.forPath(
@@ -284,6 +300,7 @@ class NodeStager(BaseSparkLoader):
         )
         logger.info("Optimizing nodes table")
         nodes_tbl.optimize().executeCompaction()
+        nodes_tbl.vacuum()
         logger.info("Optimization completed")
 
     def clear_temp_files(self) -> None:

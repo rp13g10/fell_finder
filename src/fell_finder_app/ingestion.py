@@ -4,6 +4,7 @@ data, joins the two datasets together to create a single augmented graph.
 
 # ruff: noqa: ERA001, E501, F401, RUF100
 
+import logging
 import os
 import shutil
 from pathlib import Path
@@ -21,19 +22,25 @@ from pyspark.sql import SparkSession
 
 from fell_finder_app.utils import set_up_logging
 
+# TODO: Resolve issue where removal of temp folder kills write_bounds_to_parquet
+
 if __name__ == "__main__":
     # Initial Setup ###########################################################
     DATA_DIR = Path(os.environ["FF_DATA_DIR"])
     set_up_logging()
 
+    logger = logging.getLogger(__name__)
+
     # Landing #################################################################
 
+    logger.info("Processing raw LIDAR data")
     lidar_loader = LidarLoader()
     self = lidar_loader
     lidar_loader.run()
     del lidar_loader
 
     # Config set for execution on personal devices, not tuned for cloud
+    logger.debug("Creating local spark context")
     builder = (
         SparkSession.builder.appName("fell_loader")
         .config("spark.master", "local[*]")
@@ -52,15 +59,14 @@ if __name__ == "__main__":
 
     spark = configure_spark_with_delta_pip(builder).getOrCreate()
 
+    logger.info("Processing raw OSM data")
     osm_loader = OsmLoader(spark)
     osm_loader.run()
     del osm_loader
 
     # Staging #################################################################
 
-    # TODO: Set this up to re-process data without elevation when a new LIDAR
-    #       file is added
-
+    logger.info("Loading data to the staging layer")
     node_stager = NodeStager(spark)
     node_stager.run()
     del node_stager
@@ -71,6 +77,7 @@ if __name__ == "__main__":
 
     # Sanitising ##############################################################
 
+    logger.info("Loading data to the sanitised layer")
     edge_sanitiser = EdgeSanitiser(spark)
     edge_sanitiser.run()
     del edge_sanitiser
@@ -81,6 +88,7 @@ if __name__ == "__main__":
 
     # Optimising ##############################################################
 
+    logger.info("Loading data to the optimised layer")
     graph_optimiser = GraphOptimiser(spark)
     graph_optimiser.run()
     del graph_optimiser
@@ -89,12 +97,16 @@ if __name__ == "__main__":
 
     # Load to Postgres ########################################################
 
+    logger.info("Uploading optimised data to postgres")
     graph_uploader = GraphUploader()
     graph_uploader.run()
     del graph_uploader
 
     # Clear temp data #########################################################
 
+    logger.info("Clearing out temp files")
     shutil.rmtree(
         path=(DATA_DIR / "temp").as_posix(),
     )
+
+    logger.info("Data load completed")

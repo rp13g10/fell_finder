@@ -452,11 +452,14 @@ class GraphOptimiser(BaseSparkLoader):
         edges = self.contract_chains(edges)
         edges = self.generate_new_edges_from_chains(edges)
         edges = self.drop_dead_ends(edges)
-        edges = self.set_geom_to_pgsql_format(edges)
         edges = add_coords_partition_to_spark_df(
             edges, lat_col="src_lat", lon_col="src_lon"
         )
-        edges = self.map_to_schema(edges, EDGES_SCHEMA)
+        edges = self.map_to_schema(edges, EDGES_SCHEMA, cast=True)
+
+        # Write arrays as strings for compatibility with postgres load
+        edges = self.set_geom_to_pgsql_format(edges)
+        edges = self.map_to_schema(edges, EDGES_SCHEMA, cast=False)
 
         nodes = self.drop_unused_nodes(nodes, edges)
         nodes = add_coords_partition_to_spark_df(nodes)
