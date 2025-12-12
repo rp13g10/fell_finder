@@ -419,11 +419,30 @@ class LidarLoader(BaseLoader):
                 )
             )
 
+        # If no new files were processed, no records to update
+        if not records:
+            return
+
+        # Parse details of files written in the current run
+        new = pl.from_dicts(
+            records,
+            schema=pl.Schema(
+                {
+                    "file_id": pl.String(),
+                    "min_easting": pl.Int32(),
+                    "min_northing": pl.Int32(),
+                    "max_easting": pl.Int32(),
+                    "max_northing": pl.Int32(),
+                }
+            ),
+        )
+
+        # Combine with details of files from previous runs
         target = self.data_dir / "landing" / "lidar_bounds.parquet"
-        new = pl.from_dicts(records)
+
         try:
             old = pl.read_parquet(target)
-            full = pl.concat([old, new])
+            full = pl.concat([old, new]).unique()
         except FileNotFoundError:
             full = new
 
