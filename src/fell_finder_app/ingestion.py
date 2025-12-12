@@ -14,10 +14,10 @@ from fell_loader.landing import (
     LidarLoader,
     OsmLoader,
 )
-from fell_loader.optimising import GraphOptimiser
-from fell_loader.sanitising import EdgeSanitiser, NodeSanitiser
+from fell_loader.optimised import GraphOptimiser
+from fell_loader.postgres import GraphUploader
+from fell_loader.sanitised import EdgeSanitiser, NodeSanitiser
 from fell_loader.staging import EdgeStager, NodeStager
-from fell_loader.uploading import GraphUploader
 from pyspark.sql import SparkSession
 
 from fell_finder_app.utils import set_up_logging

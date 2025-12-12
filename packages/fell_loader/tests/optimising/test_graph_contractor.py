@@ -3,7 +3,7 @@
 from unittest.mock import MagicMock
 
 import pytest
-from fell_loader.optimising.graph_contractor import GraphContractor
+from fell_loader.optimised.graph_contractor import GraphContractor
 from pyspark.sql import SparkSession
 from pyspark.sql.types import (
     ArrayType,

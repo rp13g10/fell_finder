@@ -2,6 +2,6 @@
 optimised CSV files into the postgres database.
 """
 
-from fell_loader.uploading.graph import GraphUploader
+from fell_loader.postgres.graph import GraphUploader
 
 __all__ = ["GraphUploader"]

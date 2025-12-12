@@ -2,7 +2,7 @@
 applying final round of performance optimisations
 """
 
-from fell_loader.sanitising.edges import EdgeSanitiser
-from fell_loader.sanitising.nodes import NodeSanitiser
+from fell_loader.sanitised.edges import EdgeSanitiser
+from fell_loader.sanitised.nodes import NodeSanitiser
 
 __all__ = ["EdgeSanitiser", "NodeSanitiser"]
