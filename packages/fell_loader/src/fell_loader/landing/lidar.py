@@ -16,7 +16,6 @@ import rasterio as rio
 from tqdm.contrib.concurrent import process_map
 
 from fell_loader.base import BaseLoader
-from fell_loader.utils.partitioning import add_bng_partition_to_polars_df
 
 # Set the max number of LIDAR files which will be processed in parallel
 # Allow up to 3gb of RAM per worker (should be closer to 2)
@@ -49,7 +48,8 @@ class LidarLoader(BaseLoader):
         dc_path = Path(self.data_dir) / "temp" / "lidar_bounds"
         self.dc = diskcache.Index(dc_path.as_posix())
 
-    def _get_file_id_from_path(self, path: str) -> str:
+    @staticmethod
+    def _get_file_id_from_path(path: str) -> str:
         file_id = re.search(r".*([A-Z][A-Z]\d\d[ns][ew]).*", path)
 
         if not file_id:
@@ -104,7 +104,9 @@ class LidarLoader(BaseLoader):
 
         """
         loaded_dir = self.data_dir / "landing" / "lidar"
-        all_loaded_dirs = [path.as_posix() for path in loaded_dir.glob("*")]
+        all_loaded_dirs = [
+            path.as_posix() for path in loaded_dir.glob("*.parquet")
+        ]
         if not all_loaded_dirs:
             logger.debug("No existing LIDAR data detected")
             return {}
@@ -207,7 +209,9 @@ class LidarLoader(BaseLoader):
         for corner in corners:
             corner_text = corner.text
             if corner_text is None:
-                raise AssertionError("oops!")
+                raise ValueError(
+                    "Invalid XML encountered, boundaries not defined for file"
+                )
             easting, northing = corner_text.split(" ")
             easting = int(float(easting))
             northing = int(float(northing))
@@ -217,12 +221,13 @@ class LidarLoader(BaseLoader):
             min_northing = min(min_northing, northing)
             max_northing = max(max_northing, northing)
 
-        assert all(
+        if not all(
             (abs(x) != sys.maxsize)
             for x in [min_easting, max_easting, min_northing, max_northing]
-        ), "Error while extracting bbox"
-        assert min_easting < max_easting, "Error while extracting bbox"
-        assert min_northing < max_northing, "Error while extracting bbox"
+        ):
+            raise ValueError(
+                "Error while extracting bbox, unable to determine coordinates"
+            )
 
         bbox = np.array(
             [min_easting, min_northing, max_easting, max_northing], dtype=int
@@ -344,8 +349,6 @@ class LidarLoader(BaseLoader):
         lidar, bbox = self.load_lidar_and_bbox_from_folder(lidar_dir)
 
         lidar_df = self.generate_df_from_lidar_array(lidar, bbox)
-
-        lidar_df = add_bng_partition_to_polars_df(lidar_df)
         lidar_df = self.set_output_schema(lidar_df)
         return lidar_df, bbox
 
@@ -391,15 +394,12 @@ class LidarLoader(BaseLoader):
         except pl.exceptions.ShapeError:
             logger.warning(f"Unable to parse file {lidar_dir}")
 
-    def write_bounds_to_parquet(self) -> None:
-        """Write the bounding box for a file ID to disk. This needs to be a
-        thread-safe operation as multiple files may be processed at once
+    def get_updated_bounds(self) -> pl.DataFrame | None:
+        """Get the bounding box for all files to be written, if any updates
+        have been made. If data has not been updated, return None.
 
-        Args:
-            file_id: The unique identifier for the lidar file which has been
-                parsed
-            bbox: The bounding box for the file
-
+        Returns:
+            The dataframe to be written to disk, or None
         """
         logger.info("Updating lidar_bounds table")
         records = []
@@ -421,7 +421,7 @@ class LidarLoader(BaseLoader):
 
         # If no new files were processed, no records to update
         if not records:
-            return
+            return None
 
         # Parse details of files written in the current run
         new = pl.from_dicts(
@@ -446,7 +446,16 @@ class LidarLoader(BaseLoader):
         except FileNotFoundError:
             full = new
 
-        full.write_parquet(target)
+        return full
+
+    def write_bounds(self, bounds: pl.DataFrame) -> None:
+        """Write out LIDAR bounds to disk
+
+        Args:
+            bounds: A dataframe containing lidar bounds
+        """
+        target = self.data_dir / "landing" / "lidar_bounds.parquet"
+        bounds.write_parquet(target)
 
     def run(self) -> None:
         """Primary user facing function for this class. Parses every available
@@ -464,4 +473,6 @@ class LidarLoader(BaseLoader):
                 max_workers=MAX_WORKERS,
             )
 
-        self.write_bounds_to_parquet()
+        bounds = self.get_updated_bounds()
+        if bounds is not None:
+            self.write_bounds(bounds)
