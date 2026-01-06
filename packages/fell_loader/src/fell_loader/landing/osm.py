@@ -71,7 +71,7 @@ class OsmLoader(BaseSparkLoader):
         Raises:
             FileNotFoundError: If no osm.pbf file is found in the extracts/osm
                 subfolder of the data directory, an exception will be raised
-            RuntimeError: If multiple osm.pbf files are found in the
+            ValueError: If multiple osm.pbf files are found in the
                 extracts/osm subfolder of the data directory, an exception will
                 be raised
 
@@ -84,7 +84,7 @@ class OsmLoader(BaseSparkLoader):
             raise FileNotFoundError(f"No osm.pbf file detected in {pbf_loc}")
         if len(pbf_loc) > 1:
             pbf_str = ", ".join(pbf.as_posix() for pbf in pbf_loc)
-            raise RuntimeError(
+            raise ValueError(
                 f"Multiple osm.pbf files detected in {pbf_loc}: {pbf_str}"
             )
         pbf_loc = pbf_loc[0]
@@ -369,35 +369,6 @@ class OsmLoader(BaseSparkLoader):
 
         return edges
 
-    @staticmethod
-    def set_edge_output_schema(edges: DataFrame) -> DataFrame:
-        """Ensure the edge output dataset contains only the required columns
-
-        Args:
-            edges: A dataframe containing details of all edges in the graph
-
-        Returns:
-            A subset of the provided dataframe
-
-        """
-        edges = edges.select(
-            "src",
-            "dst",
-            "way_id",
-            "way_inx",
-            "src_lat",
-            "src_lon",
-            "dst_lat",
-            "dst_lon",
-            "src_easting",
-            "src_northing",
-            "dst_easting",
-            "dst_northing",
-            "tags",
-            "timestamp",
-        )
-        return edges
-
     # MARK: Main Runner
 
     def clear_temp_files(self) -> None:
@@ -438,7 +409,6 @@ class OsmLoader(BaseSparkLoader):
         edges = self.generate_edges(ways)
         edges = self.get_edge_start_coords(nodes, edges)
         edges = self.get_edge_end_coords(nodes, edges)
-        edges = self.set_edge_output_schema(edges)
 
         edges = self.map_to_schema(edges, EDGES_SCHEMA)
         self.write_parquet(edges, layer="landing", dataset="edges")

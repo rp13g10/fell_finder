@@ -46,8 +46,9 @@ class BaseSparkLoader(BaseLoader, ABC):
 
         self.spark = spark
 
+    @staticmethod
     def map_to_schema(
-        self, df: DataFrame, schema: T.StructType, cast: bool = True
+        df: DataFrame, schema: T.StructType, cast: bool = True
     ) -> DataFrame:
         """Apply a specific schema to a dataframe, ensuring that both column
         names and types align. Any columns in the dataframe not in the schema

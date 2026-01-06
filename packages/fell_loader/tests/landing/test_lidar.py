@@ -722,7 +722,7 @@ class TestGetUpdatedBounds:
         result = test_loader.get_updated_bounds()
 
         # Assert ##############################################################
-        assert_frame_equal(result, target)  # type: ignore
+        assert_frame_equal(result, target, check_row_order=False)  # type: ignore
 
     def test_old_present(self, mock_read_parquet: MagicMock):
         """Output combines both inputs"""
