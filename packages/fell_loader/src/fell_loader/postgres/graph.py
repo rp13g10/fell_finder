@@ -68,7 +68,7 @@ class GraphUploader(BaseLoader):
         return conn
 
     def _gen_ptns_query(self) -> str:
-        """Programatically generate a query which will generate all required
+        """Programmatically generate a query which will generate all required
         partitions for the nodes & edges tables. The range of lats/lons used
         should cover the entirety of the British Isles.
 
