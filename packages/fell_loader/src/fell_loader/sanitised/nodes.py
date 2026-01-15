@@ -28,6 +28,8 @@ class NodeSanitiser(BaseSparkLoader):
         Returns:
             The nodes dataset to be written to the sanitised layer
         """
+        # TODO: Move this into base class, implements same logic as
+        #       `fell_loader.landing.osm.drop_nodes_not_in_edges`
         src_ids = edges.select(F.col("src").alias("id"))
         dst_ids = edges.select(F.col("dst").alias("id"))
         ids = src_ids.union(dst_ids).distinct()

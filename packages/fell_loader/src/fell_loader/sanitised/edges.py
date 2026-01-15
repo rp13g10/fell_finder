@@ -273,11 +273,6 @@ class EdgeSanitiser(BaseSparkLoader):
                     last_point = point
                     continue
 
-                assert point is not None, f"point is None! got {elevation}"
-                assert last_point is not None, (
-                    f"last_point is None! got {elevation}"
-                )
-
                 # Check that absolute change is within expected bounds
                 delta = abs(point - last_point)
                 valid_step = delta < MAX_DELTA
@@ -302,12 +297,20 @@ class EdgeSanitiser(BaseSparkLoader):
                 changes_udf(F.col("elevation"))
             ),
         )
-        edges = edges.withColumns(
-            {
-                "elevation_gain": F.col("changes").getItem("elevation_gain"),
-                "elevation_loss": F.col("changes").getItem("elevation_loss"),
-            }
-        ).fillna(0.0, subset=["elevation_gain", "elevation_loss"])
+        edges = (
+            edges.withColumns(
+                {
+                    "elevation_gain": F.col("changes").getItem(
+                        "elevation_gain"
+                    ),
+                    "elevation_loss": F.col("changes").getItem(
+                        "elevation_loss"
+                    ),
+                }
+            )
+            .fillna(0.0, subset=["elevation_gain", "elevation_loss"])
+            .drop("changes", "elevation")
+        )
 
         return edges
 

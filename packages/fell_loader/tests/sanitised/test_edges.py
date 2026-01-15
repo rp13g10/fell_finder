@@ -8,6 +8,7 @@ import pytest
 from fell_loader.sanitised.edges import EdgeSanitiser
 from pyspark.sql import SparkSession
 from pyspark.sql.types import (
+    ArrayType,
     BooleanType,
     DoubleType,
     IntegerType,
@@ -657,32 +658,22 @@ def test_calculate_elevation_changes(test_session: SparkSession):
 
     # Test Data ---------------------------------------------------------------
 
-    # fmt: off
-    _ = (
-        ['src', 'dst', 'inx', 'elevation', 'is_flat'])
+    # NOTE: Records with NULL elevation explicitly dropped earlier in the
+    #       pipeline
 
+    # fmt: off
+    #    src, dst, is_flat, elevation
     test_data = [
-        # No bridge
-        [0    , 1    , 0    , 5.0        , False],
-        [0    , 1    , 1    , 10.0       , False],
-        # Bridge
-        [1    , 2    , 0    , 5.0        , True],
-        [1    , 2    , 1    , 10.0       , True],
-        # Up at each point
-        [3    , 4    , 0    , 5.0        , False],
-        [3    , 4    , 1    , 10.0       , False],
-        [3    , 4    , 2    , 15.0       , False],
-        # Down at each point
-        [4    , 5    , 0    , 15.0       , False],
-        [4    , 5    , 1    , 10.0       , False],
-        [4    , 5    , 2    , 5.0        , False],
-        # Up then down
-        [5    , 6    , 0    , 10.0       , False],
-        [5    , 6    , 1    , 15.0       , False],
-        [5    , 6    , 2    , 5.0        , False],
-        # No change
-        [6    , 7    , 0    , 5.0        , False],
-        [6    , 7    , 0    , 5.0        , False]
+        # Single entry (hypothetical, shouldn't happen)
+        [0  , 1  , False  , [1.0]],
+        # Two entries
+        [1  , 2  , False  , [2.0, 3.0]],
+        # Three entries
+        [2  , 3  , False  , [3.0, 4.0, 5.0]],
+        # Four entries
+        [3  , 4  , False  , [5.0, 6.0, 3.0, 4.0]],
+        # Three entries, marked as flat
+        [4  , 5  , True   , [3.0, 4.0, 5.0]],
     ]
 
     # fmt: on
@@ -691,9 +682,8 @@ def test_calculate_elevation_changes(test_session: SparkSession):
         [
             StructField("src", IntegerType()),
             StructField("dst", IntegerType()),
-            StructField("inx", IntegerType()),
-            StructField("elevation", DoubleType()),
             StructField("is_flat", BooleanType()),
+            StructField("elevation", ArrayType(DoubleType())),
         ]
     )
 
@@ -704,31 +694,18 @@ def test_calculate_elevation_changes(test_session: SparkSession):
     # Target Data -------------------------------------------------------------
 
     # fmt: off
-    _ = (
-        ['src', 'dst', 'inx', 'elevation', 'is_flat', 'last_elevation', 'delta', 'elevation_gain', 'elevation_loss'])
-
+    #    src, dst, is_flat, elevation_gain, elevation_loss
     target_data = [
-        # No bridge
-        [0    , 1    , 0    , 5.0        , False   , None            , None   , 0.0             , 0.0],
-        [0    , 1    , 1    , 10.0       , False   , 5.0             , 5.0    , 5.0             , 0.0],
-        # Bridge
-        [1    , 2    , 0    , None       , True    , None            , None   , 0.0             , 0.0],
-        [1    , 2    , 1    , None       , True    , 5.0             , 5.0    , 0.0             , 0.0],
-        # Up at each point
-        [3    , 4    , 0    , 5.0        , False   , None            , None   , 0.0             , 0.0],
-        [3    , 4    , 1    , 10.0       , False   , 5.0             , 5.0    , 5.0             , 0.0],
-        [3    , 4    , 2    , 15.0       , False   , 10.0            , 5.0    , 5.0             , 0.0],
-        # Down at each point
-        [4    , 5    , 0    , 15.0       , False   , None            , None   , 0.0             , 0.0],
-        [4    , 5    , 1    , 10.0       , False   , 15.0            , -5.0   , 0.0            , 5.0],
-        [4    , 5    , 2    , 5.0        , False   , 10.0            , -5.0   , 0.0            , 5.0],
-        # Up then down
-        [5    , 6    , 0    , 10.0       , False   , None            , None   , 0.0             , 0.0],
-        [5    , 6    , 1    , 15.0       , False   , 10.0            , 5.0    , 5.0             , 0.0],
-        [5    , 6    , 2    , 5.0        , False   , 15.0            , -10.0  , 0.0            , 10.0],
-        # No change
-        [6    , 7    , 0    , 5.0        , False   , None            , None   , 0.0             , 0.0],
-        [6    , 7    , 0    , 5.0        , False   , 5.0             , 0.0    , 0.0             , 0.0]
+        # Single entry (hypothetical, shouldn't happen)
+        [0  , 1  , False  , 0.0           , 0.0],
+        # Two entries
+        [1  , 2  , False  , 1.0           , 0.0],
+        # Three entries
+        [2  , 3  , False  , 2.0           , 0.0],
+        # Four entries
+        [3  , 4  , False  , 2.0           , 3.0],
+        # Three entries, marked as flat
+        [4  , 5  , True   , 0.0           , 0.0],
     ]
 
     # fmt: on
@@ -737,11 +714,7 @@ def test_calculate_elevation_changes(test_session: SparkSession):
         [
             StructField("src", IntegerType()),
             StructField("dst", IntegerType()),
-            StructField("inx", IntegerType()),
-            StructField("elevation", DoubleType()),
             StructField("is_flat", BooleanType()),
-            StructField("last_elevation", DoubleType()),
-            StructField("delta", DoubleType()),
             StructField("elevation_gain", DoubleType()),
             StructField("elevation_loss", DoubleType()),
         ]
@@ -759,7 +732,7 @@ def test_calculate_elevation_changes(test_session: SparkSession):
     assertDataFrameEqual(result_df, target_df)
 
 
-@patch("fell_loader.enriching.edge_mixin.distance")
+@patch("fell_loader.sanitised.edges.distance")
 def test_calculate_edge_distances(
     mock_distance: MagicMock, test_session: SparkSession
 ):
@@ -844,14 +817,14 @@ def test_add_reverse_edges(test_session: SparkSession):
 
     # ----- Test Data -----
     # fmt: off
-    #   way_id, way_inx, src, dst, oneway
+    #   way_id, way_inx, src, dst, oneway, elevation_gain, elevation_loss
     test_data = [
         # One way, should not be reversed
-        [1    , 1      , 1  , 2  , True],
-        [1    , 2      , 2  , 3  , True],
+        [1    , 1      , 1  , 2  , True  , 1.0           , 1.0],
+        [1    , 2      , 2  , 3  , True  , 1.0           , 1.0],
         # Bi-directional, should be reversed
-        [2    , 3      , 3  , 4  , False],
-        [2    , 4      , 4  , 5  , False],
+        [2    , 3      , 3  , 4  , False , 1.0           , 1.0],
+        [2    , 4      , 4  , 5  , False , 1.0           , 1.0],
     ]
     # fmt: on
 
@@ -862,6 +835,8 @@ def test_add_reverse_edges(test_session: SparkSession):
             StructField("src", IntegerType()),
             StructField("dst", IntegerType()),
             StructField("oneway", BooleanType()),
+            StructField("elevation_gain", DoubleType()),
+            StructField("elevation_loss", DoubleType()),
         ]
     )
 
@@ -872,13 +847,13 @@ def test_add_reverse_edges(test_session: SparkSession):
     #   way_id, way_inx, src, dst, oneway
     tgt_data = [
         # One way, should not be reversed
-        [1    , 1      , 1  , 2  , True],
-        [1    , 2      , 2  , 3  , True],
+        [1    , 1      , 1  , 2  , True  , 1.0           , 1.0],
+        [1    , 2      , 2  , 3  , True  , 1.0           , 1.0],
         # Bi-directional, should be reversed
-        [2    , 3      , 3  , 4  , False],
-        [2    , 4      , 4  , 5  , False],
-        [-2   , -3     , 4  , 3  , False],
-        [-2   , -4     , 5  , 4  , False],
+        [2    , 3      , 3  , 4  , False , 1.0           , 1.0],
+        [2    , 4      , 4  , 5  , False , 1.0           , 1.0],
+        [-2   , -3     , 4  , 3  , False , -1.0          , -1.0],
+        [-2   , -4     , 5  , 4  , False , -1.0          , -1.0],
     ]
     # fmt: on
 
@@ -889,6 +864,8 @@ def test_add_reverse_edges(test_session: SparkSession):
             StructField("src", IntegerType()),
             StructField("dst", IntegerType()),
             StructField("oneway", BooleanType()),
+            StructField("elevation_gain", DoubleType()),
+            StructField("elevation_loss", DoubleType()),
         ]
     )
 
@@ -899,3 +876,8 @@ def test_add_reverse_edges(test_session: SparkSession):
 
     # Assert ##################################################################
     assertDataFrameEqual(tgt_df, res_df)
+
+
+@pytest.mark.skip("High effort, low value")
+def test_run():
+    """Check that all expected function calls are generated"""
