@@ -18,6 +18,8 @@ from fell_loader.schemas.landing import EDGES_SCHEMA, NODES_SCHEMA
 
 logger = logging.getLogger(__name__)
 
+# cSpell: ignore: OSGB, parquetizer, latlon
+
 
 class OsmLoader(BaseSparkLoader):
     """Reads in the contents of the provided OSM extract. Generates three
@@ -186,33 +188,6 @@ class OsmLoader(BaseSparkLoader):
         return nodes
 
     @staticmethod
-    def drop_nodes_not_in_edges(
-        nodes: DataFrame, edges: DataFrame
-    ) -> DataFrame:
-        """A large proportion of nodes in the OSM dataset correspond to things
-        like objects (trees), buildings, or boundaries. As these are not of
-        any value when generating running routes, they are discarded to reduce
-        the volume of data which is joined on to the elevation dataset.
-        Any records in the nodes dataset where the id not not appear in either
-        the src or dst column of the edges dataset will be removed.
-
-        Args:
-            nodes: The complete nodes dataset
-            edges: The final edges dataset
-
-        Returns:
-            A filtered copy of the nodes dataset
-        """
-        logger.debug("Dropping nodes which do not correspond to an edge")
-        src_ids = edges.select(F.col("src").alias("id"))
-        dst_ids = edges.select(F.col("dst").alias("id"))
-        ids = src_ids.union(dst_ids).distinct()
-
-        nodes = nodes.join(ids, on="id", how="inner")
-
-        return nodes
-
-    @staticmethod
     def rename_coord_fields(df: DataFrame) -> DataFrame:
         """Rename 'latitude' and 'longitude' to 'lat' and 'lon' for brevity
 
@@ -220,7 +195,7 @@ class OsmLoader(BaseSparkLoader):
             df: A dataframe containing 'latitude' and 'longitude' columns
 
         Returns:
-            A modfied view of the provided dataframe with renames applied
+            A modified view of the provided dataframe with renames applied
 
         """
         return df.withColumnsRenamed({"latitude": "lat", "longitude": "lon"})
@@ -396,7 +371,7 @@ class OsmLoader(BaseSparkLoader):
         nodes = self.assign_bng_coords(nodes)
         nodes = self.rename_coord_fields(nodes)
 
-        # Write out nodes, read in output to save re-evalulating transforms
+        # Write out nodes, read in output to save re-evaluating transforms
         self.write_parquet(nodes, layer="temp", dataset="nodes")
         nodes = self.read_parquet(layer="temp", dataset="nodes")
 
@@ -414,6 +389,6 @@ class OsmLoader(BaseSparkLoader):
         self.write_parquet(edges, layer="landing", dataset="edges")
 
         edges = self.read_parquet(layer="landing", dataset="edges")
-        nodes = self.drop_nodes_not_in_edges(nodes, edges)
+        nodes = self.drop_unused_nodes(nodes, edges)
         nodes = self.map_to_schema(nodes, NODES_SCHEMA)
         self.write_parquet(nodes, layer="landing", dataset="nodes")

@@ -388,27 +388,6 @@ class GraphOptimiser(BaseSparkLoader):
             )
         return edges
 
-    @staticmethod
-    def drop_unused_nodes(nodes: DataFrame, edges: DataFrame) -> DataFrame:
-        """Drop any nodes from the graph which are no longer connected to an
-        edge.
-
-        Args:
-            nodes: A dataframe containing all of the nodes in the graph
-            edges: A dataframe containing all of the chains in the graph
-
-        Returns:
-            A filtered copy of the nodes dataframe
-
-        """
-        src_nodes = edges.select(F.col("src").alias("id"))
-        dst_nodes = edges.select(F.col("dst").alias("id"))
-        to_keep = src_nodes.union(dst_nodes).dropDuplicates()
-
-        nodes = nodes.join(to_keep, on="id", how="inner")
-
-        return nodes
-
     def export_to_csv(self, df: DataFrame, target: str) -> None:
         """Store an enriched dataframe to disk, as utf-8 encoded CSV files.
         These can then be bulk loaded directly into postgres.

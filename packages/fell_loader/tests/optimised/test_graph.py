@@ -1,10 +1,11 @@
-"""Tests for the GraphContractor class"""
+"""Tests for `fell_loader.optimised.graph`"""
 
+from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
-
-# from fell_loader.optimised.graph_contractor import GraphContractor
+from fell_loader.optimised.graph import GraphOptimiser
 from pyspark.sql import SparkSession
 from pyspark.sql.types import (
     ArrayType,
@@ -17,29 +18,119 @@ from pyspark.sql.types import (
 )
 from pyspark.testing import assertDataFrameEqual
 
-GraphContractor = MagicMock
+
+class MockGraphOptimiser(GraphOptimiser):
+    """Mock implementation of the node sanitiser class, uses static values
+    of fetching info from environment variables
+    """
+
+    def __init__(self, spark: SparkSession | None = None) -> None:
+        # Attrs from base
+        self.data_dir = Path("data_dir")
+        self.skip_load = False
+        self.spark: Any = spark if spark is not None else MagicMock()
 
 
-class MockGraphContractor(GraphContractor):
-    """Dummy implementation with static properties"""
-
-    def __init__(self) -> None:
-        self.data_dir = "data_dir"
-        self.spark = MagicMock()
+# MARK: From Base
 
 
-def test_load_df():
-    """Make sure the correct read calls are being generated"""
-    # Arrange
-    test_contractor = MockGraphContractor()
-    test_dataset = "nodes"
-    target_path = "data_dir/enriched/nodes"
+def test_drop_unused_nodes(test_session: SparkSession):
+    """Make sure that any nodes without a corresponding edge (i.e. those which
+    were along the middle of a chain) are being removed
+    """
+    # Arrange #################################################################
 
-    # Act
-    test_contractor.load_df(test_dataset)
+    # Test Data ---------------------------------------------------------------
 
-    # Assert
-    test_contractor.spark.read.parquet.assert_called_once_with(target_path)
+    # ----- Nodes -----
+    # fmt: off
+    _ = (
+        ['id'])
+
+    test_node_data = [
+        # Source and dest
+        [0],
+        # Source only
+        [1],
+        # Dest only
+        [2],
+        # Neither
+        [3]
+    ]
+    # fmt: on
+
+    test_node_schema = StructType(
+        [
+            StructField("id", IntegerType()),
+        ]
+    )
+
+    test_node_df = test_session.createDataFrame(
+        test_node_data, test_node_schema
+    )
+
+    # ----- Edges -----
+    # fmt: off
+    _ = (
+        ['src', 'dst'])
+
+    test_edge_data = [
+        # Source and dest
+        [0, 2],
+        [1, 0],
+        # Source only
+        [1, 2],
+        # Dest only
+        [4, 2],
+        # Neither
+    ]
+    # fmt: on
+
+    test_edge_schema = StructType(
+        [
+            StructField("src", IntegerType()),
+            StructField("dst", IntegerType()),
+        ]
+    )
+
+    test_edge_df = test_session.createDataFrame(
+        test_edge_data, test_edge_schema
+    )
+
+    # Target Data -------------------------------------------------------------
+
+    # fmt: off
+    _ = (
+        ['id'])
+
+    tgt_data = [
+        # Source and dest
+        [0],
+        # Source only
+        [1],
+        # Dest only
+        [2],
+        # Neither
+    ]
+
+    # fmt: on
+
+    tgt_schema = StructType(
+        [
+            StructField("id", IntegerType()),
+        ]
+    )
+
+    tgt_df = test_session.createDataFrame(tgt_data, tgt_schema)
+
+    # Act #####################################################################
+    res_df = GraphOptimiser.drop_unused_nodes(test_node_df, test_edge_df)
+
+    # Assert ##################################################################
+    assertDataFrameEqual(res_df, tgt_df)
+
+
+# MARK: Implementation Specific
 
 
 def test_get_node_degrees(test_session: SparkSession):
@@ -126,7 +217,7 @@ def test_get_node_degrees(test_session: SparkSession):
     tgt_df = test_session.createDataFrame(tgt_data, tgt_schema)
 
     # Act #####################################################################
-    res_df = GraphContractor._get_node_degrees(test_df)
+    res_df = GraphOptimiser._get_node_degrees(test_df)
 
     # Assert ##################################################################
     assertDataFrameEqual(res_df, tgt_df)
@@ -136,7 +227,7 @@ def test_add_degrees_to_nodes(test_session: SparkSession):
     """Make sure the table join has been set up properly"""
     # Arrange #################################################################
 
-    test_contractor = MockGraphContractor()
+    test_contractor = MockGraphOptimiser()
 
     # Test Data ---------------------------------------------------------------
 
@@ -269,7 +360,7 @@ def test_derive_node_flags(test_session: SparkSession):
     tgt_df = test_session.createDataFrame(tgt_data, tgt_schema)
 
     # Act #####################################################################
-    res_df = GraphContractor.derive_node_flags(test_df)
+    res_df = GraphOptimiser.derive_node_flags(test_df)
 
     # Assert ##################################################################
     assertDataFrameEqual(res_df, tgt_df)
@@ -343,7 +434,7 @@ def test_derive_way_start_end_flags(test_session: SparkSession):
     tgt_df = test_session.createDataFrame(tgt_data, tgt_schema)
 
     # Act #####################################################################
-    res_df = GraphContractor.derive_way_start_end_flags(test_df)
+    res_df = GraphOptimiser.derive_way_start_end_flags(test_df)
 
     # Assert ##################################################################
     assertDataFrameEqual(res_df, tgt_df)
@@ -478,7 +569,7 @@ def test_derive_chain_src_dst(test_session: SparkSession):
     tgt_df = tgt_df.select(*sorted(tgt_df.columns))
 
     # Act #####################################################################
-    res_df = GraphContractor.derive_chain_src_dst(test_node_df, test_edge_df)
+    res_df = GraphOptimiser.derive_chain_src_dst(test_node_df, test_edge_df)
     res_df = res_df.select(*sorted(res_df.columns))
 
     # Assert ##################################################################
@@ -569,7 +660,7 @@ def test_propagate_chain_src_dst(test_session: SparkSession):
     tgt_df = test_session.createDataFrame(tgt_data, tgt_schema)
 
     # Act #####################################################################
-    res_df = GraphContractor.propagate_chain_src_dst(test_df)
+    res_df = GraphOptimiser.propagate_chain_src_dst(test_df)
 
     # Assert ##################################################################
     assertDataFrameEqual(res_df, tgt_df)
@@ -810,7 +901,7 @@ def test_contract_chains(test_session: SparkSession):
     tgt_df = test_session.createDataFrame(tgt_data, tgt_schema)
 
     # Act #####################################################################
-    res_df = GraphContractor.contract_chains(test_df)
+    res_df = GraphOptimiser.contract_chains(test_df)
 
     # Assert ##################################################################
     assertDataFrameEqual(res_df, tgt_df)
@@ -1011,7 +1102,7 @@ def test_generate_new_edges_from_chains(test_session: SparkSession):
 
     # fmt: off
     _ = (
-        ['src', 'dst', 'highway'     , 'surface'     , 'elevation_gain', 'elevation_loss', 'distance', 'geom_lat'          , 'geom_lon'          , 'geom_elevation'    , 'geom_distance'      , 'src_dead_end_flag', 'dst_dead_end_flag', 'src_lat', 'src_lon'])
+        ['src', 'dst', 'highway'     , 'surface'     , 'elevation_gain', 'elevation_loss', 'distance', 'lats'              , 'lon'               , 'eles'              , 'dists'              , 'src_dead_end_flag', 'dst_dead_end_flag', 'src_lat', 'src_lon'])
 
     tgt_data = [
         # Single record
@@ -1033,10 +1124,10 @@ def test_generate_new_edges_from_chains(test_session: SparkSession):
             StructField("elevation_gain", DoubleType()),
             StructField("elevation_loss", DoubleType()),
             StructField("distance", DoubleType()),
-            StructField("geom_lat", ArrayType(DoubleType()), False),
-            StructField("geom_lon", ArrayType(DoubleType()), False),
-            StructField("geom_elevation", ArrayType(DoubleType()), False),
-            StructField("geom_distance", ArrayType(DoubleType()), False),
+            StructField("lats", ArrayType(DoubleType()), False),
+            StructField("lons", ArrayType(DoubleType()), False),
+            StructField("eles", ArrayType(DoubleType()), False),
+            StructField("dists", ArrayType(DoubleType()), False),
             StructField("src_dead_end_flag", IntegerType()),
             StructField("dst_dead_end_flag", IntegerType()),
             StructField("src_lat", DoubleType()),
@@ -1047,7 +1138,7 @@ def test_generate_new_edges_from_chains(test_session: SparkSession):
     tgt_df = test_session.createDataFrame(tgt_data, tgt_schema)
 
     # Act #####################################################################
-    res_df = GraphContractor.generate_new_edges_from_chains(test_df)
+    res_df = GraphOptimiser.generate_new_edges_from_chains(test_df)
 
     # Assert ##################################################################
     assertDataFrameEqual(res_df, tgt_df)
@@ -1102,253 +1193,65 @@ def test_drop_dead_ends(test_session: SparkSession):
     tgt_df = test_session.createDataFrame(tgt_data, tgt_schema)
 
     # Act #####################################################################
-    res_df = GraphContractor.drop_dead_ends(test_df)
+    res_df = GraphOptimiser.drop_dead_ends(test_df)
 
     # Assert ##################################################################
     assertDataFrameEqual(res_df, tgt_df)
 
 
-def test_set_edge_output_schema(test_session: SparkSession):
-    """Make sure that the correct output schema is being set"""
+def test_set_geom_to_pgsql_format(test_session: SparkSession):
+    """Confirm that arrays are being converted to the correct format"""
     # Arrange #################################################################
 
-    # Test Data ---------------------------------------------------------------
-
     # fmt: off
-    _ = (
-        ['src', 'dst', 'highway', 'surface', 'elevation_gain', 'elevation_loss', 'distance', 'geom_lat', 'geom_lon', 'geom_elevation', 'geom_distance', 'src_lat', 'src_lon', 'ptn', 'other'])
-
+    #    inx, lats     , lons     , eles     , dists    , other
     test_data = [
-        ['src', 'dst', 'highway', 'surface', 'elevation_gain', 'elevation_loss', 'distance', 'geom_lat', 'geom_lon', 'geom_elevation', 'geom_distance', -25.5    , 75.0     , 'ptn', 'other']
+        [0  , [1, 2, 3], [1, 2, 3], [1, 2, 3], [1, 2, 3], [1, 2, 3]],
     ]
     # fmt: on
-
     test_schema = StructType(
         [
-            StructField("src", StringType()),
-            StructField("dst", StringType()),
-            StructField("highway", StringType()),
-            StructField("surface", StringType()),
-            StructField("elevation_gain", StringType()),
-            StructField("elevation_loss", StringType()),
-            StructField("distance", StringType()),
-            StructField("geom_lat", StringType()),
-            StructField("geom_lon", StringType()),
-            StructField("geom_elevation", StringType()),
-            StructField("geom_distance", StringType()),
-            StructField("src_lat", DoubleType()),
-            StructField("src_lon", DoubleType()),
-            StructField("ptn", StringType()),
-            StructField("other", StringType()),
+            StructField("inx", IntegerType()),
+            StructField("lats", ArrayType(IntegerType())),
+            StructField("lons", ArrayType(IntegerType())),
+            StructField("eles", ArrayType(IntegerType())),
+            StructField("dists", ArrayType(IntegerType())),
+            StructField("other", ArrayType(IntegerType())),
         ]
     )
-
     test_df = test_session.createDataFrame(test_data, test_schema)
 
-    # Target Data -------------------------------------------------------------
-
     # fmt: off
-    _ = (
-        ['src', 'dst', 'src_lat', 'src_lon', 'highway', 'surface', 'elevation_gain', 'elevation_loss', 'distance', 'lats'    , 'lons'     , 'eles'          , 'dists'        , 'ptn'])
-
+    #    inx, lats     , lons     , eles     , dists    , other
     tgt_data = [
-        ['src', 'dst', -25.5    , 75.0     , 'highway', 'surface', 'elevation_gain', 'elevation_loss', 'distance', 'geom_lat', 'geom_lon', 'geom_elevation', 'geom_distance',  'ptn']
+        [0  , "{1,2,3}", "{1,2,3}", "{1,2,3}", "{1,2,3}", [1, 2, 3]],
     ]
-
     # fmt: on
-
     tgt_schema = StructType(
         [
-            StructField("src", StringType()),
-            StructField("dst", StringType()),
-            StructField("src_lat", DoubleType()),
-            StructField("src_lon", DoubleType()),
-            StructField("highway", StringType()),
-            StructField("surface", StringType()),
-            StructField("elevation_gain", StringType()),
-            StructField("elevation_loss", StringType()),
-            StructField("distance", StringType()),
+            StructField("inx", IntegerType()),
             StructField("lats", StringType()),
             StructField("lons", StringType()),
             StructField("eles", StringType()),
             StructField("dists", StringType()),
-            StructField("ptn", StringType()),
+            StructField("other", ArrayType(IntegerType())),
         ]
     )
-
     tgt_df = test_session.createDataFrame(tgt_data, tgt_schema)
 
     # Act #####################################################################
-    res_df = GraphContractor.set_edge_output_schema(test_df)
+    res_df = GraphOptimiser.set_geom_to_pgsql_format(test_df)
 
     # Assert ##################################################################
     assertDataFrameEqual(res_df, tgt_df)
 
 
-def test_drop_unused_nodes(test_session: SparkSession):
-    """Make sure that any nodes without a corresponding edge (i.e. those which
-    were along the middle of a chain) are being removed
-    """
-    # Arrange #################################################################
-
-    # Test Data ---------------------------------------------------------------
-
-    # ----- Nodes -----
-    # fmt: off
-    _ = (
-        ['id'])
-
-    test_node_data = [
-        # Source and dest
-        [0],
-        # Source only
-        [1],
-        # Dest only
-        [2],
-        # Neither
-        [3]
-    ]
-    # fmt: on
-
-    test_node_schema = StructType(
-        [
-            StructField("id", IntegerType()),
-        ]
-    )
-
-    test_node_df = test_session.createDataFrame(
-        test_node_data, test_node_schema
-    )
-
-    # ----- Edges -----
-    # fmt: off
-    _ = (
-        ['src', 'dst'])
-
-    test_edge_data = [
-        # Source and dest
-        [0, 2],
-        [1, 0],
-        # Source only
-        [1, 2],
-        # Dest only
-        [4, 2],
-        # Neither
-    ]
-    # fmt: on
-
-    test_edge_schema = StructType(
-        [
-            StructField("src", IntegerType()),
-            StructField("dst", IntegerType()),
-        ]
-    )
-
-    test_edge_df = test_session.createDataFrame(
-        test_edge_data, test_edge_schema
-    )
-
-    # Target Data -------------------------------------------------------------
-
-    # fmt: off
-    _ = (
-        ['id'])
-
-    tgt_data = [
-        # Source and dest
-        [0],
-        # Source only
-        [1],
-        # Dest only
-        [2],
-        # Neither
-    ]
-
-    # fmt: on
-
-    tgt_schema = StructType(
-        [
-            StructField("id", IntegerType()),
-        ]
-    )
-
-    tgt_df = test_session.createDataFrame(tgt_data, tgt_schema)
-
-    # Act #####################################################################
-    res_df = GraphContractor.drop_unused_nodes(test_node_df, test_edge_df)
-
-    # Assert ##################################################################
-    assertDataFrameEqual(res_df, tgt_df)
-
-
-def test_set_node_output_schema(test_session: SparkSession):
-    """Make sure that the output schema for the nodes dataset is being set
-    properly
-    """
-    # Arrange #################################################################
-
-    # Test Data ---------------------------------------------------------------
-
-    # fmt: off
-    _ = (
-        ["id", "lat", "lon", "elevation", "ptn", "other"])
-
-    test_data = [
-        ["id", -25.5, 75.0 , "elevation", "ptn", "other"],
-        [None, 0.0  , 0.0  , "elevation", "ptn", "other"],
-    ]
-    # fmt: on
-
-    test_schema = StructType(
-        [
-            StructField("id", StringType()),
-            StructField("lat", DoubleType()),
-            StructField("lon", DoubleType()),
-            StructField("elevation", StringType()),
-            StructField("ptn", StringType()),
-            StructField("other", StringType()),
-        ],
-    )
-
-    test_df = test_session.createDataFrame(test_data, test_schema)
-
-    # Target Data -------------------------------------------------------------
-
-    # fmt: off
-    _ = (
-        ["id", "lat", "lon", "elevation", "ptn"])
-
-    tgt_data = [
-        ["id", -25.5, 75.0 , "elevation", "ptn"],
-    ]
-
-    # fmt: on
-
-    tgt_schema = StructType(
-        [
-            StructField("id", StringType()),
-            StructField("lat", DoubleType()),
-            StructField("lon", DoubleType()),
-            StructField("elevation", StringType()),
-            StructField("ptn", StringType()),
-        ]
-    )
-
-    tgt_df = test_session.createDataFrame(tgt_data, tgt_schema)
-
-    # Act #####################################################################
-    res_df = GraphContractor.set_node_output_schema(test_df)
-
-    # Assert ##################################################################
-    assertDataFrameEqual(res_df, tgt_df)
-
-
-def test_store_df():
+def test_export_to_csv():
     """Make sure that the correct calls are being generated when storing data
     back to disk
     """
     # Arrange
-    test_contractor = MockGraphContractor()
+    test_contractor = MockGraphOptimiser()
 
     test_df = MagicMock()
     test_df.write.mode.return_value = test_df
@@ -1359,7 +1262,7 @@ def test_store_df():
     target_path = "data_dir/optimised/target"
 
     # Act
-    test_contractor.store_df(test_df, test_target)
+    test_contractor.export_to_csv(test_df, test_target)
 
     # Assert
     test_df.write.mode.assert_called_once_with("overwrite")
@@ -1368,6 +1271,6 @@ def test_store_df():
     )
 
 
-@pytest.mark.skip
-def test_contract():
-    """Test for E2E needs building out"""
+@pytest.mark.skip("High effort, low value")
+def test_run():
+    """Check that all expected function calls are generated"""

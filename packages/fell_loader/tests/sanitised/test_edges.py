@@ -248,6 +248,92 @@ class TestReadDelta:
         mock_deltatable.forPath.assert_not_called()
 
 
+def test_drop_unused_nodes(test_session: SparkSession):
+    """Make sure that any nodes not present in an edge are dropped"""
+    # Arrange #################################################################
+
+    # ----- Test Data -----
+
+    # fmt: off
+    #    id, other
+    test_nodes_data = [
+        # nodes only
+        [1 , 'other'],
+        # edges only
+        # both (src and dst) # noqa: ERA001
+        [3 , 'other'],
+        # both (src only)
+        [4 , 'other'],
+        # both (dst only)
+        [5 , 'other']
+    ]
+    # fmt: on
+
+    test_nodes_schema = StructType(
+        [StructField("id", IntegerType()), StructField("other", StringType())]
+    )
+
+    test_nodes_df = test_session.createDataFrame(
+        test_nodes_data, test_nodes_schema
+    )
+
+    # fmt: off
+    #     src, dst, other
+    test_edges_data = [
+        # nodes only
+        # edges only
+        [2   , 6  , 'other'],
+        # both (src and dst) # noqa: ERA001
+        [3   , 7  , 'other'],
+        [8   , 3  , 'other'],
+        # both (src only),
+        [4   , 9  , 'other'],
+        # both (dst only)
+        [10  , 5  , 'other'],
+    ]
+    # fmt: on
+
+    test_edges_schema = StructType(
+        [
+            StructField("src", IntegerType()),
+            StructField("dst", IntegerType()),
+            StructField("other", StringType()),
+        ]
+    )
+
+    test_edges_df = test_session.createDataFrame(
+        test_edges_data, test_edges_schema
+    )
+
+    # ----- Target Data -----
+
+    # fmt: off
+    #    id, other
+    tgt_data = [
+        # nodes only
+        # edges only
+        # both (src and dst) # noqa: ERA001
+        [3 , 'other'],
+        # both (src only)
+        [4 , 'other'],
+        # both (dst only)
+        [5 , 'other']
+    ]
+    # fmt: on
+
+    tgt_schema = StructType(
+        [StructField("id", IntegerType()), StructField("other", StringType())]
+    )
+
+    tgt_df = test_session.createDataFrame(tgt_data, tgt_schema)
+
+    # Act #####################################################################
+    res_df = EdgeSanitiser.drop_unused_nodes(test_nodes_df, test_edges_df)
+
+    # Assert ##################################################################
+    assertDataFrameEqual(res_df, tgt_df)
+
+
 # MARK: Implementation Specific
 
 

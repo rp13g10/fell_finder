@@ -244,10 +244,7 @@ class TestReadDelta:
         mock_deltatable.forPath.assert_not_called()
 
 
-# MARK: Implementation Specific
-
-
-def test_remove_unused_nodes(test_session: SparkSession):
+def test_drop_unused_nodes(test_session: SparkSession):
     """Make sure that any nodes not present in an edge are dropped"""
     # Arrange #################################################################
 
@@ -327,10 +324,13 @@ def test_remove_unused_nodes(test_session: SparkSession):
     tgt_df = test_session.createDataFrame(tgt_data, tgt_schema)
 
     # Act #####################################################################
-    res_df = NodeSanitiser.remove_unused_nodes(test_nodes_df, test_edges_df)
+    res_df = NodeSanitiser.drop_unused_nodes(test_nodes_df, test_edges_df)
 
     # Assert ##################################################################
     assertDataFrameEqual(res_df, tgt_df)
+
+
+# MARK: Implementation Specific
 
 
 @pytest.mark.skip("High effort, low value")
