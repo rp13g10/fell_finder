@@ -16,10 +16,6 @@ from pyspark.sql.types import (
 )
 from pyspark.testing import assertDataFrameEqual
 
-# Set location for temp delta table
-CURDIR = Path(__file__).parent
-TMPDIR = CURDIR / "temp"
-
 
 class MockNodeStager(NodeStager):
     """Mock implementation of the node loader class, uses static values instead
@@ -256,36 +252,6 @@ class TestReadDelta:
         mock_deltatable.forPath.assert_not_called()
 
 
-# MARK: Implementation Specific
-
-
-@patch("fell_loader.staging.nodes.stg")
-@patch("fell_loader.staging.nodes.DeltaTable")
-def test_initialize_output_table(
-    mock_deltatable: MagicMock, mock_stg: MagicMock
-):
-    """Check that the correct calls are being generated"""
-    # Arrange
-    test_stager = MockNodeStager()
-
-    mock_stg.NODES_SCHEMA.fields = "fields"
-
-    mock_deltatable.createIfNotExists.return_value = mock_deltatable
-    mock_deltatable.location.return_value = mock_deltatable
-    mock_deltatable.addColumns.return_value = mock_deltatable
-
-    # Act
-    test_stager.initialize_output_table()
-
-    # Assert
-    mock_deltatable.createIfNotExists.assert_called_once_with(
-        test_stager.spark
-    )
-    mock_deltatable.location.assert_called_once_with("data_dir/staging/nodes")
-    mock_deltatable.addColumns.assert_called_once_with("fields")
-    mock_deltatable.execute.assert_called_once()
-
-
 @patch("pathlib.Path.read_text")
 @patch("pathlib.Path.exists")
 @patch("pathlib.Path.glob")
@@ -356,9 +322,9 @@ class TestCheckForLidarUpdates:
         assert res_updated
 
 
-@patch("fell_loader.staging.nodes.F")
-@patch("fell_loader.staging.nodes.DeltaTable")
-def test_clear_data_without_elevation_simple(
+@patch("fell_loader.staging.base.F")
+@patch("fell_loader.staging.base.DeltaTable")
+def test_clear_data_without_elevation(
     mock_deltatable: MagicMock, mock_f: MagicMock
 ):
     """Make sure the right files are being deleted"""
@@ -369,12 +335,87 @@ def test_clear_data_without_elevation_simple(
     mock_deltatable.forPath.return_value = mock_tbl
 
     # Act
-    test_stager.clear_data_without_elevation()
+    test_stager.clear_data_without_elevation(dataset="nodes")
 
     # Assert
+    mock_deltatable.forPath.assert_called_once_with(
+        test_stager.spark, "data_dir/staging/nodes"
+    )
     mock_tbl.delete.assert_called_once_with(
         mock_f.col.return_value.isNull.return_value
     )
+
+
+@patch("fell_loader.staging.base.shutil.rmtree")
+class TestClearTempFiles:
+    """Make sure temp files are being cleaned up properly"""
+
+    def test_files_found(self, mock_rmtree: MagicMock):
+        """If temp files are present, they should be removed"""
+        # Arrange
+        test_loader = MockNodeStager()
+
+        # Act
+        test_loader.clear_temp_files("node_updates")
+
+        # Assert
+        mock_rmtree.assert_called_once_with("data_dir/temp/node_updates")
+
+    def test_files_not_found(self, mock_rmtree: MagicMock):
+        """If no temp files are present, the raised exception should be
+        suppressed
+        """
+        # Arrange
+        test_loader = MockNodeStager()
+        mock_rmtree.side_effect = FileNotFoundError
+
+        # Act
+        test_loader.clear_temp_files("node_updates")
+
+    def test_suppression_setup(self, mock_rmtree: MagicMock):
+        """Make sure that suppression is definitely working by demonstrating
+        that other exception types do get raised. Without this, the above
+        test is not sufficient to show the expected behaviour when files are
+        not found. In isolation it doesn't prove that the side effect has been
+        set up properly.
+        """
+        # Arrange
+        test_loader = MockNodeStager()
+        mock_rmtree.side_effect = ValueError
+
+        # Act, Assert
+        with pytest.raises(ValueError):
+            test_loader.clear_temp_files("node_updates")
+
+
+# MARK: Implementation Specific
+
+
+@patch("fell_loader.staging.nodes.stg")
+@patch("fell_loader.staging.nodes.DeltaTable")
+def test_initialize_output_table(
+    mock_deltatable: MagicMock, mock_stg: MagicMock
+):
+    """Check that the correct calls are being generated"""
+    # Arrange
+    test_stager = MockNodeStager()
+
+    mock_stg.NODES_SCHEMA.fields = "fields"
+
+    mock_deltatable.createIfNotExists.return_value = mock_deltatable
+    mock_deltatable.location.return_value = mock_deltatable
+    mock_deltatable.addColumns.return_value = mock_deltatable
+
+    # Act
+    test_stager.initialize_output_table()
+
+    # Assert
+    mock_deltatable.createIfNotExists.assert_called_once_with(
+        test_stager.spark
+    )
+    mock_deltatable.location.assert_called_once_with("data_dir/staging/nodes")
+    mock_deltatable.addColumns.assert_called_once_with("fields")
+    mock_deltatable.execute.assert_called_once()
 
 
 class TestGetNodesToRemove:
@@ -643,10 +684,11 @@ def test_read_elevation(mock_lnd: MagicMock, test_session: SparkSession):
     )
     # ----- Lidar Bounds -----
     # fmt: off
-    #    file_id   , min_easting, max_easting, min_northing, max_northing
+    #    file_id     , min_easting, max_easting, min_northing, max_northing
     test_bounds_data = [
-        ['file_one', 5          , 10         , 5           , 10],
-        ['file_two', 15         , 20         , 15          , 20],
+        ['file_one'  , 5          , 10         , 5           , 10],
+        ['file_two'  , 15         , 20         , 15          , 20],
+        ['file_three', 25         , 30         , 25          , 30],
     ]
     # fmt: on
     test_bounds_schema = StructType(
@@ -794,51 +836,6 @@ def test_optimise_nodes_table(mock_deltatable: MagicMock):
     mock_tbl.vacuum.assert_called_once()
 
 
-@patch("fell_loader.staging.nodes.shutil.rmtree")
-class TestClearTempFiles:
-    """Make sure temp files are being cleaned up properly"""
-
-    def test_files_found(self, mock_rmtree: MagicMock):
-        """If temp files are present, they should be removed"""
-        # Arrange
-        test_loader = MockNodeStager()
-
-        # Act
-        test_loader.clear_temp_files()
-
-        # Assert
-        mock_rmtree.assert_called_once_with("data_dir/temp/node_updates")
-
-    def test_files_not_found(self, mock_rmtree: MagicMock):
-        """If no temp files are present, the raised exception should be
-        suppressed
-        """
-        # Arrange
-        test_loader = MockNodeStager()
-        mock_rmtree.side_effect = FileNotFoundError
-
-        # Act
-        test_loader.clear_temp_files()
-
-    def test_suppression_setup(self, mock_rmtree: MagicMock):
-        """Make sure that suppression is definitely working by demonstrating
-        that other exception types do get raised. Without this, the above
-        test is not sufficient to show the expected behaviour when files are
-        not found. In isolation it doesn't prove that the side effect has been
-        set up properly.
-        """
-        # Arrange
-        test_loader = MockNodeStager()
-        mock_rmtree.side_effect = ValueError
-
-        # Act, Assert
-        with pytest.raises(ValueError):
-            test_loader.clear_temp_files()
-
-
 @pytest.mark.skip("High effort, low value")
 def test_run():
-    """This needs to be built out, preferably in a way which demonstrates
-    that the E2E process works as expected, rather than simply showing that
-    the correct calls are being generated.
-    """
+    """Check that all expected function calls are generated"""

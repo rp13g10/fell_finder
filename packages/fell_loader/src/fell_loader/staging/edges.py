@@ -2,17 +2,16 @@
 with updates applied as a delta on top of data already in the staging layer.
 """
 
-import contextlib
 import logging
-import shutil
 
 from delta import DeltaTable
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql import types as T
 
-from fell_loader.base import BaseSparkLoader
-from fell_loader.schemas.staging import EDGES_SCHEMA
+import fell_loader.schemas.landing as lnd
+import fell_loader.schemas.staging as stg
+from fell_loader.staging.base import BaseStager
 
 CHUNK_SIZE = 100_000
 ELEVATION_RES_M = 10
@@ -20,7 +19,7 @@ ELEVATION_RES_M = 10
 logger = logging.getLogger(__name__)
 
 
-class EdgeStager(BaseSparkLoader):
+class EdgeStager(BaseStager):
     """Defines staging logic for the edges dataset."""
 
     def __init__(self, spark: SparkSession) -> None:
@@ -35,56 +34,7 @@ class EdgeStager(BaseSparkLoader):
         """If no data is present in the staging layer, create an empty table"""
         DeltaTable.createIfNotExists(self.spark).location(
             (self.data_dir / "staging" / "edges").as_posix()
-        ).addColumns(EDGES_SCHEMA.fields).execute()
-
-    # TODO: Generalize logic for determining records to update, move into
-    #       base class
-
-    def check_for_lidar_update(self) -> bool:
-        """Determine whether there has been any change in the LIDAR data
-        available since the last run. This cross-checks the current contents
-        of the 'landing/lidar' folder in the data directory against
-        'last_run_lidar.txt' in the 'staging' folder in the data directory.
-        This file is written by the `EdgeStager` component at the end of each
-        successful run.
-
-        Returns:
-            True if there has been a change in the available LIDAR data, False
-            if there hasn't
-        """
-        # TODO: Move this out into utils or a base class to prevent duplication
-        #       of code
-
-        lidar_files = (self.data_dir / "landing" / "lidar").glob("*.parquet")
-        lidar_files = (path.as_posix() for path in lidar_files)
-
-        last_run_loc = self.data_dir / "staging" / "last_run_lidar.txt"
-        if not last_run_loc.exists():
-            logger.debug("No record of lidar files from previous runs")
-            last_run_files = ""
-        else:
-            logger.debug("Found record of previous lidar runs")
-            last_run_files = last_run_loc.read_text()
-
-        updated = str(sorted(lidar_files)) != last_run_files.strip()
-        logger.debug(f"Lidar files updated: {updated}")
-        return updated
-
-    def clear_data_without_elevation(self) -> None:
-        """Drop any records which don't currently have a value for elevation.
-        This will cause them to be re-processed, and tagged with elevation
-        using the latest set of available LIDAR data. This should only be
-        triggered when the LIDAR data changes.
-        """
-        logger.info("Dropping records where elevation is NULL")
-
-        edges_tbl = DeltaTable.forPath(
-            self.spark, (self.data_dir / "staging" / "edges").as_posix()
-        )
-
-        edges_tbl.delete(F.col("elevation").isNull())
-
-        logger.debug("Records dropped successfully")
+        ).addColumns(stg.EDGES_SCHEMA.fields).execute()
 
     def get_edges_to_remove(self) -> DataFrame | None:
         """Determine which edges need to be removed by finding any src/dst
@@ -147,9 +97,11 @@ class EdgeStager(BaseSparkLoader):
         # Determine which edges need updating
         update_mask = F.col("timestamp") > F.col("cur_timestamp")
         new_mask = F.col("cur_timestamp").isNull()
-        to_update = new_edges.join(
-            current_edges, on=["src", "dst"], how="left"
-        ).filter(update_mask | new_mask)
+        to_update = (
+            new_edges.join(current_edges, on=["src", "dst"], how="left")
+            .filter(update_mask | new_mask)
+            .drop("cur_timestamp")
+        )
 
         if self.remaining_count == -1:
             self.remaining_count = to_update.count()
@@ -229,23 +181,14 @@ class EdgeStager(BaseSparkLoader):
             ).as_posix()
             for file in files
         ]
-        if paths:
-            elevation = self.spark.read.parquet(*paths)
-        else:
-            elevation = self.spark.createDataFrame(
-                data=[],
-                schema=T.StructType(
-                    [
-                        T.StructField("easting", T.IntegerType()),
-                        T.StructField("northing", T.IntegerType()),
-                        T.StructField("elevation", T.DoubleType()),
-                    ]
-                ),
-            )
+
+        # Schema must be provided, as `paths` may be empty
+        elevation = self.spark.read.schema(lnd.LIDAR_SCHEMA).parquet(*paths)
 
         return elevation
 
-    def calculate_step_metrics(self, edges: DataFrame) -> DataFrame:
+    @staticmethod
+    def calculate_step_metrics(edges: DataFrame) -> DataFrame:
         """Work out the number steps which each edge will need to be broken
         down into in order to calculate the elevation gain/loss at the
         specified resolution. The number of steps will always be at least 2, to
@@ -580,14 +523,6 @@ class EdgeStager(BaseSparkLoader):
             str(sorted(path.as_posix() for path in lidar_files))
         )
 
-    def clear_temp_files(self) -> None:
-        """One the data load operation has finished, clear out any files in
-        the temp directory
-        """
-        logger.info("Clearing temp directory")
-        with contextlib.suppress(FileNotFoundError):
-            shutil.rmtree((self.data_dir / "temp" / "edge_updates").as_posix())
-
     def run(self) -> None:
         """End-to-end script for the staging of edge data. This reads in the
         contents of the edges dataset from the landing layer, calculates which
@@ -598,7 +533,7 @@ class EdgeStager(BaseSparkLoader):
         self.initialize_output_table()
 
         if self.check_for_lidar_update():
-            self.clear_data_without_elevation()
+            self.clear_data_without_elevation(dataset="edges")
 
         to_remove = self.get_edges_to_remove()
         to_update_df = self.get_edges_to_update()
@@ -615,7 +550,7 @@ class EdgeStager(BaseSparkLoader):
             to_update_df = self.tag_exploded_edges(to_update_df, elevation_df)
             to_update_df = self.implode_edges(to_update_df)
 
-            to_update_df = self.map_to_schema(to_update_df, EDGES_SCHEMA)
+            to_update_df = self.map_to_schema(to_update_df, stg.EDGES_SCHEMA)
 
             self.apply_edge_updates(to_update_df, to_remove)
 
@@ -626,4 +561,4 @@ class EdgeStager(BaseSparkLoader):
 
         self.optimise_edges_table()
         self.record_lidar_files()
-        self.clear_temp_files()
+        self.clear_temp_files("edge_updates")

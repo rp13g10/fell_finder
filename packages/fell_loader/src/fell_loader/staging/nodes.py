@@ -2,24 +2,22 @@
 updates applied as a delta on top of data already in the staging layer.
 """
 
-import contextlib
 import logging
-import shutil
 
 from delta import DeltaTable
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 
-from fell_loader.base import BaseSparkLoader
 from fell_loader.schemas import landing as lnd
 from fell_loader.schemas import staging as stg
+from fell_loader.staging.base import BaseStager
 
 CHUNK_SIZE = 100_000
 
 logger = logging.getLogger(__name__)
 
 
-class NodeStager(BaseSparkLoader):
+class NodeStager(BaseStager):
     """Defines staging logic for the nodes dataset."""
 
     def __init__(self, spark: SparkSession) -> None:
@@ -36,49 +34,6 @@ class NodeStager(BaseSparkLoader):
         DeltaTable.createIfNotExists(self.spark).location(
             (self.data_dir / "staging" / "nodes").as_posix()
         ).addColumns(stg.NODES_SCHEMA.fields).execute()
-
-    def check_for_lidar_update(self) -> bool:
-        """Determine whether there has been any change in the LIDAR data
-        available since the last run. This cross-checks the current contents
-        of the 'landing/lidar' folder in the data directory against
-        'last_run_lidar.txt' in the 'staging' folder in the data directory.
-        This file is written by the `EdgeStager` component at the end of each
-        successful run.
-
-        Returns:
-            True if there has been a change in the available LIDAR data, False
-            if there hasn't
-        """
-        lidar_files = (self.data_dir / "landing" / "lidar").glob("*.parquet")
-        lidar_files = (path.as_posix() for path in lidar_files)
-
-        last_run_loc = self.data_dir / "staging" / "last_run_lidar.txt"
-        if not last_run_loc.exists():
-            logger.debug("No record of lidar files from previous runs")
-            last_run_files = ""
-        else:
-            logger.debug("Found record of previous lidar runs")
-            last_run_files = last_run_loc.read_text()
-
-        updated = str(sorted(lidar_files)) != last_run_files.strip()
-        logger.debug(f"Lidar files updated: {updated}")
-        return updated
-
-    def clear_data_without_elevation(self) -> None:
-        """Drop any records which don't currently have a value for elevation.
-        This will cause them to be re-processed, and tagged with elevation
-        using the latest set of available LIDAR data. This should only be
-        triggered when the LIDAR data changes.
-        """
-        logger.info("Dropping records where elevation is NULL")
-
-        nodes_tbl = DeltaTable.forPath(
-            self.spark, (self.data_dir / "staging" / "nodes").as_posix()
-        )
-
-        nodes_tbl.delete(F.col("elevation").isNull())
-
-        logger.debug("Records dropped successfully")
 
     def get_nodes_to_remove(self) -> DataFrame | None:
         """Determine which nodes need to be removed by finding any node IDs
@@ -303,14 +258,6 @@ class NodeStager(BaseSparkLoader):
         nodes_tbl.vacuum()
         logger.info("Optimization completed")
 
-    def clear_temp_files(self) -> None:
-        """One the data load operation has finished, clear out any files in
-        the temp directory
-        """
-        logger.info("Clearing temp directory")
-        with contextlib.suppress(FileNotFoundError):
-            shutil.rmtree((self.data_dir / "temp" / "node_updates").as_posix())
-
     def run(self) -> None:
         """End-to-end script for the staging of node data. This reads in the
         contents of the nodes dataset from the landing layer, calculates which
@@ -321,7 +268,7 @@ class NodeStager(BaseSparkLoader):
         self.initialize_output_table()
 
         if self.check_for_lidar_update():
-            self.clear_data_without_elevation()
+            self.clear_data_without_elevation(dataset="nodes")
 
         to_remove = self.get_nodes_to_remove()
         to_update_df = self.get_nodes_to_update()
@@ -343,4 +290,4 @@ class NodeStager(BaseSparkLoader):
             to_update_df = self.get_nodes_to_update()
 
         self.optimise_nodes_table()
-        self.clear_temp_files()
+        self.clear_temp_files("node_updates")
