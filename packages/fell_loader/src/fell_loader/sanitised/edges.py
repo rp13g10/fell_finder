@@ -145,7 +145,9 @@ class EdgeSanitiser(BaseSparkLoader):
         """
         # Drop motorways & motorway links
         edges = self._get_tag_as_column(edges, "highway")
-        not_motorway_mask = ~F.col("highway").contains(F.lit("motorway"))
+        not_motorway_mask = (
+            ~F.col("highway").contains(F.lit("motorway"))
+        ) | F.col("highway").isNull()
         edges = edges.filter(not_motorway_mask)
 
         # Drop any roads where the footway forms a separate edge

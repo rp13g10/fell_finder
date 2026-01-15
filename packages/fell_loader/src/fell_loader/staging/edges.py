@@ -5,7 +5,7 @@ with updates applied as a delta on top of data already in the staging layer.
 import logging
 
 from delta import DeltaTable
-from pyspark.sql import DataFrame, SparkSession
+from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 from pyspark.sql import types as T
 
@@ -21,14 +21,6 @@ logger = logging.getLogger(__name__)
 
 class EdgeStager(BaseStager):
     """Defines staging logic for the edges dataset."""
-
-    def __init__(self, spark: SparkSession) -> None:
-        super().__init__(spark)
-        self.removals_applied = False
-        self.updates_applied = False
-
-        self.remaining_count = -1
-        self.current_chunk_size = -1
 
     def initialize_output_table(self) -> None:
         """If no data is present in the staging layer, create an empty table"""

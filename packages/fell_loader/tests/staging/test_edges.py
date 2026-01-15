@@ -27,7 +27,6 @@ class MockEdgeStager(EdgeStager):
     def __init__(self, spark: SparkSession | None = None) -> None:
         # Attrs from base
         self.data_dir = Path("data_dir")
-        self.binary_loc = Path("binary_loc")
         self.skip_load = False
         self.spark: Any = spark if spark is not None else MagicMock()
 
