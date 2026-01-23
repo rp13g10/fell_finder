@@ -1,7 +1,8 @@
 """Defines the backend application which powers the fell_finder webapp,
 this has been moved out from the root level app.py as some callbacks
 reference the background callback manager. Attempting to create the app
-and set the layout in the same file results in a circular import."""
+and set the layout in the same file results in a circular import.
+"""
 
 import os
 
@@ -10,7 +11,7 @@ import diskcache
 from celery import Celery
 from dash import CeleryManager, Dash, DiskcacheManager
 
-__all__ = ["background_callback_manager", "app"]
+__all__ = ["app", "background_callback_manager"]
 
 if os.environ["FF_DEBUG_MODE"] == "true":
     celery_app = None

@@ -14,11 +14,11 @@ from fell_viewer.elements.buttons import Button, ButtonConfig
 
 CUR_DIR = os.path.dirname(os.path.abspath(__file__))
 with open(
-    os.path.join(CUR_DIR, "..", "highway_types.json"), "r", encoding="utf8"
+    os.path.join(CUR_DIR, "..", "highway_types.json"), encoding="utf8"
 ) as fobj:
     HIGHWAY_TYPES = list(json.load(fobj).keys())
 with open(
-    os.path.join(CUR_DIR, "..", "surface_types.json"), "r", encoding="utf8"
+    os.path.join(CUR_DIR, "..", "surface_types.json"), encoding="utf8"
 ) as fobj:
     SURFACE_TYPES = list(json.load(fobj).keys())
 

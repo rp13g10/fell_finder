@@ -3,6 +3,11 @@
 from unittest.mock import patch
 
 import polars as pl
+from fell_loader.utils.partitioning import (
+    add_bng_partition_to_polars_df,
+    add_bng_partition_to_spark_df,
+    add_coords_partition_to_spark_df,
+)
 from polars.testing import assert_frame_equal
 from pyspark.sql import SparkSession
 from pyspark.sql.types import (
@@ -13,12 +18,6 @@ from pyspark.sql.types import (
     StructType,
 )
 from pyspark.testing.utils import assertDataFrameEqual
-
-from fell_loader.utils.partitioning import (
-    add_bng_partition_to_polars_df,
-    add_bng_partition_to_spark_df,
-    add_coords_partition_to_spark_df,
-)
 
 
 @patch("fell_loader.utils.partitioning.PTN_EDGE_SIZE_M", 10000)

@@ -1,5 +1,6 @@
 """Callbacks which are required in order to display the layout of the
-entire webapp"""
+entire webapp
+"""
 
 from dash import Input, Output, callback, html
 from dash.development.base_component import Component
@@ -10,7 +11,8 @@ from fell_viewer.content import home, route_finder
 def init_callbacks() -> None:
     """This function needs to be called at the point the webapp layout is
     defined in order to ensure the enclosed callbacks are correctly
-    registered"""
+    registered
+    """
 
     @callback(
         Output("inx-page-content", "children"), [Input("url", "pathname")]

@@ -1,7 +1,9 @@
 """Defines utilities for the creation of complex control panels which can be
-used to collect multiple user inputs"""
+used to collect multiple user inputs
+"""
 
-from typing import Literal, Sequence
+from collections.abc import Sequence
+from typing import Literal
 
 import dash_bootstrap_components as dbc
 from dash import html
@@ -16,7 +18,8 @@ type ControlType = FVComponent | Control | "PanelSection"
 class Control(FVComponent):
     """Defines a single control element, which is comprised of a title and
     another component, typically an interactive item from dash core
-    components"""
+    components
+    """
 
     def __init__(
         self,
@@ -33,17 +36,15 @@ class Control(FVComponent):
     def _get_widths(self) -> tuple[int, int] | tuple[str, None]:
         if self.control_width == "auto":
             return ("auto", None)
-        else:
-            assert type(self.control_width) is int, (
-                f"control_width must be int, got {type(self.control_width)}"
-            )
-            assert 1 <= self.control_width <= 12, (
-                "control_width must be between 0 and 12, "
-                f"got {self.control_width}"
-            )
-            if self.control_width == 12:
-                return (12, 12)
-            return (12 - self.control_width, self.control_width)
+        assert type(self.control_width) is int, (
+            f"control_width must be int, got {type(self.control_width)}"
+        )
+        assert 1 <= self.control_width <= 12, (
+            f"control_width must be between 0 and 12, got {self.control_width}"
+        )
+        if self.control_width == 12:
+            return (12, 12)
+        return (12 - self.control_width, self.control_width)
 
     def generate(self) -> dbc.Row:
         """Render this Control so that it can be displayed on the page"""
@@ -69,7 +70,8 @@ class Control(FVComponent):
 class PanelSection(FVComponent):
     """Defines a control panel section, which wraps multiple control elements
     and a title into a subsection of a panel. This should always be placed in
-    a Panel object, and is not designed for use on its own."""
+    a Panel object, and is not designed for use on its own.
+    """
 
     def __init__(
         self, title: str, controls: Sequence[SectionControlType]
@@ -79,7 +81,6 @@ class PanelSection(FVComponent):
 
     def generate(self) -> Component:
         """Render this PanelSection so that it can be displayed on the page"""
-
         title_div = html.H6(
             className="sidebar-heading h5", children=self.title
         )
@@ -93,7 +94,8 @@ class PanelSection(FVComponent):
 
 class Panel(FVComponent):
     """Defines a control panel component, which wraps multiple control elements
-    and a title into a single panel."""
+    and a title into a single panel.
+    """
 
     def __init__(self, title: str, controls: Sequence[ControlType]) -> None:
         self.title = title

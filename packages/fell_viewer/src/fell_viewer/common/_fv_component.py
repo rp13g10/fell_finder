@@ -10,10 +10,12 @@ from dash.development.base_component import Component
 
 class FVComponent(ABC):
     """Defines the behaviours which must be implemented by all custom
-    components"""
+    components
+    """
 
     @abstractmethod
     def generate(self) -> Component:
         """Every component must include a generate method, which returns an
-        object which can be rendered directly on the page by Dash"""
+        object which can be rendered directly on the page by Dash
+        """
         ...

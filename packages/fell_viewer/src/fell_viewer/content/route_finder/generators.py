@@ -1,5 +1,6 @@
 """Functions which generate components for the route finder page based on
-configurable inputs"""
+configurable inputs
+"""
 
 from plotly import graph_objects as go
 
@@ -19,7 +20,6 @@ def generate_elevation_plot(route: Route) -> go.Figure:
         the Y axis
 
     """
-
     cml_distances = []
     cml_distance = 0.0
     for dist in route.geometry.dists:

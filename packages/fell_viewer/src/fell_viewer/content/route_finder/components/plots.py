@@ -13,7 +13,8 @@ ROUTE_START_PNG = get_image_as_str("route_start.png")
 
 class RouteMap(FVComponent):
     """Generates a blank map element using dash_leaflet which can be used to
-    render generated routes."""
+    render generated routes.
+    """
 
     def __init__(self, id: str) -> None:
         self.id = id
@@ -53,7 +54,8 @@ class RouteMap(FVComponent):
 
 class RouteProfile(FVComponent):
     """Generates a blank route profile using plotly which can be used to
-    render the elevation profiles of generated routes"""
+    render the elevation profiles of generated routes
+    """
 
     def __init__(self, id: str) -> None:
         self.id = id

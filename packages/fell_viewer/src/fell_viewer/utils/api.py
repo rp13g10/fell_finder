@@ -1,5 +1,6 @@
 """Contains the functions required to interface with the API provided by
-fell_finder"""
+fell_finder
+"""
 
 import json
 from dataclasses import fields
@@ -53,7 +54,6 @@ def request_new_route(
         A list of generated routes
 
     """
-
     url = _gen_request_url(config)
 
     response = requests.get(url, headers={"Content-Type": "application/json"})

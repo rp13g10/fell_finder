@@ -8,39 +8,23 @@ readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "bng-latlon>=1.1",
+    "delta-spark>=4.0.0",
+    "diskcache>=5.6.3",
     "geopy>=2.4.1",
-    "hatchling>=1.27.0",
     "numpy<2.0",
     "pandas>=2.2.3",
     "polars>=1.17.1",
     "psycopg2-binary>=2.9.10",
     "pyarrow>=18.1.0",
     "pyrosm>=0.6.2",
-    "pyspark>=3.5.3",
+    "pyspark>=4.0.0",
     "rasterio>=1.4.3",
     "tqdm>=4.67.1",
 ]
 
-[tool.ruff]
-line-length = 79
-
-[tool.ruff.lint]
-select = ["E", "F", "W", "D1", "D41", "ANN001", "ANN2", "ERA"]
-ignore = ["D107", "D415"]
-
-[tool.ruff.lint.per-file-ignores]
-"./tests/*" = ["E501", "ANN201"]
-"__init__.py" = ["D104"]
-
-[tool.setuptools.packages.find]
-where = ["src"]
-include = ["fell_loader*"]
-
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["uv_build"]
+build-backend = "uv_build"
 
 [dependency-groups]
-dev = [
-    "tabulate>=0.9.0",
-]
+dev = ["tabulate>=0.9.0"]
