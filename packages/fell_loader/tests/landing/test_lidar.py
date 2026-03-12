@@ -799,16 +799,20 @@ def test_write_bounds():
 
     # Assert
     test_bounds.write_parquet.assert_called_once_with(
-        Path("data_dir/landing/lidar_bounds.parquet")
+        Path("data_dir/landing/lidar_bounds.parquet"),
+        compression="zstd",
+        compression_level=22,
     )
 
 
-@patch("fell_loader.landing.lidar.MAX_WORKERS", new=42)
+@patch("fell_loader.landing.lidar.get_env_var")
 @patch("fell_loader.landing.lidar.process_map")
-def test_run(mock_process_map: MagicMock):
+def test_run(mock_process_map: MagicMock, mock_get_env_var: MagicMock):
     """Ensure the correct info is passed to process_map"""
     # Arrange
     mock_loader = MockLidarLoader()
+
+    mock_get_env_var.return_value = 42
 
     mock_process_lidar_file = MagicMock()
     mock_loader.process_lidar_file = mock_process_lidar_file

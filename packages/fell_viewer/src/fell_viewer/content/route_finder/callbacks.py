@@ -40,16 +40,16 @@ MAX_JOB_DURATION = int(os.environ.get("FF_MAX_JOB_SECONDS", "600"))
 
 with open(
     os.path.join(CUR_DIR, "highway_types.json"), encoding="utf8"
-) as fobj:
-    HIGHWAY_TYPES = json.load(fobj)
+) as file:
+    HIGHWAY_TYPES = json.load(file)
 
 with open(
     os.path.join(CUR_DIR, "surface_types.json"), encoding="utf8"
-) as fobj:
-    SURFACE_TYPES = json.load(fobj)
+) as file:
+    SURFACE_TYPES = json.load(file)
 
 
-def init_callbacks() -> None:
+def init_callbacks() -> None:  # noqa: PLR0915
     """This function needs to be called in a function which defines elements of
     the page config in order to ensure the enclosed callbacks are correctly
     registered
@@ -130,7 +130,7 @@ def init_callbacks() -> None:
         ],
         prevent_initial_call=True,
     )
-    def request_new_route_from_input(
+    def request_new_route_from_input(  # noqa: PLR0913
         n_clicks: int | None,
         current_children: list,
         route_dist: str,
@@ -426,7 +426,7 @@ def init_callbacks() -> None:
 
         route = new_routes[0]
 
-        polyline = route.to_polyline(id="route-plot-trace")
+        polyline = route.to_polyline(element_id="route-plot-trace")
 
         viewport = route.geometry.bbox.to_viewport()
 
@@ -498,7 +498,7 @@ def init_callbacks() -> None:
         # Fetch the selected route
         route = next(x for x in routes if str(x.route_id) == target_id)
 
-        polyline = route.to_polyline(id="route-plot-trace")
+        polyline = route.to_polyline(element_id="route-plot-trace")
 
         viewport = route.geometry.bbox.to_viewport()
 

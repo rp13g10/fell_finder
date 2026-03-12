@@ -8,18 +8,18 @@ readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "bng-latlon>=1.1",
-    "delta-spark>=4.0.0",
+    "delta-spark>=4.0.0,<4.1",
     "diskcache>=5.6.3",
     "geopy>=2.4.1",
     "numpy<2.0",
-    "pandas>=2.2.3",
     "polars>=1.17.1",
     "psycopg2-binary>=2.9.10",
     "pyarrow>=18.1.0",
-    "pyrosm>=0.6.2",
-    "pyspark>=4.0.0",
+    "pyspark>=4.0.0,<4.1",
     "rasterio>=1.4.3",
+    "setuptools<80.0",
     "tqdm>=4.67.1",
+    "zstandard>=0.25.0",
 ]
 
 [build-system]

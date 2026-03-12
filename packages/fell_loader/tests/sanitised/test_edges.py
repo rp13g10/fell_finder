@@ -575,7 +575,7 @@ def test_remove_unsafe_routes(test_session: SparkSession):
         # Dropped, motorway (with speed limit tag)
         [6 , {'maxspeed': '70 mph', 'highway': 'motorway'}, False           , False],
         # Dropped, 60 mph, separate footway
-        [7 , {'maxspeed': '60 mph'}    , False            , True]
+        [7 , {'maxspeed': '60 mph'}                       , False            , True]
     ]
     # fmt: on
 
@@ -903,14 +903,14 @@ def test_add_reverse_edges(test_session: SparkSession):
 
     # ----- Test Data -----
     # fmt: off
-    #   way_id, way_inx, src, dst, oneway, elevation_gain, elevation_loss
+    #   way_id, way_inx, src, dst, src_lat, dst_lat, src_lon, dst_lon, oneway, elevation_gain, elevation_loss
     test_data = [
         # One way, should not be reversed
-        [1    , 1      , 1  , 2  , True  , 1.0           , 1.0],
-        [1    , 2      , 2  , 3  , True  , 1.0           , 1.0],
+        [1    , 1      , 1  , 2  , 10.0   , 11.0   , 12.0   , 13.0   , True  , 1.0           , 2.0],
+        [1    , 2      , 2  , 3  , 20.0   , 21.0   , 22.0   , 23.0   , True  , 1.0           , 2.0],
         # Bi-directional, should be reversed
-        [2    , 3      , 3  , 4  , False , 1.0           , 1.0],
-        [2    , 4      , 4  , 5  , False , 1.0           , 1.0],
+        [2    , 3      , 3  , 4  , 30.0   , 31.0   , 32.0   , 33.0   , False , 1.0           , 2.0],
+        [2    , 4      , 4  , 5  , 40.0   , 41.0   , 42.0   , 43.0   , False , 1.0           , 2.0],
     ]
     # fmt: on
 
@@ -920,6 +920,10 @@ def test_add_reverse_edges(test_session: SparkSession):
             StructField("way_inx", IntegerType()),
             StructField("src", IntegerType()),
             StructField("dst", IntegerType()),
+            StructField("src_lat", DoubleType()),
+            StructField("dst_lat", DoubleType()),
+            StructField("src_lon", DoubleType()),
+            StructField("dst_lon", DoubleType()),
             StructField("oneway", BooleanType()),
             StructField("elevation_gain", DoubleType()),
             StructField("elevation_loss", DoubleType()),
@@ -930,16 +934,16 @@ def test_add_reverse_edges(test_session: SparkSession):
 
     # ----- Target Data -----
     # fmt: off
-    #   way_id, way_inx, src, dst, oneway
+    #   way_id, way_inx, src, dst, src_lat, dst_lat, src_lon, dst_lon, oneway, elevation_gain, elevation_loss
     tgt_data = [
         # One way, should not be reversed
-        [1    , 1      , 1  , 2  , True  , 1.0           , 1.0],
-        [1    , 2      , 2  , 3  , True  , 1.0           , 1.0],
+        [1    , 1      , 1  , 2  , 10.0   , 11.0   , 12.0   , 13.0   , True  , 1.0           , 2.0],
+        [1    , 2      , 2  , 3  , 20.0   , 21.0   , 22.0   , 23.0   , True  , 1.0           , 2.0],
         # Bi-directional, should be reversed
-        [2    , 3      , 3  , 4  , False , 1.0           , 1.0],
-        [2    , 4      , 4  , 5  , False , 1.0           , 1.0],
-        [-2   , -3     , 4  , 3  , False , -1.0          , -1.0],
-        [-2   , -4     , 5  , 4  , False , -1.0          , -1.0],
+        [2    , 3      , 3  , 4  , 30.0   , 31.0   , 32.0   , 33.0   , False , 1.0           , 2.0],
+        [2    , 4      , 4  , 5  , 40.0   , 41.0   , 42.0   , 43.0   , False , 1.0           , 2.0],
+        [-2   , -3     , 4  , 3  , 31.0   , 30.0   , 33.0   , 32.0   , False , 2.0           , 1.0],
+        [-2   , -4     , 5  , 4  , 41.0   , 40.0   , 43.0   , 42.0   , False , 2.0           , 1.0],
     ]
     # fmt: on
 
@@ -949,6 +953,10 @@ def test_add_reverse_edges(test_session: SparkSession):
             StructField("way_inx", IntegerType()),
             StructField("src", IntegerType()),
             StructField("dst", IntegerType()),
+            StructField("src_lat", DoubleType()),
+            StructField("dst_lat", DoubleType()),
+            StructField("src_lon", DoubleType()),
+            StructField("dst_lon", DoubleType()),
             StructField("oneway", BooleanType()),
             StructField("elevation_gain", DoubleType()),
             StructField("elevation_loss", DoubleType()),
@@ -957,11 +965,13 @@ def test_add_reverse_edges(test_session: SparkSession):
 
     tgt_df = test_session.createDataFrame(tgt_data, schema=tgt_schema)
 
+    test_edge_sanitiser = MockEdgeSanitiser()
+
     # Act #####################################################################
-    res_df = EdgeSanitiser.add_reverse_edges(test_df)
+    res_df = test_edge_sanitiser.add_reverse_edges(test_df)
 
     # Assert ##################################################################
-    assertDataFrameEqual(tgt_df, res_df)
+    assertDataFrameEqual(res_df, tgt_df)
 
 
 @pytest.mark.skip("High effort, low value")

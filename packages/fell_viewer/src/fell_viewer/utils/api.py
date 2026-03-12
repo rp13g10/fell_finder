@@ -12,7 +12,7 @@ from fell_viewer.common.containers import Route, RouteConfig
 
 
 def _gen_request_url(config: RouteConfig) -> str:
-    base_url = "http://localhost:8000/route/request"
+    base_url = "http://ff_api:8000/route/request"
 
     query = []
     for field in fields(config):
@@ -30,13 +30,13 @@ def _gen_request_url(config: RouteConfig) -> str:
 
 
 def _gen_status_url(job_id: str) -> str:
-    base_url = "http://localhost:8000/route/status"
+    base_url = "http://ff_api:8000/route/status"
 
     return f"{base_url}?job_id={job_id}"
 
 
 def _gen_retrieve_url(job_id: str) -> str:
-    base_url = "http://localhost:8000/route/retrieve"
+    base_url = "http://ff_api:8000/route/retrieve"
 
     return f"{base_url}?job_id={job_id}"
 
@@ -104,8 +104,8 @@ def get_job_results(job_id: str) -> list[Route]:
 
     raw_routes = json.loads(response.content)
 
-    generated = []
-    for route in raw_routes:
-        generated.append(Route.from_api_response(route))
+    generated = [
+        Route.from_api_response(raw_route) for raw_route in raw_routes
+    ]
 
     return generated

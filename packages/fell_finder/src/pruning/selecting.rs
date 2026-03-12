@@ -23,6 +23,8 @@ fn get_cand_ordering(
     b: &Candidate,
     mode: &RouteMode,
 ) -> Ordering {
+    // TODO: Set up a few different ordering strategies (ratio, elevation, mixed)
+    //       and create a config param to switch between them
     let a_t1 = (a.metrics.common.dist / 1000.0) as isize;
     let b_t1 = (b.metrics.common.dist / 1000.0) as isize;
 
@@ -271,10 +273,7 @@ mod tests {
             geometry: CandidateGeometry::new(),
             metrics: CandidateMetrics::new(),
             route_config: Arc::new(get_test_route_config()),
-            backend_config: Arc::new(BackendConfig::default(
-                "dummy".to_string(),
-                "dummy".to_string(),
-            )),
+            backend_config: Arc::new(BackendConfig::default()),
             cur_inx: NodeIndex::new(0),
             start_inx: NodeIndex::new(0),
         }

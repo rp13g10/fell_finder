@@ -16,7 +16,7 @@ def get_image_as_str(image_file: str) -> str:
     with open(os.path.join(ASSETS_DIR, image_file), "rb") as fobj:
         b64_bytes = base64.b64encode(fobj.read())
 
-    file_format = image_file.split(".")[-1]
+    file_format = image_file.rsplit(".", maxsplit=1)[-1]
 
     img_str = f"data:/image/{file_format};base64,{b64_bytes.decode('utf8')}"
 

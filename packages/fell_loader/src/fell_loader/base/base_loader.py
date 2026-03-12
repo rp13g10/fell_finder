@@ -4,7 +4,6 @@ of the ETL pipeline
 """
 
 import logging
-import os
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Literal
@@ -13,6 +12,8 @@ from delta import DeltaTable
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql import types as T
+
+from fell_loader.utils import get_env_var
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +27,8 @@ class BaseLoader(ABC):
     """
 
     def __init__(self) -> None:
-        self.data_dir = Path(os.environ["FF_DATA_DIR"])
+        data_dir = get_env_var("FF_DATA_DIR")
+        self.data_dir = Path(data_dir)
 
     @abstractmethod
     def run(self) -> None:
@@ -135,7 +137,7 @@ class BaseSparkLoader(BaseLoader, ABC):
         data directory, where data is stored in the delta format. This is only
         appropriate for simple read operations, anything which needs to
         apply updates to the underlying delta table will need a custom
-        implemetation.
+        implementation.
 
         Args:
             layer: The data layer to read the dataset from

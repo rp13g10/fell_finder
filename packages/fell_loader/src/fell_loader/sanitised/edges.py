@@ -169,7 +169,7 @@ class EdgeSanitiser(BaseSparkLoader):
             "maxspeed",
             F.regexp_extract(
                 F.col("maxspeed"), r"[A-Za-z\s]*(\d{1,3})[A-Za-z\s]*", 1
-            ),
+            ).try_cast(T.IntegerType()),
         )
 
         # Keep records with max speed below 50, no known max speed, or have
@@ -362,7 +362,17 @@ class EdgeSanitiser(BaseSparkLoader):
         return edges
 
     @staticmethod
-    def add_reverse_edges(edges: DataFrame) -> DataFrame:
+    def _swap_columns(reverse: DataFrame, src: str, dst: str) -> DataFrame:
+        # src --> old_src
+        reverse = reverse.withColumn(f"old_{src}", F.col(src))
+        # dst --> src
+        reverse = reverse.withColumn(src, F.col(dst))
+        # old_src --> dst
+        reverse = reverse.withColumn(dst, F.col(f"old_{src}"))
+        reverse = reverse.drop(f"old_{src}")
+        return reverse
+
+    def add_reverse_edges(self, edges: DataFrame) -> DataFrame:
         """For any edges A-B where the oneway field is either NULL or
         explicitly set to no, create a second edge B-A. Assign this new edge
         to a new way, and record its position in the dataframe. The geometry
@@ -380,23 +390,18 @@ class EdgeSanitiser(BaseSparkLoader):
         # Get bi-directional edges
         reverse = edges.filter(~F.col("oneway"))
 
-        # Swap src and dst
-        reverse = reverse.withColumn("old_src", F.col("src"))
-        reverse = reverse.withColumn("src", F.col("dst"))
-        reverse = reverse.withColumn("dst", F.col("old_src"))
-        reverse = reverse.drop("old_src")
+        # Swap IDs & Coordinates of src/dst, invert loss/gain
+        for src_col, dst_col in [
+            ("src", "dst"),
+            ("src_lat", "dst_lat"),
+            ("src_lon", "dst_lon"),
+            ("elevation_gain", "elevation_loss"),
+        ]:
+            reverse = self._swap_columns(reverse, src_col, dst_col)
 
         # Create new way ID and invert position of edge in way
         reverse = reverse.withColumn("way_id", F.col("way_id") * -1)
         reverse = reverse.withColumn("way_inx", F.col("way_inx") * -1)
-
-        # Invert gain & loss
-        reverse = reverse.withColumn(
-            "elevation_gain", F.col("elevation_gain") * -1
-        )
-        reverse = reverse.withColumn(
-            "elevation_loss", F.col("elevation_loss") * -1
-        )
 
         # Add inverted edges onto the original dataset
         out = edges.unionByName(reverse)
@@ -413,7 +418,9 @@ class EdgeSanitiser(BaseSparkLoader):
         coordinates.
         """
         # Read in data
-        edges = self.read_delta(layer="staging", dataset="edges")
+        edges = self.read_delta(layer="staging", dataset="edges").repartition(
+            512  # Prevents hang when running against whole-UK data
+        )
         edges = self.drop_edges_without_elevation(edges)
 
         # Limit to edges which are suitable for runners

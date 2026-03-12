@@ -1,0 +1,88 @@
+services:
+  ff_db:
+    image: "postgres:18.1"
+    networks:
+      - ff_net
+    ports:
+      - "5432:5432" # DB Connections
+    restart: always
+    environment:
+      POSTGRES_DB: fell_finder
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - ff_db:/var/lib/postgresql
+  ff_cache:
+    image: "redis:8.6.1"
+    networks:
+      - ff_net
+    # ports:
+      # - 6379:6379 # Endpoint
+  ff_app:
+    image: "fell_viewer"
+    networks:
+      - ff_net
+    ports:
+      - 8050:8050 # Webapp
+    volumes:
+      # Python code (temp, to be removed after debug phase)
+      - ff_src:/fell_finder/src
+      - fell_viewer:/fell_viewer/packages/fell_viewer
+    environment:
+      # Redis connection details
+      - FF_REDIS_HOST=ff_cache
+      - FF_REDIS_PORT=6379
+      # App config
+      - FF_DEBUG_MODE=false
+      - FF_DIST_TOLERANCE=0.1
+  ff_api:
+    image: "fell_finder"
+    networks:
+      - ff_net
+    # ports:
+      # - 8000:8000 # API Endpoint
+    environment:
+      # Database connection details
+      - FF_DB_HOST=ff_db
+      - FF_DB_PORT=5432
+      - FF_DB_USER=postgres
+      - FF_DB_PASS=postgres
+      # Redis connection details
+      - FF_REDIS_HOST=ff_cache
+      - FF_REDIS_PORT=6379
+      # App config
+      - FF_MAX_CANDS=16384
+      - FF_MAX_ROUTES=16
+      - FF_PRUNING_THRESHOLD=0.95
+      - FF_PRUNING_STRATEGY=naive # naive / fuzzy
+      - FF_DIJKSTRA_VALIDATION=true
+      - FF_DISPLAY_THRESHOLD=0.9
+      - FF_BIN_SIZE=64
+      - FF_BIN_STRATEGY=centre # centre / last
+      - FF_FINISHING_OVERLAPS=3
+      - FF_MAX_JOB_SECONDS=600
+      - FF_UPDATE_FREQUENCY=5
+networks:
+  ff_net:
+    driver: bridge
+volumes:
+  # Temp volumes to be removed after debug
+  fell_viewer:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      device: /home/ross/repos/fell_finder/packages/fell_viewer/src/fell_viewer
+  ff_src:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      device: /home/ross/repos/fell_finder/src
+  ff_db:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      # Update this to match your db directory (fast storage recommended)
+      device: /home/ross/ff_db/

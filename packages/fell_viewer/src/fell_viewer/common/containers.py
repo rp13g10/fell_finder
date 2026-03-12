@@ -256,12 +256,12 @@ class Route:
             metrics=RouteMetrics.from_dict(content["metrics"]),
         )
 
-    def to_polyline(self, id: str | None = None) -> dl.Polyline:
+    def to_polyline(self, element_id: str | None = None) -> dl.Polyline:
         """For a generated route, generate a dash-leaflet polyline which can be
         displayed on a map
 
         Args:
-            id: The id which should be set for the generated polyline
+            element_id: The id which should be set for the generated polyline
 
         Returns:
             A polyline which can be added to a dash_leaflet map
@@ -271,8 +271,8 @@ class Route:
             positions=self.geometry.coords, interactive=True
         )
 
-        if id:
-            kwargs["id"] = id
+        if element_id:
+            kwargs["id"] = element_id
 
         polyline = dl.Polyline(**kwargs)
 

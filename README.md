@@ -33,6 +33,8 @@ Eventually, everything will be set up to run in containers. Until then, it takes
   * [python build tools](https://devguide.python.org/getting-started/setup-building/#install-dependencies)
     * If you run into build errors with pyarrow, you can find the dependencies to install [here](https://arrow.apache.org/docs/developers/cpp/building.html)
     * If you run into build errors with numpy, you might need to install the C build tools. Use `dnf group install c-development development-tools` to install them on Fedora
+  * To run pyspark outside of containers (e.g. to run the tests) you will need Java. Use `dnf install java-21-openjdk-headless.x86_64` for Fedora.
+    * Set `JAVA_HOME` to '/usr/lib/jvm/java-21-openjdk' on Fedora
 * Build the [fell_finder](packages/fell_finder/README.md) package
 * Run the [fell_loader](packages/fell_loader/README.md) package to get all of the required data into postgres
 * Run the [fell_viewer](packages/fell_viewer/README.md) package to start the webapp

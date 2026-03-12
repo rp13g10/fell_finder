@@ -4,30 +4,19 @@ into postgres
 """
 
 import logging
-import os
+from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 import psycopg2 as pg
 from psycopg2.extensions import connection
-from tqdm import tqdm
 
 from fell_loader.base import BaseLoader
+from fell_loader.utils import get_env_var
 
-logger = logging.Logger(__name__)
+logger = logging.getLogger(__name__)
 
 CUR_DIR = Path(__file__).parent.absolute()
-
-with (CUR_DIR / "init_db.sql").open("r", encoding="utf8") as file:
-    INIT_DB_QUERY = file.read()
-
-with (CUR_DIR / "init_ptns.sql").open("r", encoding="utf8") as file:
-    INIT_PTNS_TEMPLATE = file.read()
-
-with (CUR_DIR / "copy_nodes.sql").open("r", encoding="utf8") as file:
-    COPY_NODES_QUERY = file.read()
-
-with (CUR_DIR / "copy_edges.sql").open("r", encoding="utf8") as file:
-    COPY_EDGES_QUERY = file.read()
 
 
 class GraphUploader(BaseLoader):
@@ -37,23 +26,31 @@ class GraphUploader(BaseLoader):
 
     def __init__(self) -> None:
         super().__init__()
-
         self.db = self._get_db_conn()
         self.db.autocommit = True
 
-    def _get_credentials(self) -> tuple[str, str]:
-        """Quick & dirty function to fetch credentials for database access,
-        this will be phased out once project migrates over to containers
+    @staticmethod
+    @lru_cache
+    def _get_sql_query(
+        query_name: Literal[
+            "init_db", "init_ptns", "copy_nodes", "copy_edges"
+        ],
+    ) -> str:
+        """Fetch one of the pre-defined SQL queries from the `postgres` folder
+
+        Args:
+            query_name: The name of the query to be retrieved, this must
+                correspond to one of the .sql files stored in the
+                same folder as this file
 
         Returns:
-            tuple[str, str]: User provided username, password
-
+            The contents of the requested .sql file
         """
-        # TODO: Set up error handling
-        user = os.environ["FF_DB_USER"]
-        pass_ = os.environ["FF_DB_PASS"]
-
-        return user, pass_
+        with (CUR_DIR / f"{query_name}.sql").open(
+            "r", encoding="utf8"
+        ) as file:
+            query = file.read()
+        return query
 
     def _get_db_conn(self) -> connection:
         """Fetch a connection to the fell_finder database, user will need to
@@ -63,8 +60,17 @@ class GraphUploader(BaseLoader):
             A psycopg2 connection to the database
 
         """
-        user, pass_ = self._get_credentials()
-        conn = pg.connect(dbname="fell_finder", user=user, password=pass_)
+        logger.debug("Connecting to database")
+        pg_host = get_env_var("FF_DB_HOST")
+        pg_port = get_env_var("FF_DB_PORT")
+        pg_user = get_env_var("FF_DB_USER")
+        pg_pass = get_env_var("FF_DB_PASS")
+
+        pg_uri = (
+            f"postgres://{pg_user}:{pg_pass}@{pg_host}:{pg_port}/fell_finder"
+        )
+        conn = pg.connect(pg_uri)
+        logger.debug("Connected to database")
         return conn
 
     def _gen_ptns_query(self) -> str:
@@ -79,16 +85,18 @@ class GraphUploader(BaseLoader):
         """
         query = []
         for table in ["nodes", "edges"]:
-            for lat in range(50, 60):
+            for lat in range(49, 62):
                 min_lat = lat - 1
-                for lon in range(-2, 11):
+                for lon in range(-14, 3):
                     min_lon = lon - 1
                     ptn = f"{min_lat}_{min_lon}".replace("-", "n")
                     query.append(
-                        INIT_PTNS_TEMPLATE.format(
+                        self._get_sql_query("init_ptns")
+                        .format(
                             table=table,
                             ptn=ptn,
-                        ).replace("_-", "_n")
+                        )
+                        .replace("_-", "_n")
                     )
 
         query_str = "\n".join(query)
@@ -98,12 +106,10 @@ class GraphUploader(BaseLoader):
         """Initializes the database with all required tables, indexes and
         partitions ready for data to be loaded.
         """
-        init_ptns_query = self._gen_ptns_query()
-
         logger.info("Initializing database")
         cur = self.db.cursor()
-        cur.execute(INIT_DB_QUERY)
-        cur.execute(init_ptns_query)
+        cur.execute(self._get_sql_query("init_db"))
+        cur.execute(self._gen_ptns_query())
 
         cur.close()
         logger.info("Database initialization complete")
@@ -118,11 +124,11 @@ class GraphUploader(BaseLoader):
         #       this seems to go via stdout
 
         logger.info("Uploading nodes to database")
-        for path in tqdm(to_load):
+        for path in to_load:
             logger.debug("Loading file %s", path)
             with path.open(encoding="utf8") as file:
                 cur.copy_expert(
-                    COPY_NODES_QUERY,
+                    self._get_sql_query("copy_nodes"),
                     file,
                 )
         cur.close()
@@ -135,11 +141,11 @@ class GraphUploader(BaseLoader):
         cur = self.db.cursor()
 
         logger.info("Uploading edges to database")
-        for path in tqdm(to_load):
+        for path in to_load:
             logger.debug("Loading file %s", path)
             with path.open(encoding="utf8") as file:
                 cur.copy_expert(
-                    COPY_EDGES_QUERY,
+                    self._get_sql_query("copy_edges"),
                     file,
                 )
         cur.close()

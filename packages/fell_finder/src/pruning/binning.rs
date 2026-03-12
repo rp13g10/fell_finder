@@ -109,7 +109,7 @@ fn compare_lons(c1: &Candidate, c2: &Candidate) -> Ordering {
 }
 
 /// Assign all of the provided routes to bins based on their central
-/// coordinates. Routes are binned across both lats and lons, analagous
+/// coordinates. Routes are binned across both lats and lons, analogous
 /// to placing them into a 2d grid.
 pub fn bin_candidates(
     bin_details: BinDetails,
@@ -172,10 +172,7 @@ mod tests {
             geometry: CandidateGeometry::new(),
             metrics: CandidateMetrics::new(),
             route_config: Arc::new(get_test_route_config()),
-            backend_config: Arc::new(BackendConfig::default(
-                "dummy".to_string(),
-                "dummy".to_string(),
-            )),
+            backend_config: Arc::new(BackendConfig::default()),
             cur_inx: NodeIndex::new(0),
             start_inx: NodeIndex::new(0),
         }
@@ -188,10 +185,7 @@ mod tests {
         #[test]
         fn test_square_number() {
             let max_cands = 1024; // 64 * 4 * 4
-            let cfg = Arc::new(BackendConfig::default(
-                "dummy".to_string(),
-                "dummy".to_string(),
-            ));
+            let cfg = Arc::new(BackendConfig::default());
 
             let target = BinDetails {
                 bin_size_x: 256,
@@ -206,10 +200,7 @@ mod tests {
         #[test]
         fn test_no_leftovers() {
             let max_cands = 1280; // 64 * 5 * 4
-            let cfg = Arc::new(BackendConfig::default(
-                "dummy".to_string(),
-                "dummy".to_string(),
-            ));
+            let cfg = Arc::new(BackendConfig::default());
 
             // --> num_bins = 20
             // --> x_bins = 5, y_bins = 4
@@ -227,10 +218,7 @@ mod tests {
         #[test]
         fn test_leftovers() {
             let max_cands = 5432;
-            let cfg = Arc::new(BackendConfig::default(
-                "dummy".to_string(),
-                "dummy".to_string(),
-            ));
+            let cfg = Arc::new(BackendConfig::default());
 
             // --> num_bins = 85 (5432 / 64 = 84.875)
             // --> x_bins = 10 (sqrt(85) = 9.22)

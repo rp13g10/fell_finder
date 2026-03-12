@@ -16,18 +16,20 @@ class RouteMap(FVComponent):
     render generated routes.
     """
 
-    def __init__(self, id: str) -> None:
-        self.id = id
+    def __init__(self, element_id: str) -> None:
+        self.element_id = element_id
 
     def _gen_blank_map(self) -> dl.Map:
         blank_map = dl.Map(
-            id=self.id,
+            id=self.element_id,
             children=[
-                dl.TileLayer(id=f"{self.id}-tiles"),
-                dl.ScaleControl(position="bottomleft", id=f"{self.id}-scale"),
+                dl.TileLayer(id=f"{self.element_id}-tiles"),
+                dl.ScaleControl(
+                    position="bottomleft", id=f"{self.element_id}-scale"
+                ),
                 dl.Marker(
                     position=[50.9690528, -1.3832098],  # type: ignore
-                    id=f"{self.id}-marker",
+                    id=f"{self.element_id}-marker",
                     icon={
                         "iconUrl": ROUTE_START_PNG,
                         "iconSize": [48, 48],
@@ -57,8 +59,8 @@ class RouteProfile(FVComponent):
     render the elevation profiles of generated routes
     """
 
-    def __init__(self, id: str) -> None:
-        self.id = id
+    def __init__(self, element_id: str) -> None:
+        self.element_id = element_id
 
     # TODO: Add toggle to switch between elevation & cumulative gain
 
@@ -73,7 +75,7 @@ class RouteProfile(FVComponent):
         )
 
         blank_profile = dcc.Graph(
-            id=self.id,
+            id=self.element_id,
             figure=figure,
             className="w-100 h-100",
         )
@@ -87,5 +89,5 @@ class RouteProfile(FVComponent):
         return wrapped
 
 
-blank_map = RouteMap(id="route-plot").generate()
-blank_profile = RouteProfile(id="route-profile").generate()
+blank_map = RouteMap(element_id="route-plot").generate()
+blank_profile = RouteProfile(element_id="route-profile").generate()

@@ -24,12 +24,12 @@ class FellFilter(logging.Filter):
 def set_up_logging() -> None:
     """Set up the logging module to write out internal logs to a folder"""
     # TODO: Add a retention period to logs
-    log_dir = (Path.cwd()) / "logs"
+    log_dir = Path("/logs")
     if not log_dir.exists():
-        log_dir.mkdir()
+        raise FileNotFoundError("Target log directory does not exist!")
 
     now = datetime.now().isoformat(timespec="seconds")
-    handler = logging.FileHandler(filename=f"logs/{now}.log")
+    handler = logging.FileHandler(filename=(log_dir / f"{now}.log").as_posix())
 
     fell_filter = FellFilter()
 

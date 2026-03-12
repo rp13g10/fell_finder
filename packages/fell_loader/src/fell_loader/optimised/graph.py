@@ -10,7 +10,7 @@ from pyspark.sql.window import Window
 
 from fell_loader.base import BaseSparkLoader
 from fell_loader.schemas.optimised import EDGES_SCHEMA, NODES_SCHEMA
-from fell_loader.utils.partitioning import add_coords_partition_to_spark_df
+from fell_loader.utils import add_coords_partition_to_spark_df
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +50,7 @@ class GraphOptimiser(BaseSparkLoader):
         degrees = links.groupBy("id").agg(
             F.count(F.col("neighbour_in")).alias("in_degree"),
             F.count(F.col("neighbour_out")).alias("out_degree"),
-            F.countDistinct(F.col("neighbour")).alias("degree"),
+            F.count_distinct(F.col("neighbour")).alias("degree"),
         )
 
         return degrees

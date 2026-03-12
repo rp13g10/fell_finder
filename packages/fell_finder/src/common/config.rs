@@ -176,6 +176,55 @@ impl RouteConfig {
 
 // MARK: Backend Config
 
+/// Fetches the specified environment variable as usize, returns an error
+/// if the environment variable has not been set, or cannot be converted
+fn get_evar_as_int(evar: &str) -> Result<usize, BackendError> {
+    let maybe_usr_pref = env::var(evar);
+    match maybe_usr_pref {
+        Ok(str) => match str.parse() {
+            Ok(int) => Ok(int),
+            Err(_) => Err(BackendError::InvalidEvarError(evar.to_string())),
+        },
+        Err(_) => Err(BackendError::MissingEvarError(evar.to_string())),
+    }
+}
+
+/// Fetches the specified environment variable as f64, returns an error
+/// if the environment variable has not been set, or cannot be converted
+fn get_evar_as_float(evar: &str) -> Result<f64, BackendError> {
+    let maybe_usr_pref = env::var(evar);
+    match maybe_usr_pref {
+        Ok(str) => match str.parse() {
+            Ok(float) => Ok(float),
+            Err(_) => Err(BackendError::InvalidEvarError(evar.to_string())),
+        },
+        Err(_) => Err(BackendError::MissingEvarError(evar.to_string())),
+    }
+}
+
+/// Fetches the specified environment variable as String, returns an error
+/// if the environment variable has not been set
+fn get_evar_as_string(evar: &str) -> Result<String, BackendError> {
+    let maybe_usr_pref = env::var(evar);
+    match maybe_usr_pref {
+        Ok(str) => Ok(str),
+        Err(_) => Err(BackendError::MissingEvarError(evar.to_string())),
+    }
+}
+
+/// Fetches the specified environment variable as bool, returns an error
+/// if the environment variable has not been set, or cannot be converted
+fn get_evar_as_bool(evar: &str) -> Result<bool, BackendError> {
+    let maybe_usr_pref = env::var(evar);
+    match maybe_usr_pref {
+        Ok(str) => match str.parse() {
+            Ok(bool) => Ok(bool),
+            Err(_) => Err(BackendError::InvalidEvarError(evar.to_string())),
+        },
+        Err(_) => Err(BackendError::MissingEvarError(evar.to_string())),
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum PruningStrategy {
     Naive,
@@ -189,6 +238,51 @@ pub enum BinStrategy {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct PostgresDetails {
+    pub user: String,
+    pub pass: String,
+    pub host: String,
+    pub port: String,
+}
+
+impl PostgresDetails {
+    pub fn get_uri(&self) -> String {
+        format!(
+            "postgres://{}:{}@{}:{}/fell_finder",
+            self.user, self.pass, self.host, self.port
+        )
+    }
+
+    pub fn new() -> Result<PostgresDetails, BackendError> {
+        Ok(PostgresDetails {
+            user: get_evar_as_string("FF_DB_USER")?,
+            pass: get_evar_as_string("FF_DB_PASS")?,
+            host: get_evar_as_string("FF_DB_HOST")?,
+            port: get_evar_as_string("FF_DB_PORT")?,
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RedisDetails {
+    pub host: String,
+    pub port: String,
+}
+
+impl RedisDetails {
+    pub fn get_uri(&self) -> String {
+        format!("redis://{}:{}/", self.host, self.port)
+    }
+
+    pub fn new() -> Result<RedisDetails, BackendError> {
+        Ok(RedisDetails {
+            host: get_evar_as_string("FF_REDIS_HOST")?,
+            port: get_evar_as_string("FF_REDIS_PORT")?,
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct BackendConfig {
     pub max_candidates: usize,
     pub max_routes: usize,
@@ -198,67 +292,19 @@ pub struct BackendConfig {
     pub display_threshold: f64,
     pub bin_size: usize,
     pub bin_strategy: BinStrategy,
-    pub db_user: String,
-    pub db_pass: String,
+    pub db_details: PostgresDetails,
+    pub redis_details: RedisDetails,
     pub finishing_overlaps: usize,
     pub max_job_seconds: f64,
     pub progress_update_seconds: f64,
 }
 
 impl BackendConfig {
-    fn get_evar_as_int(evar: &str) -> Result<usize, BackendError> {
-        let maybe_usr_pref = env::var(evar);
-        match maybe_usr_pref {
-            Ok(str) => match str.parse() {
-                Ok(int) => Ok(int),
-                Err(_) => {
-                    Err(BackendError::InvalidEvarError(evar.to_string()))
-                }
-            },
-            Err(_) => Err(BackendError::MissingEvarError(evar.to_string())),
-        }
-    }
-
-    fn get_evar_as_float(evar: &str) -> Result<f64, BackendError> {
-        let maybe_usr_pref = env::var(evar);
-        match maybe_usr_pref {
-            Ok(str) => match str.parse() {
-                Ok(float) => Ok(float),
-                Err(_) => {
-                    Err(BackendError::InvalidEvarError(evar.to_string()))
-                }
-            },
-            Err(_) => Err(BackendError::MissingEvarError(evar.to_string())),
-        }
-    }
-
-    fn get_evar_as_str(evar: &str) -> Result<String, BackendError> {
-        let maybe_usr_pref = env::var(evar);
-        match maybe_usr_pref {
-            Ok(str) => Ok(str),
-            Err(_) => Err(BackendError::MissingEvarError(evar.to_string())),
-        }
-    }
-
-    fn get_evar_as_bool(evar: &str) -> Result<bool, BackendError> {
-        let maybe_usr_pref = env::var(evar);
-        match maybe_usr_pref {
-            Ok(str) => match str.parse() {
-                Ok(bool) => Ok(bool),
-                Err(_) => {
-                    Err(BackendError::InvalidEvarError(evar.to_string()))
-                }
-            },
-            Err(_) => Err(BackendError::MissingEvarError(evar.to_string())),
-        }
-    }
-
     /// Create a new BackendConfig object, pulling all of the required
     /// information from environment variables. If any variables cannot
     /// be read/parsed, the programme will panic
     pub fn new() -> Result<BackendConfig, BackendError> {
-        let pruning_strategy_in =
-            BackendConfig::get_evar_as_str("FF_PRUNING_STRATEGY")?;
+        let pruning_strategy_in = get_evar_as_string("FF_PRUNING_STRATEGY")?;
 
         let pruning_strategy = match pruning_strategy_in.to_uppercase().as_str() {
             "NAIVE" => Ok(PruningStrategy::Naive),
@@ -268,8 +314,7 @@ impl BackendConfig {
             )),
         }?;
 
-        let bin_strategy_in =
-            BackendConfig::get_evar_as_str("FF_BIN_STRATEGY")?;
+        let bin_strategy_in = get_evar_as_string("FF_BIN_STRATEGY")?;
 
         let bin_strategy = match bin_strategy_in.to_uppercase().as_str() {
             "CENTRE" => Ok(BinStrategy::Centre),
@@ -280,35 +325,25 @@ impl BackendConfig {
         }?;
 
         Ok(BackendConfig {
-            max_candidates: BackendConfig::get_evar_as_int("FF_MAX_CANDS")?,
-            max_routes: BackendConfig::get_evar_as_int("FF_MAX_ROUTES")?,
-            bin_size: BackendConfig::get_evar_as_int("FF_BIN_SIZE")?,
+            max_candidates: get_evar_as_int("FF_MAX_CANDS")?,
+            max_routes: get_evar_as_int("FF_MAX_ROUTES")?,
+            bin_size: get_evar_as_int("FF_BIN_SIZE")?,
             bin_strategy: bin_strategy,
-            pruning_threshold: BackendConfig::get_evar_as_float(
-                "FF_PRUNING_THRESHOLD",
-            )?,
+            pruning_threshold: get_evar_as_float("FF_PRUNING_THRESHOLD")?,
             pruning_strategy: pruning_strategy,
-            dijkstra_validation: BackendConfig::get_evar_as_bool(
-                "FF_DIJKSTRA_VALIDATION",
-            )?,
-            display_threshold: BackendConfig::get_evar_as_float(
-                "FF_DISPLAY_THRESHOLD",
-            )?,
-            db_user: BackendConfig::get_evar_as_str("FF_DB_USER")?,
-            db_pass: BackendConfig::get_evar_as_str("FF_DB_PASS")?,
-            finishing_overlaps: BackendConfig::get_evar_as_int(
-                "FF_FINISHING_OVERLAPS",
-            )?,
-            max_job_seconds: BackendConfig::get_evar_as_float(
-                "FF_MAX_JOB_SECONDS",
-            )?,
-            progress_update_seconds: BackendConfig::get_evar_as_float(
-                "FF_UPDATE_FREQUENCY",
-            )?,
+            dijkstra_validation: get_evar_as_bool("FF_DIJKSTRA_VALIDATION")?,
+            display_threshold: get_evar_as_float("FF_DISPLAY_THRESHOLD")?,
+            db_details: PostgresDetails::new()?,
+            redis_details: RedisDetails::new()?,
+            finishing_overlaps: get_evar_as_int("FF_FINISHING_OVERLAPS")?,
+            max_job_seconds: get_evar_as_float("FF_MAX_JOB_SECONDS")?,
+            progress_update_seconds: get_evar_as_float("FF_UPDATE_FREQUENCY")?,
         })
     }
 
-    pub fn default(db_user: String, db_pass: String) -> BackendConfig {
+    /// Returns a 'default' configuration object with sensible defaults. This is
+    /// not used while hosting the API, but is called frequently during unit tests
+    pub fn default() -> BackendConfig {
         BackendConfig {
             max_candidates: 1024,
             max_routes: 32,
@@ -318,8 +353,16 @@ impl BackendConfig {
             pruning_strategy: PruningStrategy::Naive,
             dijkstra_validation: false,
             display_threshold: 0.9,
-            db_user,
-            db_pass,
+            db_details: PostgresDetails {
+                host: "localhost".to_string(),
+                port: "5432".to_string(),
+                user: "postgres".to_string(),
+                pass: "postgres".to_string(),
+            },
+            redis_details: RedisDetails {
+                host: "localhost".to_string(),
+                port: "6379".to_string(),
+            },
             finishing_overlaps: 3,
             max_job_seconds: 300.0,
             progress_update_seconds: 1.0,

@@ -66,6 +66,7 @@ impl Candidate {
     ) -> Candidate {
         let start_id = graph
             .node_weight(*start_inx)
+            // TODO: Set this up to cascade up to user
             .expect("Provided start node isn't in the graph!")
             .id;
 
@@ -296,10 +297,7 @@ mod tests {
             None => Arc::new(get_test_config()),
         };
 
-        let test_backend_config = Arc::new(BackendConfig::default(
-            "dummy".to_string(),
-            "dummy".to_string(),
-        ));
+        let test_backend_config = Arc::new(BackendConfig::default());
 
         Candidate {
             points: test_points,
@@ -407,10 +405,7 @@ mod tests {
         let _ = test_graph.add_node(test_ndata2);
 
         let test_route_config = Arc::new(get_test_config());
-        let test_backend_config = Arc::new(BackendConfig::default(
-            "dummy".to_string(),
-            "dummy".to_string(),
-        ));
+        let test_backend_config = Arc::new(BackendConfig::default());
 
         // Target data
 
@@ -450,10 +445,7 @@ mod tests {
         #[test]
         fn test_panic() {
             let test_route_config = Arc::new(get_test_config());
-            let test_backend_config = Arc::new(BackendConfig::default(
-                "dummy".to_string(),
-                "dummy".to_string(),
-            ));
+            let test_backend_config = Arc::new(BackendConfig::default());
 
             let test_candidate = Candidate {
                 points: Vec::<i64>::new(),

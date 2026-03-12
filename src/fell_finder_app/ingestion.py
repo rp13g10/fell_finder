@@ -7,6 +7,7 @@ data, joins the two datasets together to create a single augmented graph.
 import logging
 import os
 import shutil
+import sys
 from pathlib import Path
 
 from delta import configure_spark_with_delta_pip
@@ -22,8 +23,6 @@ from pyspark.sql import SparkSession
 
 from fell_finder_app.utils import set_up_logging
 
-# TODO: Resolve issue where removal of temp folder kills write_bounds_to_parquet
-
 if __name__ == "__main__":
     # Initial Setup ###########################################################
     DATA_DIR = Path(os.environ["FF_DATA_DIR"])
@@ -35,7 +34,6 @@ if __name__ == "__main__":
 
     logger.info("Processing raw LIDAR data")
     lidar_loader = LidarLoader()
-    self = lidar_loader
     lidar_loader.run()
     del lidar_loader
 
@@ -43,9 +41,8 @@ if __name__ == "__main__":
     logger.debug("Creating local spark context")
     builder = (
         SparkSession.builder.appName("fell_loader")
-        .config("spark.master", "local[*]")
-        .config("spark.driver.memory", "4g")
-        .config("spark.driver.memoryOverhead", "1g")
+        # TODO: Confirm whether these can be set via env vars, initial attempt
+        #       did not work
         .config(
             "spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension"
         )
@@ -53,11 +50,12 @@ if __name__ == "__main__":
             "spark.sql.catalog.spark_catalog",
             "org.apache.spark.sql.delta.catalog.DeltaCatalog",
         )
-        .config("spark.log.level", "WARN")
-        .config("spark.local.dir", (DATA_DIR / "temp" / "spark").as_posix())
+        .config("spark.python.worker.faulthandler.enabled", "true")
     )
 
     spark = configure_spark_with_delta_pip(builder).getOrCreate()
+
+    logger.debug("Spark context created")
 
     logger.info("Processing raw OSM data")
     osm_loader = OsmLoader(spark)
@@ -97,7 +95,6 @@ if __name__ == "__main__":
 
     # Load to Postgres ########################################################
 
-    logger.info("Uploading optimised data to postgres")
     graph_uploader = GraphUploader()
     graph_uploader.run()
     del graph_uploader

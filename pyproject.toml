@@ -6,7 +6,11 @@ authors = [{ name = "Ross Piper", email = "rp-webservices@outlook.com" }]
 license = { text = "MIT License" }
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
-dependencies = ["fell-viewer", "fell-loader"]
+dependencies = [
+    "fell-viewer",
+    "fell-loader",
+    "pandas<3.0.0",
+]
 
 [dependency-groups]
 dev = [

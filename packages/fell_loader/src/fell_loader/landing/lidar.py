@@ -16,10 +16,7 @@ import rasterio as rio
 from tqdm.contrib.concurrent import process_map
 
 from fell_loader.base import BaseLoader
-
-# Set the max number of LIDAR files which will be processed in parallel
-# Allow up to 3gb of RAM per worker (should be closer to 2)
-MAX_WORKERS = 8
+from fell_loader.utils import get_env_var
 
 logger = logging.getLogger(__name__)
 
@@ -455,7 +452,7 @@ class LidarLoader(BaseLoader):
             bounds: A dataframe containing lidar bounds
         """
         target = self.data_dir / "landing" / "lidar_bounds.parquet"
-        bounds.write_parquet(target)
+        bounds.write_parquet(target, compression="zstd", compression_level=22)
 
     def run(self) -> None:
         """Primary user facing function for this class. Parses every available
@@ -465,12 +462,15 @@ class LidarLoader(BaseLoader):
         data_dir
         """
         if self.to_load:
+            max_workers = get_env_var(
+                "FF_LIDAR_WORKERS", cast=int, default="4"
+            )
             process_map(
                 self.process_lidar_file,
                 self.to_load.items(),
                 desc="Parsing LIDAR data",
                 chunksize=1,
-                max_workers=MAX_WORKERS,
+                max_workers=max_workers,
             )
 
         bounds = self.get_updated_bounds()

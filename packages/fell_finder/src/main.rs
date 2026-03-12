@@ -216,15 +216,12 @@ async fn main() {
     // Connect to postgres DB, contains map data
     let db_pool = PgPoolOptions::new()
         .max_connections(5)
-        .connect(&format!(
-            "postgres://{}:{}@localhost:5432/fell_finder",
-            backend_config.db_user, backend_config.db_pass
-        ))
+        .connect(&backend_config.db_details.get_uri())
         .await
         .expect("Error connecting to postgres!");
 
     // Connect to redis, used to job status & outputs
-    let client = redis::Client::open("redis://127.0.0.1/")
+    let client = redis::Client::open(backend_config.redis_details.get_uri())
         .expect("Error connecting to redis!");
     let redis_conn = client
         .get_multiplexed_tokio_connection()
