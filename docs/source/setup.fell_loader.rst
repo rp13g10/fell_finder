@@ -1,3 +1,5 @@
+.. _setup_fell_loader::
+
 ===================
 Setup - Fell Loader
 ===================
@@ -62,6 +64,9 @@ With the data in place, navigate to `./docker/fell_loader_compose.yaml`. You wil
 Volumes
 ^^^^^^^
 
+While the code-base is under active development, the python files required to run it are not being baked into the containers. This is primarily driven by poor network connectivity on trains making rebuilds very time consuming.
+As an interim solution, the code must instead be mounted as volumes at runtime. This is done in the docker compose file.
+
 .. code-block:: yaml
 
     volumes:
@@ -85,7 +90,7 @@ Volumes
                 o: bind
                 type: none
                 # Update this to match your data directory (slower storage OK)
-                device: /ff_data
+                device: /path/to/ff_data
         ff_db:
             driver: local
             driver_opts:
@@ -94,7 +99,7 @@ Volumes
                 # Update this to match your db directory (fast storage recommended)
                 device: /path/to/ff_db/
 
-You will need to update the `device` parameters to match your system. For `fell_loader` and `ff_src`, you can replace `/path/to_fell_finder` with the path you cloned this repo to. `/ff_data` will be the folder containing the data extracts.
+You will need to update the `device` parameters to match your system. For `fell_loader` and `ff_src`, you can replace `/path/to_fell_finder` with the path you cloned this repo to. `/path/to/ff_data` will be the folder containing the data extracts.
 
 `ff_db` is a special case, as it should ideally point to a folder (or volume) on fast storage (ideally an NVME drive). It will need to be an empty folder to start off with. Once the data load completes, this is where the files for the PostgreSQL database will be stored.
 
@@ -120,13 +125,13 @@ Build
 
 First, you need to build the `fell_loader` image. Future iterations will likely host this online, but for now pre-built images are not available. All of these commands should be run from the root of the repo.
 
-First, we'll use UV to generate a requirements file:
+First, use UV to generate a requirements file:
 
 ```
 uv pip compile packages/fell_loader/pyproject.toml -o dist/fell_loader_requirements.txt
 ```
 
-Then, we'll build the image:
+Then, build the image:
 
 ```
 docker build -f docker/fell_loader.dockerfile --tag 'fell_loader' .
@@ -141,4 +146,4 @@ Once the `fell_loader` image has been built, it can be executed with docker comp
 docker compose -f docker/fell_loader_compose.yaml up
 ```
 
-Logs will be generated in the `docker` file which you can use to track progress as it runs.
+Logs will be generated in the `docker/logs` folder which you can use to track progress as it runs.
