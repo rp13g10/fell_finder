@@ -54,6 +54,7 @@ Fell Viewer
 * Admin dashboard to help monitor performance
 * Potential to change to a more performant backend than Flask
 * Potential to change to a more flexible frontend (JS?)
+* Show the available route creation space as users select different filters
 
 Known Issues / Limitations
 ==========================

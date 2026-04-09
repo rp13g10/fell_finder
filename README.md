@@ -1,8 +1,17 @@
 # Fell Finder
 
-A personal project which aims to help you find the hilliest possible routes in your local area (so long as you're UK based). Development is typically limited to ~4 hours a week while I'm commuting in to the office, so new features may take a while to implement. You are welcome to use any of the code provided in this repo, so long as credit is given to me as the original author.
-
 ![Webapp Preview](./assets/webapp_preview.png)
+
+Fell Finder is a personal project which allows you to generate running routes in your local area (so long as you're UK based). It has been in active development for several years, and is the product of many hours spent commuting into London on the train. Due to time constraints and the limited connectivity on the trains, development proceeds at a slow but steady pace.
+
+To the user, Fell Finder is a webapp which can be used to generate superlative routes (the hilli*est*, the flatt*est*), as opposed to simply a 'hilly' route. Future builds may include other features for the hill climbers among us, such as helping to identify the largest/steepest hills in the area. To me, it is predominantly an opportunity to learn new tools and technologies, and to improve my coding abilities.
+
+Documentation for this project is now available on [RTD](https://link.to.docs/)
+
+
+-------------------------------------
+Content below this line to be removed
+
 
 ## Objectives
 

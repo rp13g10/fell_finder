@@ -12,7 +12,6 @@ To the user, Fell Finder is a webapp which can be used to generate superlative r
    :maxdepth: 2
    :caption: Contents:
 
-   components
    setup
    usage
    roadmap
