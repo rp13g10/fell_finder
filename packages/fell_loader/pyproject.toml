@@ -1,10 +1,9 @@
 [project]
 name = "fell-loader"
-version = "0.1.0"
+version = "0.4.1"
 description = "Ingestion scripts for the fell-finder webapp"
 authors = [{ name = "Ross Piper", email = "rp-webservices@outlook.com" }]
 license = { text = "MIT License" }
-readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "bng-latlon>=1.1",

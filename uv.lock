@@ -617,7 +617,7 @@ wheels = [
 
 [[package]]
 name = "fell-finder-app"
-version = "0.1.0"
+version = "0.12.1"
 source = { editable = "." }
 dependencies = [
     { name = "fell-loader" },
@@ -654,7 +654,7 @@ dev = [
 
 [[package]]
 name = "fell-loader"
-version = "0.1.0"
+version = "0.4.1"
 source = { editable = "packages/fell_loader" }
 dependencies = [
     { name = "bng-latlon" },
@@ -699,7 +699,7 @@ dev = [{ name = "tabulate", specifier = ">=0.9.0" }]
 
 [[package]]
 name = "fell-viewer"
-version = "0.1.0"
+version = "0.7.0"
 source = { editable = "packages/fell_viewer" }
 dependencies = [
     { name = "celery", extra = ["redis"] },

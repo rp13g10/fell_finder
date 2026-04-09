@@ -1,10 +1,9 @@
 [project]
 name = "fell-viewer"
-version = "0.1.0"
+version = "0.7.0"
 description = "Frontend code for the fell-finder webapp"
 authors = [{ name = "Ross Piper", email = "rp-webservices@outlook.com" }]
 license = { text = "MIT License" }
-readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "celery[redis]>=5.5.3",
