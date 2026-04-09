@@ -6,9 +6,8 @@ from dash import Input, Output, State, callback
 def init_callbacks() -> None:
     """This function needs to be called in a function which defines elements of
     the page config in order to ensure the enclosed callbacks are correctly
-    registered"""
-
-    # ruff: noqa: ANN202
+    registered
+    """
 
     @callback(
         Output("navbar-collapse", "is_open"),

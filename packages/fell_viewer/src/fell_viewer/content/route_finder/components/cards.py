@@ -22,7 +22,8 @@ class RouteCard(FVComponent):
 
     def generate(self) -> dbc.Card:
         """Generate a card for a single generate route, which includes a
-        minimap, high-level metrics, and buttons to view & download"""
+        minimap, high-level metrics, and buttons to view & download
+        """
         # Generate a minimap showing the shape of the route
         polyline = self.route.to_polyline()
         plot = dl.Map(

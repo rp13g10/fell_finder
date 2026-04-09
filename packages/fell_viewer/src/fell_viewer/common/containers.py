@@ -1,9 +1,10 @@
 """Defines the various dataclasses which are used to send and receive
-information through this package."""
+information through this package.
+"""
 
 import os
 from dataclasses import dataclass, field
-from typing import Any, List, Literal
+from typing import Any, Literal
 
 import dash_leaflet as dl
 import gpxpy
@@ -24,9 +25,6 @@ class RouteConfig:
           can be while still being considered valid
         route_mode: Set to 'hilly' to generate the hilliest possible
           route, or 'flat' for the flattest possible route
-        max_candidates: The maximum number of candidate routes which
-          should be held in memory. Lower this to increase calculation speed,
-          increase it to potentially increase the quality of routes generated.
         highway_types: The different types of terrain which should
           be considered for this route. If not provided, all terrain types
           will be considered. Defaults to None.
@@ -38,26 +36,23 @@ class RouteConfig:
 
     start_lat: float
     start_lon: float
-
+    route_mode: Literal["hilly", "flat"]
     target_distance: float
 
-    route_mode: Literal["hilly", "flat"]
-    max_candidates: int
-
     restricted_surfaces_perc: float
-    restricted_surfaces: List[str] = field(default_factory=list)
-
-    highway_types: List[str] = field(default_factory=list)
-    surface_types: List[str] = field(default_factory=list)
-
     distance_tolerance: float = float(
+        # TODO: Set this as a user input
         os.environ.get("FF_DIST_TOLERANCE", "0.1")
     )
 
+    highway_types: list[str] = field(default_factory=list)
+    surface_types: list[str] = field(default_factory=list)
+    restricted_surfaces: list[str] = field(default_factory=list)
+
     def __post_init__(self) -> None:
         """Calculate min_distance and max_distance based on user provided
-        target_distance and tolerance"""
-
+        target_distance and tolerance
+        """
         # Ensure inputs are stored using the expected datatype
         for attr in [
             "start_lat",
@@ -66,9 +61,6 @@ class RouteConfig:
             "restricted_surfaces_perc",
         ]:
             setattr(self, attr, float(getattr(self, attr)))
-
-        for attr in ["max_candidates"]:
-            setattr(self, attr, int(getattr(self, attr)))
 
 
 @dataclass
@@ -110,14 +102,14 @@ class BBox:
     @property
     def bounds(self) -> tuple[tuple[float, float], tuple[float, float]]:
         """Return the bounds of a route in a format which can be used by
-        plotly maps"""
-
+        plotly maps
+        """
         return ((self.min_lat, self.min_lon), (self.max_lat, self.max_lon))
 
     def to_viewport(self) -> dict[str, Any]:
         """Returns a dict which can be used to define the viewport of a plotly
-        map plot. Contains the 'bounds' and 'center' keys."""
-
+        map plot. Contains the 'bounds' and 'center' keys.
+        """
         bounds = {
             "bounds": self.bounds,
             "center": self.centre,
@@ -156,7 +148,6 @@ class RouteGeometry:
         content: dict[str, Any], coords: bool = False
     ) -> "RouteGeometry":
         """Convert back from a dict to a dataclass"""
-
         if coords:
             coords_data = content["coords"]
             lats, lons = [], []
@@ -177,8 +168,8 @@ class RouteGeometry:
 
     def to_gpx(self) -> str:
         """Export the geometry of the route to a GPX file, presented as a
-        string for easier use with the Dash frontend"""
-
+        string for easier use with the Dash frontend
+        """
         gpx = gpxpy.gpx.GPX()
         route = gpxpy.gpx.GPXRoute()
         route.type = "run"
@@ -235,7 +226,6 @@ class Route:
     @staticmethod
     def from_api_response(api_response: dict[str, Any]) -> "Route":
         """Enable the creation of a route from an API response"""
-
         geometry_dict = api_response["geometry"]
         geometry = RouteGeometry.from_dict(geometry_dict, coords=True)
 
@@ -266,24 +256,23 @@ class Route:
             metrics=RouteMetrics.from_dict(content["metrics"]),
         )
 
-    def to_polyline(self, id: str | None = None) -> dl.Polyline:
+    def to_polyline(self, element_id: str | None = None) -> dl.Polyline:
         """For a generated route, generate a dash-leaflet polyline which can be
         displayed on a map
 
         Args:
-            id: The id which should be set for the generated polyline
+            element_id: The id which should be set for the generated polyline
 
         Returns:
             A polyline which can be added to a dash_leaflet map
 
         """
-
         kwargs: dict[str, Any] = dict(
             positions=self.geometry.coords, interactive=True
         )
 
-        if id:
-            kwargs["id"] = id
+        if element_id:
+            kwargs["id"] = element_id
 
         polyline = dl.Polyline(**kwargs)
 

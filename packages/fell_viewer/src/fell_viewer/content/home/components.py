@@ -46,7 +46,7 @@ class HomeText(FVComponent):
         "the following:"
     )
 
-    SOURCES = [
+    SOURCES = (
         ("Open Street Map", "https://www.openstreetmap.org/"),
         (
             "LIDAR DTM 1m",
@@ -55,11 +55,10 @@ class HomeText(FVComponent):
         ("Geofabrik", "https://www.geofabrik.de/"),
         ("OSM Parquetizer", "https://github.com/adrianulbona/osm-parquetizer"),
         ("Mappity", "https://www.mappity.org/"),
-    ]
+    )
 
     def generate(self) -> Component:
         """Generates the text which will be shown on the project homepage"""
-
         text_kwargs: dict[str, Any] = dict(className="mb-3")
 
         text_rows = [

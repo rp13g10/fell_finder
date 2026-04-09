@@ -31,7 +31,8 @@ class Button(FVComponent):
     def generate(self) -> Component:
         """Generate a button element based on the provided config. Note that
         dcc.Link is used instead of html.A to avoid a full page refresh on
-        click"""
+        click
+        """
         button = dbc.Button(
             type="button",
             size=self.config.size,

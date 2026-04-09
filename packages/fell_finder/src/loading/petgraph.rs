@@ -1,5 +1,6 @@
 use crate::common::config::RouteConfig;
-use crate::common::graph_data::{EdgeData, NodeData};
+use crate::common::exceptions::RoutingError;
+use crate::common::graph_data::{EdgeData, NodeData, TaggedGraph};
 use crate::loading::postgres::{EdgeRow, NodeRow};
 use core::f64;
 use geo::{Distance, Haversine, Point};
@@ -8,6 +9,7 @@ use petgraph::graph::NodeIndex;
 use petgraph::visit::IntoNodeReferences;
 use petgraph::{Directed, Graph};
 use rustc_hash::{FxHashMap, FxHashSet};
+use std::sync::Arc;
 
 /// Nodes in the graph need to have associated lat/lon data. To achieve this,
 /// we create a mapping for source IDs as they appear in the OSM data to
@@ -22,8 +24,8 @@ pub fn generate_node_map(
     let mut used_nodes = FxHashSet::<i64>::default();
 
     for edge in edges {
-        used_nodes.insert(edge.src.clone());
-        used_nodes.insert(edge.dst.clone());
+        used_nodes.insert(edge.src);
+        used_nodes.insert(edge.dst);
     }
 
     for node in nodes {
@@ -82,9 +84,9 @@ pub fn create_graph(
 /// node to it. While the index of this node is not fixed, the is_start
 /// attribute will also be set to true for easier detection
 pub fn tag_start_node(
-    config: &RouteConfig,
+    config: Arc<RouteConfig>,
     mut graph: Graph<NodeData, EdgeData, Directed, u32>,
-) -> (NodeIndex<u32>, Graph<NodeData, EdgeData, Directed, u32>) {
+) -> Result<TaggedGraph, RoutingError> {
     // Set variables to keep track of the current closest node
     let mut smallest_dist = f64::MAX;
     let mut closest_inx: Option<NodeIndex<u32>> = None;
@@ -100,57 +102,59 @@ pub fn tag_start_node(
         // Store details of new closest node if applicable
         if dist_to_start < smallest_dist {
             smallest_dist = dist_to_start;
-            closest_inx = Some(node_index.clone());
+            closest_inx = Some(node_index);
         }
     }
 
-    // Either return the closest node, or panic
-    // TODO: Propagate Option return type for cleaner error handling
+    // Either return the closest node, or an error
     match closest_inx {
         Some(inx) => match graph.node_weight_mut(inx) {
             Some(weight) => {
                 weight.is_start = true;
-                return (inx, graph);
+                Ok(TaggedGraph {
+                    start_inx: inx,
+                    graph,
+                })
             }
-            None => panic!("Unable to find the start node!"),
+            None => Err(RoutingError::NoMapDataError),
         },
-        None => panic!("Never updated closest_inx!"),
+        None => Err(RoutingError::NoMapDataError),
     }
 }
 
 /// Use Dijkstra's algorithm on reversed graph to calculate distance of each
 /// node from the start point
-pub fn tag_dists_to_start(
-    start_node: &NodeIndex<u32>,
-    mut graph: Graph<NodeData, EdgeData, Directed, u32>,
-) -> Graph<NodeData, EdgeData, Directed, u32> {
-    graph.reverse();
+pub fn tag_dists_to_start(mut tagged_graph: TaggedGraph) -> TaggedGraph {
+    tagged_graph.graph.reverse();
 
     let dists =
-        dijkstra(&graph, *start_node, None, |edge| edge.weight().distance);
+        dijkstra(&tagged_graph.graph, tagged_graph.start_inx, None, |edge| {
+            edge.weight().distance
+        });
 
-    graph.reverse();
+    tagged_graph.graph.reverse();
 
     for (node_inx, dist) in dists.iter() {
-        if let Some(weight) = graph.node_weight_mut(*node_inx) {
+        if let Some(weight) = tagged_graph.graph.node_weight_mut(*node_inx) {
             weight.dist_to_start = Some(*dist);
-        } else {
-            ()
         }
     }
 
-    graph
+    tagged_graph
 }
 
 /// Determine whether a node should be mapped across to the new graph. This is
 /// based on whether a valid path back to the start point exists, and whether
 /// the distance of the shortest path is within the bounds of the requested
 /// route
-fn node_map(node_data: &NodeData, config: &RouteConfig) -> Option<NodeData> {
+fn node_map(
+    node_data: &NodeData,
+    config: Arc<RouteConfig>,
+) -> Option<NodeData> {
     match node_data.dist_to_start {
         Some(dist) => {
             if dist <= config.max_distance / 2.0 {
-                Some(node_data.clone())
+                Some(*node_data)
             } else {
                 None
             }
@@ -165,37 +169,11 @@ pub fn get_start_node(
     graph: &Graph<NodeData, EdgeData, Directed, u32>,
 ) -> Option<NodeIndex> {
     for (node_inx, node_data) in graph.node_references() {
-        match node_data.is_start {
-            true => return Some(node_inx),
-            false => (),
+        if node_data.is_start {
+            return Some(node_inx);
         }
     }
-    return None;
-}
-
-pub fn get_start_and_end_nodes(
-    graph: &Graph<NodeData, EdgeData, Directed, u32>,
-    edge: &EdgeData,
-) -> Option<(NodeIndex, NodeIndex)> {
-    let mut start_node: Option<NodeIndex> = None;
-    let mut end_node: Option<NodeIndex> = None;
-    for (node_inx, node_data) in graph.node_references() {
-        match node_data.is_start {
-            true => start_node = Some(node_inx),
-            false => (),
-        }
-        if node_data.id == edge.dst {
-            end_node = Some(node_inx)
-        }
-    }
-
-    match start_node {
-        None => None,
-        Some(start_inx) => match end_node {
-            None => None,
-            Some(end_inx) => Some((start_inx, end_inx)),
-        },
-    }
+    None
 }
 
 /// Construct a new graph which contains only those nodes which are reachable
@@ -204,16 +182,21 @@ pub fn get_start_and_end_nodes(
 /// reached by any valid route. As node indices are not static, the start node
 /// must be redetermined after this operation.
 pub fn drop_unreachable_nodes(
-    graph: Graph<NodeData, EdgeData, Directed, u32>,
-    config: &RouteConfig,
-) -> (NodeIndex, Graph<NodeData, EdgeData, Directed, u32>) {
-    let new_graph = graph.filter_map(
-        |_, node_data| node_map(node_data, config),
+    tagged_graph: TaggedGraph,
+    config: Arc<RouteConfig>,
+) -> Result<TaggedGraph, RoutingError> {
+    let new_graph = tagged_graph.graph.filter_map(
+        |_, node_data| node_map(node_data, Arc::clone(&config)),
         |_, edge_data| Some(edge_data.clone()),
     );
 
-    let new_start = get_start_node(&new_graph)
-        .expect("The start node was marked as unreachable!");
+    let new_start = match get_start_node(&new_graph) {
+        Some(node_inx) => node_inx,
+        None => return Err(RoutingError::NoMapDataError),
+    };
 
-    (new_start, new_graph)
+    Ok(TaggedGraph {
+        start_inx: new_start,
+        graph: new_graph,
+    })
 }

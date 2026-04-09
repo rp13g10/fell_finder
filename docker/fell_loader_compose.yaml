@@ -1,0 +1,75 @@
+services:
+  ff_db:
+    image: "postgres:18.1"
+    networks:
+      - ff_net
+    ports:
+      # TODO: Confirm if this is required for live
+      - "5432:5432"
+    restart: always
+    environment:
+      POSTGRES_DB: fell_finder
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - ff_db:/var/lib/postgresql
+  ff_loader:
+    image: "fell_loader"
+    networks:
+      - ff_net
+    ports:
+      - "4040:4040" # Spark UI
+    volumes:
+      # Logs
+      - ./logs:/logs
+      # Persistent storage for outputs
+      - ff_data:/ff_data
+      # Python code (temp, to be removed after debug phase)
+      - ff_src:/fell_finder/src
+      - fell_loader:/fell_finder/packages/fell_loader
+    environment:
+      # Resource allocation (lidar)
+      - FF_LIDAR_WORKERS=8
+      # Resource allocation (spark)
+      - SPARK_MASTER=local[*]
+      - SPARK_DRIVER_MEMORY=48G
+      - SPARK_DRIVER_MEMORY_OVERHEAD=4G
+      # Logging
+      - SPARK_LOG_LEVEL=WARN
+      # Database connection details
+      - FF_DB_HOST=ff_db
+      - FF_DB_PORT=5432
+      - FF_DB_USER=postgres
+      - FF_DB_PASS=postgres
+networks:
+  ff_net:
+    driver: bridge
+volumes:
+  # Temp volumes to be removed after debug
+  fell_loader:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      device: /home/ross/repos/fell_finder/packages/fell_loader/src/fell_loader
+  ff_src:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      device: /home/ross/repos/fell_finder/src
+  # Persistent volumes
+  ff_data:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      # Update this to match your data directory (slower storage OK)
+      device: /home/ross/repos/fell_finder/data
+  ff_db:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      # Update this to match your db directory (fast storage recommended)
+      device: /home/ross/ff_db/

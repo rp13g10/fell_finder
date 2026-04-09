@@ -1,5 +1,6 @@
 """Sets the high-level page layout, which includes any components which will
-be rendered on all pages of the app"""
+be rendered on all pages of the app
+"""
 
 import dash_bootstrap_components as dbc
 

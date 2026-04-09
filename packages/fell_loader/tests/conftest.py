@@ -1,7 +1,11 @@
 """Configuration file for pytest"""
 
+import os
+
 import pytest
 from pyspark.sql import SparkSession
+
+os.environ["PYARROW_IGNORE_TIMEZONE"] = "1"
 
 
 @pytest.fixture
