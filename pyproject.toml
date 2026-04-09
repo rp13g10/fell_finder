@@ -1,16 +1,12 @@
 [project]
 name = "fell-finder-app"
-version = "0.1.0"
+version = "0.12.1"
 description = "A personal project which aims to help you find the hilliest possible routes in your local area (so long as you're UK based)."
 authors = [{ name = "Ross Piper", email = "rp-webservices@outlook.com" }]
 license = { text = "MIT License" }
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
-dependencies = [
-    "fell-viewer",
-    "fell-loader",
-    "pandas<3.0.0",
-]
+dependencies = ["fell-viewer", "fell-loader", "pandas<3.0.0"]
 
 [dependency-groups]
 dev = [

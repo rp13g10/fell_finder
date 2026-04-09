@@ -123,7 +123,7 @@
 * Switched to using `poetry` for dependency management
 * Initial build of unit tests for route generation algorithm
 
-v0.3.1 - 2024-08-27
+## v0.3.1 - 2024-08-27
 
 ### Fixes
 
