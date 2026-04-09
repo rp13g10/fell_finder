@@ -16,8 +16,6 @@ services:
     image: "redis:8.6.1"
     networks:
       - ff_net
-    # ports:
-      # - 6379:6379 # Endpoint
   ff_app:
     image: "fell_viewer"
     networks:
@@ -39,8 +37,6 @@ services:
     image: "fell_finder"
     networks:
       - ff_net
-    # ports:
-      # - 8000:8000 # API Endpoint
     environment:
       # Database connection details
       - FF_DB_HOST=ff_db
@@ -54,14 +50,14 @@ services:
       - FF_MAX_CANDS=16384
       - FF_MAX_ROUTES=16
       - FF_PRUNING_THRESHOLD=0.95
-      - FF_PRUNING_STRATEGY=naive # naive / fuzzy
-      - FF_DIJKSTRA_VALIDATION=true
+      - FF_PRUNING_STRATEGY=fuzzy # naive / fuzzy
+      - FF_DIJKSTRA_VALIDATION=false
       - FF_DISPLAY_THRESHOLD=0.9
       - FF_BIN_SIZE=64
       - FF_BIN_STRATEGY=centre # centre / last
       - FF_FINISHING_OVERLAPS=3
       - FF_MAX_JOB_SECONDS=600
-      - FF_UPDATE_FREQUENCY=5
+      - FF_UPDATE_FREQUENCY=1
 networks:
   ff_net:
     driver: bridge
@@ -79,6 +75,7 @@ volumes:
       o: bind
       type: none
       device: /home/ross/repos/fell_finder/src
+  # Persistent volumes
   ff_db:
     driver: local
     driver_opts:

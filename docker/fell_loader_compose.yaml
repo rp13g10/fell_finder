@@ -15,7 +15,6 @@ services:
       - ff_db:/var/lib/postgresql
   ff_loader:
     image: "fell_loader"
-    # command: "uv run python src/fell_finder_app/ingestion.py"
     networks:
       - ff_net
     ports:

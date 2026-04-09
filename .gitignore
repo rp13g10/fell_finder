@@ -13,3 +13,4 @@ target
 */logs/*
 logs/*
 **/requirements.txt
+docs/build/*

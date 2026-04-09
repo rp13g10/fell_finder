@@ -172,6 +172,9 @@ class EdgeSanitiser(BaseSparkLoader):
             ).try_cast(T.IntegerType()),
         )
 
+        # TODO: See if there's a way to distinguish between quiet country
+        #       lanes and major roads where national speed limit applies
+
         # Keep records with max speed below 50, no known max speed, or have
         # been flagged as having a footpath
         low_speed_mask = F.col("maxspeed") < 50

@@ -1,6 +1,5 @@
 """Unit tests for functions relating to partitioning of data"""
 
-
 from fell_loader.utils.partitioning import (
     add_coords_partition_to_spark_df,
 )
